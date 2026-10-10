@@ -54,6 +54,8 @@ main {
   margin: 0;
   color: var(--md-sys-color-on-surface);
   @include type.scale(title-large);
+  // Revealed by js/motion.js (shift) word by word when the register turns over, so it does not
+  // ask for the rite's own slice as well: one edge to a line.
   @include type.rite;
 }
 
@@ -92,7 +94,7 @@ main {
   margin-top: 1rem;
   color: var(--md-sys-color-on-surface);
   @include type.scale(title-large);
-  @include type.rite;
+  @include type.rite($shift: true);
   --role-size: 1.5rem;
 }
 

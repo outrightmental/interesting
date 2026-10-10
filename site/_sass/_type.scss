@@ -84,11 +84,13 @@ $typewriter: 'American Typewriter', 'Courier Prime', 'Courier New', Courier, 'Ni
 // --font-mono, --rite-weight, --rite-opsz, --rite-soft, --rite-wonk, --rite-tracking, --rite-words,
 // --rite-style, --rite-caps, --rite-case, --rite-scale, --rite-leading,
 // --rite-rule, --rite-rule-width, --rite-before, --rite-after, --rite-cap, --rite-glow; the three
-// of the temperament, --motion-grain (how uneven its treads are), --motion-tempo and
-// --motion-steps; and the hand that cuts, --cut-angle and --reveal-angle. The numeric axes are
-// registered (_tokens.scss), so when the register turns over they step to their new values along
-// the stair while one slice at the new slant cuts the words into their new face (rite, below) --
-// the letterforms themselves a movement of the rite, and one gesture with the edge.
+// of the temperament, --motion-tempo (how long its movements are), --motion-steps (a tread more
+// in each stair, where it is 1) and --motion-grain (read by js/motion.js with the other two,
+// though no stair is shaped by it now; kept so a register still names it); and the hand that
+// cuts, --cut-angle and --reveal-angle. The numeric axes are registered (_tokens.scss), so when
+// the register turns over they step to their new values along the stair, and the words at rest
+// in the page are cut into their new face by one slice at the new slant (rite, below) -- the
+// letterforms themselves a movement of the rite.
 //
 //   rite / act / mono   the faces
 //   weight, opsz, soft, wonk   the axes
@@ -356,14 +358,18 @@ $mono: var(--font-mono, #{$mono-stack});
 // taken by the register's scale, or the inherited size where a wearer sets no role.
 //
 // When the register turns over (html[data-shifting], written by js/motion.js for one rolled
-// moment), every wearer is cut into its new face by one slice at the new register's slant
-// (--reveal-angle): the reason for the edge is the hand the new register writes in. The slice and
-// the axes step together, in the same stair and the same length, so the change reads as one
-// gesture. Three kinds of wearer are left to what already cuts them: the stage's head, which is
-// cut whole (_mood.scss); a card's words, which wear the card's own register and do not change;
-// and a page's heading and the titles of its sections and panels, which js/motion.js (shift)
-// reveals itself with a tread at each word -- two edges on one line would fight over it.
-@mixin rite {
+// moment), the axes, the size and the spacing step to the new register's, but the face, the slant
+// and the case cannot step: they change at once. So the words that sit at rest in a page of words
+// -- a prose page's headings, a list line's name -- are cut into their new face by one slice at
+// the new register's slant (--reveal-angle), the hand the new register writes in, while the axes
+// step. A wearer asks for it with `type.rite($shift: true)`. The rest are left to what already
+// moves them, since the slice would replace their own mask and animation and fight them: a page's
+// heading and a section's or a panel's title, which js/motion.js (shift) reveals word by word
+// itself; the stage's head, which _mood.scss cuts whole; and the parts that arrive and leave on
+// their own (the threshold's question, the persona sheet, the unlock box) or wear their own
+// world's register (a card). Nothing is cut behind a lightbox ([inert]), where the page's
+// animations are held still and a held slice would hide the words.
+@mixin rite($shift: false) {
   font-family: var(--font-rite, #{$rite});
   font-weight: var(--rite-weight, 400);
   font-style: var(--rite-style, normal);
@@ -384,18 +390,22 @@ $mono: var(--font-mono, #{$mono-stack});
     letter-spacing var(--motion-shift) var(--ease-stair),
     word-spacing var(--motion-shift) var(--ease-stair);
 
-  html[data-shifting] &:not(.stage-head *, body [data-mood] *, .list-page-main > h1, .prose-main > h1, .section-title, .panel-title) {
-    mask: cut.slice(var(--reveal-angle, 100deg));
-    @include cut.play(in, rite-shift, shift);
+  @if $shift {
+    html[data-shifting] &:not([inert] *) {
+      mask: cut.slice(var(--reveal-angle, 100deg));
+      @include cut.play(in, rite-shift, shift);
+    }
   }
 
   // Less motion: the new face is simply there, whole.
   @media (prefers-reduced-motion: reduce) {
     transition: none;
 
-    html[data-shifting] &:not(.stage-head *, body [data-mood] *, .list-page-main > h1, .prose-main > h1, .section-title, .panel-title) {
-      mask: none;
-      animation: none;
+    @if $shift {
+      html[data-shifting] &:not([inert] *) {
+        mask: none;
+        animation: none;
+      }
     }
   }
 }
@@ -404,8 +414,8 @@ $mono: var(--font-mono, #{$mono-stack});
 // rule under them, which is what tells one register from another at the first glance. For the
 // words that carry a page -- a page's h1, the stage's title, the persona sheet's title -- and never
 // a card's name or a control. Included after rite, in a rule with no ::before/::after of its own.
-// None of it moves on its own: the ornaments, the rule and the glow belong to the words, and when
-// the register turns over they are cut in with them, under the same edge.
+// None of it moves on its own: the ornaments, the rule and the glow belong to the words, and
+// whatever edge cuts the words into a new face (a reveal, the shift's slice) cuts them too.
 @mixin rite-dress {
   &::before {
     content: var(--rite-before, '');

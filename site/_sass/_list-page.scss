@@ -11,6 +11,8 @@
   margin: 1.5rem 0 0.5rem;
   color: var(--md-sys-color-on-surface);
   @include type.scale(title-large);
+  // Revealed by js/motion.js (shift) word by word when the register turns over, so it does not
+  // ask for the rite's own slice as well: one edge to a line.
   @include type.rite;
 }
 
@@ -70,22 +72,23 @@
 // A line of a list -- a page of the site map, an orientation of the atlas -- arrives (README:
 // "Motion axiom", the cut): it lifts in from the side the page's roll gives (--arrive-x,
 // --arrive-y) behind a slice square to the way it travels (--arrive-angle), the edge and the lift
-// stepping in the same landing stair, each line a stagger after the one before. The whole list
-// comes from one side, so it reads as one gesture; the treads are each line's own where a script
-// writes them (the atlas asks js/motion.js to cut each line it writes, m.cut), and the page's
-// arrival stair where none does.
+// stepping in the page's landing stair (--ease-arrive, --motion-long, rolled once for the page).
+// The whole list comes from one side in that one stair, and each line starts one even stagger
+// after the line above it (--k, its place in the list), so the list reads as one gesture, read
+// down the page.
 .orientations > li,
 .list-stack > li,
 .list-grid > li {
   @include cut.develop;
-  animation-delay: calc(var(--k, 0) * var(--motion-stagger, 40ms) + var(--jit, 0ms));
+  animation-delay: calc(var(--k, 0) * var(--motion-stagger, 40ms));
 }
 
-@for $i from 1 through 12 {
+// The place of a line in a list written into the page (the site map's, a dozen at most); a list a
+// script writes says each line's place itself.
+@for $i from 2 through 12 {
   .list-stack > li:nth-child(#{$i}),
   .list-grid > li:nth-child(#{$i}) {
     --k: #{$i - 1};
-    --jit: #{($i * 7) % 11 * 3}ms;
   }
 }
 
@@ -103,7 +106,7 @@
   min-width: 9rem;
   color: var(--md-sys-color-on-surface);
   @include type.scale(title-medium);
-  @include type.rite;
+  @include type.rite($shift: true);
   --role-size: 1.1rem;
 }
 
@@ -122,7 +125,7 @@
   color: var(--md-sys-color-primary);
   // Its underline, its plate and its press are a link in the words' (_base.scss).
   @include type.scale(title-large);
-  @include type.rite;
+  @include type.rite($shift: true);
   --role-size: 1.2rem;
 }
 

@@ -115,17 +115,17 @@ $registers-of: (
 }
 
 // What a slice at `$angle` has not yet passed at --cut: the far side of cut.slice()'s edge. Where
-// one thing is cut in by a slice and another, in the same place, is cut away by it -- a question
-// replacing the last, a landing replacing the one before, soot lifted off a print -- this is the
-// mask of what goes, so the two changes are one edge.
+// one thing is cut in by a slice and another, in the same place, is cut away by it -- a landing
+// replacing the one before, soot lifted off a print -- this is the mask of what goes, so the two
+// changes are one edge.
 @function unpassed($angle) {
   @return linear-gradient(#{$angle}, transparent var(--cut, 0%), #000 var(--cut, 0%));
 }
 
-// Room round a cut for what a box paints outside itself: its focus ring, and on the frame the
-// read seal half a rem beyond it. The mask an arrival leaves on is the size of the border box, and
-// held at the end of the arrival it would clip both for as long as the box stands; drawn over the
-// box and a margin round it, the one edge crosses them with the rest. Declared after the `mask`
+// Room round a cut for what a box paints outside itself: its focus ring, and the focus rings and
+// seals of the controls in a landing. The mask an arrival leaves on is the size of the border box,
+// and held at the end of the arrival it would clip them for as long as the box stands; drawn over
+// the box and a margin round it, the one edge crosses them with the rest. Declared after the `mask`
 // shorthand, which resets these. (_persona.scss and _nav.scss keep the same four lines.)
 @mixin bleed($by: 16px) {
   mask-clip: no-clip;
@@ -171,16 +171,19 @@ html[data-shifting] .stage-head {
 // forward treads, chosen for the reason written beside it, and a surface that stays changed rests
 // as two shades split by its edge.
 //
-//   arriving   a question that replaces one comes in behind a slice from the side the roll gives
-//              it (--arrive-angle) while the one before is cut away by the same edge; the options
-//              of a question are dealt one after another (--d) behind the slice their question
-//              arrives by, in one stair cut for the whole deal, so a deal is one gesture
+//   arriving   a question stands with its host, which arrives behind a slice of its own (the
+//              stage's ask); once that edge has crossed, its options are dealt behind the slice
+//              their question arrives by (--arrive-angle), in the order that slice reaches them
+//              (--d), in one stair cut for the whole deal, so a deal is one gesture; a landing
+//              that replaces one comes in behind a slice while the one before is cut away by it
 //   leaving    an option not chosen, a name taken out, a line cleared go behind a slice toward
-//              where they go (--leave-angle, cut.unmake)
+//              where they go (--leave-angle, cut.unmake): the options out from the chosen one,
+//              the nearest first, and what a finished question is done with after its seal
 //   sealing    a thing chosen is sealed: its fill, two shades split by a curve round the press,
-//              grows from that point (the engine's seal, _controls.scss); the reading's seal on
-//              the frame, the field's impression and the dial's seal grow from the point the
-//              answer was given
+//              grows from that point (the engine's seal, _controls.scss); the reading is sealed
+//              ONCE, by the frame's layer from the last press, or -- where the mechanism has a
+//              picture or a panel of its own -- by that: the field's impression, the dial's seal,
+//              a canvas's own curve, the lamp of a lit window
 //   stamping   a count, a mark, a tap is set down in one tread (a scale or a translate)
 //   filling    the big button, the lamp, the soot and the room change by their area behind one
 //              edge: a curve from the press, a curve from the lamp, a slice from the side the hand
@@ -199,11 +202,9 @@ html[data-shifting] .stage-head {
   gap: 0.75rem;
 }
 
-// A question that replaces one, and the next landing of a question that has several: cut in by a
-// slice from the side the roll gives it, in the place of the one before. The first question of a
-// visit stands with its host, which arrives on its own (_stage.scss, _persona.scss): one edge
-// for one arrival.
-.probe[data-dealt='true'],
+// The next landing of a question that has several: cut in by a slice from the side the roll gives
+// it, in the place of the one before. The question itself stands with its host, which arrives on
+// its own (.stage-ask.is-landing, _stage.scss): one edge for one arrival.
 .probe-landing[data-dealt='true'] {
   --cut: 100%;
   mask: cut.slice(var(--arrive-angle, 0deg));
@@ -215,7 +216,6 @@ html[data-shifting] .stage-head {
 // what the slice has not yet passed -- its --arrive-angle, --ease-develop and --motion-develop
 // copied from the new one by the script, and its mask drawn over the same margin, so the old is
 // ahead of the edge and the new behind it, never both and never neither.
-.probe.probe-ghost,
 .probe-landing.probe-landing-ghost {
   position: absolute;
   inset: 0;
@@ -257,6 +257,14 @@ html[data-shifting] .stage-head {
   opacity: var(--fill-opacity, 0.18);
   mask: cut.curve(var(--read-x, 50%), var(--read-y, 50%));
   @include cut.play(in, seal, long, arrive);
+}
+
+// A mechanism that seals its own picture or panel -- from the knocker, the needle's tip, the top
+// stone, the pivot, the last star, the dial's thumb, the mark, the line's own direction -- seals
+// the reading with that (data-seal='own', written by the script), and the frame grows no second
+// curve from another point beside it.
+.probe[data-seal='own']::before {
+  content: none;
 }
 
 // Each mechanism tints its seals a little differently: the host's data-probe has a say.
@@ -331,9 +339,10 @@ html[data-shifting] .stage-head {
   text-align: left;
 }
 
-// Options dealt: one after another in a rolled order (--d), each behind the slice its question
-// arrives by (the --arrive-angle it inherits) and lifting in from the same side, all in the one
-// stair the script cut for the whole deal.
+// Options dealt: one after another (--d) in the order the slice their question arrives by reaches
+// them, those it reaches at once together, and not before the host has arrived; each behind that
+// slice (the --arrive-angle it inherits) and lifting in from the same side, all in the one stair
+// the script cut for the whole deal.
 .probe-body .probe-options .probe-option[data-dealt='true']:not(.probe-skip) {
   --cut: 100%;
   @include cut.develop(develop, medium);
@@ -341,7 +350,8 @@ html[data-shifting] .stage-head {
   @include bleed;
 }
 
-// The ones not chosen go behind a slice toward where they go, each on its own delay.
+// The ones not chosen go behind a slice toward where they go, out from the chosen one, the
+// nearest first (--d).
 .probe-body .probe-options .probe-option.is-leaving:not(.probe-skip) {
   --cut: 0%;
   pointer-events: none;
@@ -375,7 +385,7 @@ html[data-shifting] .stage-head {
 
 // Words that leave -- the glass twin of the trace, the meter, a name taken out of the chosen
 // order and its arrow, the order itself -- go behind a slice like everything else here, never
-// cleared in a cut.
+// cleared in a cut; at the end of a question, only once the reading's seal has grown (--d).
 .probe .probe-trace-glass.is-leaving,
 .probe .probe-meter.is-leaving,
 .probe .probe-order.is-leaving,
@@ -417,11 +427,13 @@ html[data-shifting] .stage-head {
   margin-top: 0.25rem;
 }
 
-// The skip set aside with the question: behind a slice, never hidden in a cut.
+// The skip set aside with the question: behind a slice, never hidden in a cut, and the last of
+// what a finished question is done with, after its seal (--d).
 .probe .probe-option.probe-skip.is-leaving:not([hidden]) {
   --cut: 0%;
   pointer-events: none;
   @include cut.unmake(unmake, medium);
+  animation-delay: var(--d, 0ms);
 }
 
 .probe-big {
@@ -567,8 +579,8 @@ html[data-shifting] .stage-head {
 }
 
 // The mark is set down where it was left, like a seal into wax: from a size larger, in the
-// landing's shrinking treads (mark-set). Moved by the arrow keys it steps to its new place in
-// treads (the engine's flip), never along a glide.
+// landing's shrinking treads (mark-set). Moved by the arrow keys it lands on its new place in a
+// few shrinking treads (the engine's flip, in the arrive family), never along a glide.
 .probe-mark {
   position: absolute;
   z-index: 1;
@@ -615,6 +627,12 @@ html[data-shifting] .stage-head {
   border-radius: var(--md-sys-shape-corner-extra-small);
   background: var(--md-sys-color-surface-dim);
   transition: border-color var(--motion-medium) var(--ease-stair);
+}
+
+// The window's own fill is not drawn: the lamp is the one seal a lit window wears, so lighting
+// one grows one curve and not a second from the press beside it.
+.probe-window::before {
+  content: none;
 }
 
 // The lamp: two shades of the tertiary split by a curve round the lamp itself, low in the pane
@@ -673,8 +691,9 @@ html[data-shifting] .stage-head {
   @include cut.play(out, unseal, medium, leave);
 }
 
-// The third light: the whole facade reads, every pane set down one tread in a rolled order (--d),
-// once the third lamp has grown (data-read is written by the script after that rite).
+// The third light: the whole facade reads, every pane set down one tread (--d), outward from the
+// third lamp as a curve from it would reach them, once that lamp has grown (data-read is written
+// by the script after that rite).
 .probe-windows[data-read='true'] .probe-window-pane {
   animation: pane-read var(--motion-medium) var(--ease-pane-read, var(--ease-flicker)) var(--d, 0ms) both;
 }
@@ -758,11 +777,11 @@ html[data-shifting] .stage-head {
   animation-delay: var(--d, 0ms);
 }
 
-// Start over: the soot is laid back behind a slice the way it was lifted, patch after patch in a
-// rolled order (--d).
+// Start over: the sheet is laid back by one slice at the soot's own angle, patch after patch in
+// the order that slice reaches them (--d), so it reads as one edge crossing the print.
 .probe-rub-cell[data-covering='true']::before {
   --cut: 100%;
-  mask: cut.slice();
+  mask: cut.slice(var(--soot-angle, 112deg));
   @include cut.play(in, cover, medium, stair);
   animation-delay: var(--d, 0ms);
 }
@@ -878,24 +897,29 @@ html[data-shifting] .stage-head {
   color: inherit;
 }
 
-// The key that turns: about its bow, by the angle the script rolled (--key-turn), in the
-// ratchet's even clicks, and it stays turned -- the mark of the answer -- while the other six go.
-// It stands unmasked from here, so taking its arrival off can never hide it.
+// The key that turns: about its bow, by the angle the script rolled (--key-turn), in three or
+// four even clicks cut for that turn (--ease-key-turn), and it stays turned -- the mark of the
+// answer -- while the other six go. It stands unmasked from here, so taking its arrival off can
+// never hide it.
 .probe-options.probe-keys .probe-option[data-turned='true']:not(.probe-skip) {
   --fill-opacity: 0.3;
   mask: none;
   transform-origin: 12% 50%;
   rotate: var(--key-turn, 12deg);
-  animation: key-turn var(--motion-long) var(--ease-key-turn, var(--ease-ratchet)) both;
+  animation: key-turn var(--motion-long) var(--ease-key-turn, var(--ease-stair)) both;
 }
 
-// A control spent (data-spent, written before it is disabled): inert at once; its fill, where it
-// has one, is cut away by a slice at the register's angle in the treads the script cut for this
-// retirement (--ease-unseal), while its ground steps to the disabled grey along the stair every
-// control carries (_controls.scss); only then is it disabled, since a disabled control plays
-// nothing. The big button's fill goes back the way it came instead: the script takes --fill-cut
-// off and its curve steps back to its point. Specific enough to outrank the stage's ground for
-// the threshold's cards.
+// A control spent (data-spent, written before it is disabled): inert at once. What shows of it
+// being spent waits for the reading's seal to grow (--spent-after, its length, written by the
+// script), so the seal is the one edge while it grows; then the fill, on a control that shows one
+// (a filled button, a pressed or set one), is cut away by a slice at the control's own angle
+// (--cut-angle: the way the pointer came in, which the engine writes on the control, or the
+// register's) in the treads the script cut for this retirement (--ease-unseal), while its ground
+// steps to the disabled grey along the stair every control carries (_controls.scss); only then is
+// it disabled, since a disabled control plays nothing. A control with no fill shown has nothing
+// to cut. The big button's fill goes back the way it came instead: the script takes --fill-cut off
+// and its curve steps back to its point. Specific enough to outrank the stage's ground for the
+// threshold's cards.
 .probe [data-spent='true'] {
   pointer-events: none;
 }
@@ -906,12 +930,18 @@ html[data-shifting] .stage-head {
   background-color: color-mix(in oklab, var(--md-sys-color-on-surface) 12%, transparent);
   color: color-mix(in oklab, var(--md-sys-color-on-surface) 38%, transparent);
   box-shadow: none;
+  transition-delay: var(--spent-after, 0ms);
 }
 
-.probe [data-spent='true']:not(.probe-big)::before {
+.probe [data-spent='true']:is(.btn-filled, [aria-pressed='true'], [data-set='true']):not(.probe-big)::before {
   --cut: 0%;
   mask: cut.slice();
   @include cut.play(out, unseal, medium, leave);
+  animation-delay: var(--spent-after, 0ms);
+}
+
+.probe .probe-big[data-spent='true']::before {
+  transition-delay: var(--spent-after, 0ms);
 }
 
 // ---- the keyframes: each a from and a to, stepped by its stair -------------------------------
@@ -1027,7 +1057,6 @@ html[data-shifting] .stage-head {
 // animation taken off that end is what shows. What leaves is simply gone. The selectors are the
 // rules' own, so each is stilled at the specificity it plays at.
 @media (prefers-reduced-motion: reduce) {
-  .probe[data-dealt='true'],
   .probe-landing[data-dealt='true'],
   [data-probe-state='read'] .probe::before,
   .probe-order-arrow[data-tick],
@@ -1045,7 +1074,7 @@ html[data-shifting] .stage-head {
   .probe-rub-cell[data-covering='true']::before,
   .probe-dial[data-set='true'] .probe-dial-seal,
   .probe-options.probe-keys .probe-option[data-turned='true']:not(.probe-skip),
-  .probe [data-spent='true']:not(.probe-big)::before {
+  .probe [data-spent='true']:is(.btn-filled, [aria-pressed='true'], [data-set='true']):not(.probe-big)::before {
     animation: none;
   }
 
@@ -1057,7 +1086,6 @@ html[data-shifting] .stage-head {
   }
 
   .probe.is-leaving,
-  .probe.probe-ghost,
   .probe-landing.probe-landing-ghost,
   .probe-body .probe-options .probe-option.is-leaving:not(.probe-skip),
   .probe .probe-option.probe-skip.is-leaving:not([hidden]),

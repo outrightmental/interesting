@@ -28,9 +28,11 @@ description: 'A reading is what the site makes of your answer to one sideways qu
     var worldLink = document.getElementById('current-world');
     var list = document.getElementById('orientations');
     // Words that change while a visitor reads are cut in by one slice at the register's slant
-    // (m.reveal), and a line of the atlas arrives as every line of a list does (_list-page.scss):
-    // from the side the page's roll gives the whole list, behind a slice, in a landing stair the
-    // engine composes for that line alone (m.cut). README: "Motion axiom". Where nothing can play,
+    // (m.reveal). A line of the atlas arrives as every line of a list does, by the stylesheet
+    // alone (_list-page.scss): from the side the page's roll gives the whole list, behind a slice,
+    // in the page's one landing stair, one even stagger after the line above it -- so the list is
+    // one gesture, read down the page. The script only says each line's place (--k), since the
+    // list is longer than the stylesheet counts. README: "Motion axiom". Where nothing can play,
     // the words and the lines are simply there.
     function engine() { var m = window.interestingMotion; return m && !m.reduced ? m : null; }
     function say(node, text) {
@@ -38,10 +40,6 @@ description: 'A reading is what the site makes of your answer to one sideways qu
       node.textContent = text;
       var m = engine();
       if (m && typeof m.reveal === 'function') m.reveal(node);
-    }
-    function arrive(node) {
-      var m = engine();
-      if (m && typeof m.cut === 'function') m.cut(node, 'develop', { duration: 'long' });
     }
 
     function showReading(reading) {
@@ -62,8 +60,9 @@ description: 'A reading is what the site makes of your answer to one sideways qu
     }
 
     list.textContent = '';
-    api.orientations().forEach(function (orientation) {
+    api.orientations().forEach(function (orientation, k) {
       var item = document.createElement('li');
+      item.style.setProperty('--k', String(k));
       var name = document.createElement('h3');
       name.className = 'orientation-name';
       name.textContent = orientation.name;
@@ -77,7 +76,6 @@ description: 'A reading is what the site makes of your answer to one sideways qu
       item.appendChild(pull);
       item.appendChild(world);
       list.appendChild(item);
-      arrive(item);
     });
     window.addEventListener('threshold:reading', function () { showReading(api.reading()); });
     showReading(api.reading());

@@ -370,16 +370,6 @@
   function between(a, b) { return a + Math.random() * (b - a); }
   function unit(value) { return Math.max(0, Math.min(1, value)); }
   function seedOf() { return Math.floor(Math.random() * 0x7fffffff); }
-  function shuffled(list) {
-    var out = list.slice();
-    for (var i = out.length - 1; i > 0; i--) {
-      var j = Math.floor(Math.random() * (i + 1));
-      var t = out[i];
-      out[i] = out[j];
-      out[j] = t;
-    }
-    return out;
-  }
   function staggerOf(k) {
     var m = engine();
     if (m && typeof m.stagger === 'function') { try { return m.stagger(k); } catch (e) { /* the bake */ } }
@@ -512,18 +502,30 @@
     if (!node || typeof node.setAttribute !== 'function') return;
     node.setAttribute('data-tick', node.getAttribute('data-tick') === 'a' ? 'b' : 'a');
   }
-  // The meter cleared goes behind a slice before its marks are taken, and is itself again after.
-  function gauge(trace, text) {
-    if (!trace || !trace.meter) return;
+  // The meter: its marks stamped as they land, and only when they change -- a stroke of the hand
+  // that adds no mark sets nothing down -- and a stamp still setting down is never begun again: a
+  // quick hand's marks land under the one stamp, which goes all the way down and never flickers
+  // back up mid-way; the next mark after it is stamped afresh. Cleared, it goes behind a slice
+  // before its marks are taken (after `delay` ms, in the stair `seed` gives its group, where it
+  // follows something else out), and is itself again after; a meter already going is left to go.
+  // Hands back the length of its going, delay and all, or 0.
+  function gauge(trace, text, delay, seed) {
+    if (!trace || !trace.meter) return 0;
     var meter = trace.meter;
+    var going = !!(meter.classList && meter.classList.contains('is-leaving'));
     if (text) {
-      if (meter.classList && meter.classList.contains('is-leaving')) restore(meter);
+      if (going) restore(meter);
+      else if (meter.textContent === text) return 0;
       meter.textContent = text;
-      tick(meter);
-      return;
+      var now = Date.now();
+      if (!meter.stampedAt || now - meter.stampedAt >= beat('short')) {
+        meter.stampedAt = now;
+        tick(meter);
+      }
+      return 0;
     }
-    if (!meter.textContent) return;
-    unmake(meter, function () { meter.textContent = ''; restore(meter); });
+    if (!meter.textContent || going) return 0;
+    return unmake(meter, function () { meter.textContent = ''; restore(meter); }, seed, delay);
   }
   // A tally that ratchets: one mark at a time, grouped in fives with a slash.
   function tally(n) {
@@ -540,21 +542,84 @@
     if (!m || typeof m.cut !== 'function' || stilled() || !node || !node.style) return 0;
     try { return m.cut(node, riteName, options || {}) || 0; } catch (e) { return 0; }
   }
-  // Things dealt out: one after another, each on a delay of its own in a rolled order (--d), all
-  // in one stair cut for the whole deal (one seed), so the deal is one gesture and not a scatter.
-  // They come in behind the slice their question arrives by, which they inherit (--arrive-angle),
-  // and where the question is itself coming in behind one, only once that edge has crossed
-  // (dealAfter, the question's own length), so the two movements follow each other and never
-  // cross. data-dealt is what the stylesheet plays the arrival on, and it stays, so nothing
-  // replays when a passing class comes off.
-  var dealAfter = 0;
+  // Where a thing stands on the page: the centre of its box, read once for a group's order.
+  function centreOf(node) {
+    if (!node || typeof node.getBoundingClientRect !== 'function') return { x: 0, y: 0 };
+    var box = node.getBoundingClientRect();
+    return { x: box.left + box.width / 2, y: box.top + box.height / 2 };
+  }
+  // How far along the way a slice at `angle` travels (0deg upward, 90deg rightward) a point lies:
+  // the lower, the sooner the edge reaches it.
+  function reach(p, angle) {
+    var rad = angle * Math.PI / 180;
+    return p.x * Math.sin(rad) - p.y * Math.cos(rad);
+  }
+  // A group's order, by a reason and never by a roll: each thing's measure (how far along the way
+  // an edge travels, how far from the thing chosen), the least first, and things within `near` of
+  // the same measure together, so the group goes as one edge crossing it. Hands back each thing's
+  // step, 0 for the first.
+  function stepsBy(measures, near) {
+    var sorted = measures.map(function (v, i) { return { v: v, i: i }; }).sort(function (a, b) { return a.v - b.v; });
+    var out = new Array(measures.length);
+    var step = -1;
+    var first = -Infinity;
+    sorted.forEach(function (e) {
+      if (e.v - first > near) { step += 1; first = e.v; }
+      out[e.i] = step;
+    });
+    return out;
+  }
+  // Each of `nodes`' step away from a point: the nearest first, those as near together.
+  function stepsFrom(nodes, at) {
+    return stepsBy(nodes.map(function (node) {
+      var c = centreOf(node);
+      return Math.hypot(c.x - at.x, c.y - at.y);
+    }), 4);
+  }
+  // How long until what holds `node` has arrived: the longest finite movement still to run on it
+  // or on what it stands in (the stage's ask, landing behind its slice as the question is put),
+  // in ms, at most two long beats; 0 for a host already standing.
+  function arriving(node) {
+    var left = 0;
+    for (var at = node; at && at.nodeType === 1 && at !== document.body; at = at.parentElement) {
+      if (typeof at.getAnimations !== 'function') return 0;
+      var running = [];
+      try { running = at.getAnimations(); } catch (e) { running = []; }
+      for (var i = 0; i < running.length; i++) {
+        var effect = running[i].effect;
+        if (!effect || typeof effect.getComputedTiming !== 'function' || running[i].playState === 'finished') continue;
+        var t = effect.getComputedTiming();
+        if (isFinite(t.endTime)) left = Math.max(left, t.endTime - (t.localTime || 0));
+      }
+    }
+    return Math.max(0, Math.min(left, 2 * (beat('long') || BEATS.long)));
+  }
+  // Things dealt out: one after another (--d), all in one stair cut for the whole deal (one
+  // seed), so the deal is one gesture. They come in behind the slice their question arrives by
+  // (the --arrive-angle they inherit), in the order that slice reaches them -- those it reaches at
+  // once together -- so the one edge is seen to sweep the set; and not while what holds them is
+  // still arriving behind an edge of its own (the stage's ask lands as the question is put, a
+  // moment after this is called): the deal follows that edge and never crosses it. Both are read
+  // a frame later, when the host's arrival has begun; until then each waits behind its slice,
+  // which has not yet moved, on its place in the page's order. data-dealt is what the stylesheet
+  // plays the arrival on, and it stays, so nothing replays when a passing class comes off.
   function dealOut(nodes) {
+    var dealt = nodes.filter(function (node) { return node && node.style && typeof node.setAttribute === 'function'; });
+    if (!dealt.length) return;
     var seed = seedOf();
-    shuffled(nodes).forEach(function (node, k) {
-      if (!node || !node.style) return;
-      node.style.setProperty('--d', Math.round(dealAfter + staggerOf(k)) + 'ms');
+    dealt.forEach(function (node, k) {
+      node.style.setProperty('--d', staggerOf(k) + 'ms');
       cutFor(node, 'develop', { seed: seed, duration: 'long' });
       node.setAttribute('data-dealt', 'true');
+    });
+    if (stilled() || typeof window.requestAnimationFrame !== 'function') return;
+    window.requestAnimationFrame(function () {
+      var live = dealt.filter(function (node) { return node.isConnected && !node.classList.contains('is-leaving'); });
+      if (!live.length) return;
+      var wait = arriving(live[0].parentElement);
+      var angle = angleOf(window.getComputedStyle(live[0]), '--arrive-angle', 0);
+      var steps = stepsBy(live.map(function (node) { return reach(centreOf(node), angle); }), 4);
+      live.forEach(function (node, k) { node.style.setProperty('--d', Math.round(wait + staggerOf(steps[k])) + 'ms'); });
     });
   }
   // The length the engine cut for a movement on an element (--motion-<rite>, written inline), in
@@ -564,9 +629,9 @@
     var v = parseFloat(node.style.getPropertyValue(name));
     return isFinite(v) && v > 0 ? v : 0;
   }
-  // One thing replacing another in the same place -- a question the last, a landing the one
-  // before: the new one is cut in by a slice from the side the roll gives it (data-dealt), and the
-  // old one, left over its place as a ghost (`ghostClass`), is cut away by the same edge, its angle,
+  // One thing replacing another in the same place -- a landing of a question the one before it:
+  // the new one is cut in by a slice from the side the roll gives it (data-dealt), and the old
+  // one, left over its place as a ghost (`ghostClass`), is cut away by the same edge, its angle,
   // treads and length copied from the new one's, so the change is one edge; it is taken out of the
   // page once the edge has crossed. With no engine, or for a visitor who asked for less, the old
   // one simply goes.
@@ -656,17 +721,21 @@
     if (node.style) node.style.pointerEvents = '';
     if (node.tagName === 'BUTTON') node.tabIndex = 0;
   }
-  // A control spent: inert at once (data-spent), its fill cut away by a slice in treads cut for
-  // this retirement (--ease-unseal) -- or, for the big button, its fill's curve stepped back to its
-  // point (--fill-cut taken off) -- while its ground steps to the disabled grey along its own
-  // stair, and only then disabled: a disabled control plays nothing. An input is spent the same way.
-  function retire(button) {
-    if (!button || button.disabled) return;
+  // A control spent: inert at once (data-spent). What shows of it being spent waits `after` ms
+  // (--spent-after: the reading's seal, so the seal is the one edge while it grows) and then
+  // follows: its fill, where it shows one, is cut away by a slice in treads cut for this
+  // retirement (--ease-unseal) -- or, for the big button, its fill's curve steps back to its point
+  // (--fill-cut taken off) -- while its ground steps to the disabled grey along its own stair; only
+  // then is it disabled, since a disabled control plays nothing. An input is spent the same way.
+  function retire(button, after) {
+    if (!button || button.disabled || button.getAttribute('data-spent') === 'true') return;
     button.setAttribute('aria-disabled', 'true');
     if (button.style && typeof button.style.removeProperty === 'function') button.style.removeProperty('--fill-cut');
     var wait = beat('medium');
-    if (!wait) { button.disabled = true; return; }
-    var length = cutFor(button, 'unseal', { duration: 'medium' }) || wait;
+    if (!wait || !button.style) { button.disabled = true; return; }
+    var delay = Math.max(0, Math.round(after || 0));
+    button.style.setProperty('--spent-after', delay + 'ms');
+    var length = (cutFor(button, 'unseal', { duration: 'medium' }) || wait) + delay;
     button.setAttribute('data-spent', 'true');
     var once = false;
     function go() { if (once) return; once = true; button.disabled = true; }
@@ -747,10 +816,11 @@
   function sealWash(g, w, h, k, at, warm) {
     paintCut(g, 0, 0, w, h, unit(k) * SEAL_REACH, { kind: 'curve', x: at.x, y: at.y }, rgba(warm, 0.12));
   }
-  // The angle the page's register cuts at (--cut-angle), read once for a canvas that matches it.
-  function angleOf(style) {
-    var v = parseFloat(style && typeof style.getPropertyValue === 'function' ? style.getPropertyValue('--cut-angle') : '');
-    return isFinite(v) ? v : 112;
+  // An angle the page writes -- the register's slice (--cut-angle, the default), the side a
+  // question arrives from (--arrive-angle), the soot's split -- read once, in degrees.
+  function angleOf(style, name, fallback) {
+    var v = parseFloat(style && typeof style.getPropertyValue === 'function' ? style.getPropertyValue(name || '--cut-angle') : '');
+    return isFinite(v) ? v : (fallback == null ? 112 : fallback);
   }
   // The direction a movement went, as a slice's angle (0deg upward, 90deg rightward), to the
   // nearest 15 degrees, as the engine quantizes a pointer's approach; null for no movement at all.
@@ -758,6 +828,50 @@
     if (Math.abs(dx) < 1 && Math.abs(dy) < 1) return null;
     var deg = Math.atan2(dx, -dy) * 180 / Math.PI;
     return ((Math.round(deg / 15) * 15) % 360 + 360) % 360;
+  }
+  /* A thing that follows a hand -- the compass's needle, the cairn's guide -- goes in clean stairs:
+     one stair at a time, from where it stands toward where the hand is now, read again at every
+     tread, so a hand that keeps moving is followed tread after tread and is never outrun, and a
+     stair is never thrown away and begun again before its first tread lands. No tread goes back
+     past the one before it: a hand that turns back is followed by the next stair, its own way.
+     When a stair ends with the hand somewhere else, the next begins; nothing is drawn on a
+     stair's first moment, when nothing has moved. `o` gives at() and to() (where the thing stands,
+     where the hand has it), gap(a, b) (signed, from a to b), put(v) (stand it at v and draw it),
+     ms() and treads() for each stair, and near (a gap too small to move for). Hands back go(),
+     to follow, and halt(), to let the thing be. */
+  function follow(o) {
+    var live = 0; // the stair that may still move the thing; any other was halted
+    var moving = false;
+    var stop = null;
+    function go() {
+      if (moving) return;
+      var from = o.at();
+      var first = o.gap(from, o.to());
+      if (Math.abs(first) < o.near) return;
+      var way = first > 0 ? 1 : -1;
+      var mine = ++live;
+      moving = true;
+      var halt = series({ ms: o.ms(), treads: o.treads(), step: function (k, n) {
+        if (mine !== live || !k) return;
+        var gap = o.gap(from, o.to());
+        var next = from + gap * (k / n);
+        if (gap * way <= 0 || (next - o.at()) * way <= 0) return;
+        o.put(next);
+      }, done: function () {
+        if (mine !== live) return;
+        moving = false;
+        stop = null;
+        go();
+      } });
+      if (mine === live && moving) stop = halt;
+    }
+    function halt() {
+      live += 1;
+      moving = false;
+      if (stop) stop();
+      stop = null;
+    }
+    return { go: go, halt: halt };
   }
 
   function load() {
@@ -956,19 +1070,7 @@
     });
     if (selector) selector.value = '';
     noteProbe(probe.probe);
-    // A question already up is set aside, not deleted: its frame stays over the new one's place
-    // as a ghost, and the one slice that cuts the new question in cuts it away (replace, below).
-    var old = null;
-    for (var c = 0; c < host.children.length && !old; c++) {
-      var kid = host.children[c];
-      if (kid.classList && kid.classList.contains('probe') && !kid.classList.contains('probe-ghost')) old = kid;
-    }
-    var ghost = old && beat('medium') ? old : null;
     host.textContent = '';
-    if (ghost) {
-      try { if (window.getComputedStyle(host).position === 'static') host.style.position = 'relative'; } catch (e) { /* it reads as it lies */ }
-      host.appendChild(ghost);
-    }
     host.setAttribute('data-probe', probe.probe);
     host.removeAttribute('data-probe-state');
     var answer = {};
@@ -1020,12 +1122,10 @@
     });
     frame.appendChild(skip);
     host.appendChild(frame);
-    // A question that replaces one comes in behind one slice that cuts the last away; the first
-    // question stands with its host, which arrives on its own (js/stage.js, js/persona.js), so an
-    // arrival is one edge and never two. The ask's words are cut in by the engine's reveal, and the
-    // mechanism's own tint is the host's data-probe (the stylesheet).
-    replace(frame, ghost, 'probe-ghost');
-    say(ask, probe.ask, 0.3);
+    // The question stands with its host, which arrives on its own as the question is put (the
+    // stage's ask, behind a slice of its own: js/stage.js), so the frame and the ask's words come
+    // in by that one edge and are cut by no second one; the options are dealt after it (dealOut).
+    // The mechanism's own tint is the host's data-probe (the stylesheet).
     // Where the answer was given: the last press in the frame, as a point of it (a key's press is
     // the middle of the control it pressed), so the reading's seal grows from there.
     var pressed = null;
@@ -1040,40 +1140,46 @@
       var at = ev.target.getBoundingClientRect();
       pressAt(at.left + at.width / 2, at.top + at.height / 2);
     }, true);
-    function finish() {
-      if (answered || !current()) return;
+    // The reading lands as ONE seal, and only then does what is done with go. A mechanism with a
+    // picture or a panel of its own seals that, from the point its answer lives at -- the knocker,
+    // the needle's tip, the top stone, the dial's thumb, the mark -- and hands the seal's length
+    // here (`own`), and the frame draws no second one (data-seal='own'). Otherwise the frame's own
+    // layer is the seal: two shades of the new primary split by a curve round the point the answer
+    // was given (the last press in the frame), grown from there in treads cut for it. Once the seal
+    // has grown, the glass, the meter and the skip go behind a slice, top to bottom, one after
+    // another in one stair; the question is handed on when the last of them has gone. Hands back
+    // the seal's length, so a mechanism can let its spent controls follow the seal as well.
+    function finish(own) {
+      if (answered || !current()) return 0;
       answered = true;
-      var skipLength = unmake(skip, function () { skip.hidden = true; });
       var reading = record(answer);
-      if (!current()) return;
-      // The trace's last line was heard once already, so the live line is let go; its glass twin
-      // and the meter go behind a slice rather than being wiped.
+      if (!current()) return 0;
+      // The trace's last line was heard once already, so the live line is let go.
       trace.textContent = '';
       if (typeof trace.undoGlass === 'function') { try { trace.undoGlass(); } catch (e) { /* the words stand */ } }
       trace.undoGlass = null;
-      if (glass.textContent) unmake(glass, function () { glass.textContent = ''; restore(glass); });
-      gauge(trace, '');
-      // The reading lands as a seal: the frame's layer, two shades of the new primary split by a
-      // curve round the point the answer was given, grows from that point in treads cut for it,
-      // before the question is handed on.
-      if (pressed) {
-        frame.style.setProperty('--read-x', pressed.x.toFixed(1) + '%');
-        frame.style.setProperty('--read-y', pressed.y.toFixed(1) + '%');
-      }
       var wait = beat('long');
-      var sealLength = cutFor(frame, 'seal', { duration: 'long' }) || wait;
+      var sealLength;
+      if (own != null) {
+        frame.setAttribute('data-seal', 'own');
+        sealLength = Math.max(0, Number(own) || 0);
+      } else {
+        if (pressed) {
+          frame.style.setProperty('--read-x', pressed.x.toFixed(1) + '%');
+          frame.style.setProperty('--read-y', pressed.y.toFixed(1) + '%');
+        }
+        sealLength = cutFor(frame, 'seal', { duration: 'long' }) || wait;
+      }
       host.setAttribute('data-probe-state', 'read');
       var handed = false;
       function hand() { if (handed || !current()) return; handed = true; if (typeof opts.onAnswer === 'function') opts.onAnswer(reading, probe); }
-      if (!wait) { hand(); return; }
-      // Handed on when the seal has grown -- its own end on the frame's ::before, or its length on
-      // the clock -- and not before the skip has gone.
-      var after = Math.max(0, (skipLength || 0) - sealLength) + 40;
-      frame.addEventListener('animationend', function (ev) {
-        if (ev.target !== frame || ev.pseudoElement !== '::before' || ev.animationName !== 'cut-in') return;
-        window.setTimeout(hand, after);
-      });
-      window.setTimeout(hand, Math.max(sealLength, skipLength || 0) + 240);
+      var after = wait ? sealLength : 0;
+      var gone = seedOf();
+      var k = 0;
+      if (glass.textContent) unmake(glass, function () { glass.textContent = ''; restore(glass); }, gone, after + staggerOf(k++));
+      if (gauge(trace, '', after + staggerOf(k), gone)) k += 1;
+      unmake(skip, function () { skip.hidden = true; hand(); }, gone, after + staggerOf(k));
+      return wait ? sealLength : 0;
     }
     var kinds = {
       choice: choiceProbe, sequence: sequenceProbe, tap: tapProbe, hold: holdProbe,
@@ -1081,8 +1187,7 @@
       slider: sliderProbe, sky: skyProbe, keys: keysProbe, knock: knockProbe,
       rubbing: rubbingProbe, cairn: cairnProbe, compass: compassProbe
     };
-    dealAfter = ghost ? rolled(frame, '--motion-develop') : 0;
-    try { (kinds[probe.kind] || choiceProbe)(probe, body, trace, answer, finish); } finally { dealAfter = 0; }
+    (kinds[probe.kind] || choiceProbe)(probe, body, trace, answer, finish);
     return probe;
   }
   function optionButton(label, detail) {
@@ -1124,12 +1229,13 @@
           index += 1;
           // The chosen thing is sealed (data-set: the engine grows its fill from the press, and its
           // label is set down a tread) and the rest go behind a slice, one after another in one
-          // stair; only then does the next landing come.
+          // stair, out from the chosen one -- the nearest first -- as if the choice put them by;
+          // only then does the next landing come.
+          var others = buttons.filter(function (other) { return other !== button; });
+          var away = stepsFrom(others, centreOf(button));
           button.setAttribute('data-set', 'true');
           var gone = seedOf();
-          shuffled(buttons.filter(function (other) { return other !== button; })).forEach(function (other, k) {
-            unmake(other, null, gone, staggerOf(k));
-          });
+          others.forEach(function (other, k) { unmake(other, null, gone, staggerOf(away[k])); });
           var wait = beat(probe.quick ? 'short' : 'long');
           function go() {
             if (index < steps.length) {
@@ -1295,13 +1401,15 @@
       note(trace, 'placed: ' + item.label);
       var wait = beat('short');
       function go() {
-        unmake(button, function () {
+        var leaving = unmake(button, function () {
           shuffle(function () { if (button.parentNode === group) group.removeChild(button); });
         });
         putName(item);
         refresh();
-        busy = false;
-        if (picked.length >= target) scoreAndFinish();
+        if (picked.length < target) { busy = false; return; }
+        // The reading lands once the last object has gone into the order, not on top of it; the
+        // order stands meanwhile (busy), so nothing is taken out of it under the seal.
+        if (leaving) window.setTimeout(scoreAndFinish, leaving); else scoreAndFinish();
       }
       if (wait) window.setTimeout(go, wait); else go();
     }
@@ -1351,9 +1459,8 @@
       spread /= gaps.length;
       bucket(probe.buckets, mean, answer);
       add(answer, spread < mean * 0.22 ? probe.wobble.steady : probe.wobble.loose, 1);
-      gauge(trace, '');
-      retire(button);
-      finish();
+      // Sealed first; the button's fill steps back and it greys once the seal has grown.
+      retire(button, finish());
     });
     body.appendChild(button);
   }
@@ -1391,11 +1498,10 @@
       var held = Date.now() - started;
       started = 0;
       window.clearTimeout(ticker);
-      gauge(trace, '');
       button.classList.remove('held');
-      retire(button);
       bucket(probe.buckets, held, answer);
-      finish();
+      // Sealed first; the fill steps back to its point and the button greys once the seal has grown.
+      retire(button, finish());
     }
     button.addEventListener('pointerdown', down);
     button.addEventListener('pointerup', up);
@@ -1440,12 +1546,13 @@
       mark.style.left = cursor.x * 100 + '%';
       mark.style.top = cursor.y * 100 + '%';
     }
-    // A mark already out, moved by a key, steps to its new place in treads (the engine's flip, a
-    // translate the compositor draws), never along a glide; the first showing is its set-down.
+    // A mark already out, moved by a key, lands on its new place in a few shrinking treads (the
+    // engine's flip in the arrive family, a translate the compositor draws), never along a glide;
+    // the first showing is its set-down.
     function move() {
       var m = engine();
       if (!mark.hidden && m && typeof m.flip === 'function' && !stilled()) {
-        try { m.flip(field, show, { items: [mark], family: 'ratchet', dealt: false }); return; } catch (e) { /* it jumps */ }
+        try { m.flip(field, show, { items: [mark], family: 'arrive', dealt: false }); return; } catch (e) { /* it jumps */ }
       }
       show();
     }
@@ -1464,12 +1571,13 @@
       field.tabIndex = -1;
       placed = true;
       // The mark is set like a seal in wax (mark-set), and the field takes the impression: its
-      // layer grows from the mark as a curve (--mark-x, --mark-y; data-set), so it is closed, not
-      // merely tinted.
+      // layer grows from the mark as a curve (--mark-x, --mark-y; data-set), in treads cut for it,
+      // so it is closed, not merely tinted. That impression is the reading's one seal.
       field.style.setProperty('--mark-x', (cursor.x * 100).toFixed(1) + '%');
       field.style.setProperty('--mark-y', (cursor.y * 100).toFixed(1) + '%');
+      var seal = cutFor(field, 'seal', { duration: 'long' }) || beat('long');
       field.setAttribute('data-set', 'true');
-      finish();
+      finish(seal);
     }
     field.addEventListener('click', function (ev) {
       if (placed) return;
@@ -1563,6 +1671,7 @@
       if (!drawing) return;
       points.push(at(ev));
       paint();
+      // A mark for every fourth point; gauge sets one down only when the tally has changed.
       gauge(trace, tally(Math.ceil(points.length / 4)));
     });
     pad.addEventListener('pointerup', function () {
@@ -1613,24 +1722,27 @@
       else add(answer, probe.curved, 1);
       // The line sets: a slice in the line's own direction steps across the pad, and behind it
       // the line is warm. A line that comes back to where it began has no direction of its own,
-      // and sets at the register's angle.
-      gauge(trace, '');
+      // and sets at the register's angle. The setting is the reading's one seal.
       pad.style.cursor = 'default';
       var heading = headingOf(points[points.length - 1].x - points[0].x, points[points.length - 1].y - points[0].y);
       setEdge = { kind: 'slice', angle: heading === null ? fold.angle : heading };
-      series({ ms: beat('long'), treads: 3 + Math.floor(Math.random() * 3), step: function (k, n) {
+      var seal = beat('long');
+      series({ ms: seal, treads: 3 + Math.floor(Math.random() * 3), step: function (k, n) {
+        if (!k) return;
         set = k / n;
         paint();
       } });
-      finish();
+      finish(seal);
     }
     body.appendChild(pad);
     body.appendChild(el('p', 'probe-count', 'draw with a finger, a mouse, or the arrow keys'));
     paint();
   }
-  // A lamp is lit behind a curtain: the pane's light grows out from the lamp as a curve, a window
-  // put out shrinks back into it, and on the third light the whole facade reads -- all nine panes
-  // set down one tread each in a rolled order (pane-read) before the shape is scored.
+  // A lamp is lit behind a curtain: the pane's light grows out from the lamp as a curve -- the
+  // window's one seal -- and a window put out shrinks back into it. On the third light the whole
+  // facade reads: the nine panes are set down one tread each (pane-read), outward from the third
+  // lamp, those as far from it together, as a curve from that lamp would reach them, before the
+  // shape is scored.
   function windowsProbe(probe, body, trace, answer, finish) {
     var selected = [];
     var field = el('div', 'probe-windows');
@@ -1693,7 +1805,10 @@
         // length, and the reading is handed on a long beat after the last pane is set down.
         var lighting = stilled() ? 0 : rolled(light, '--motion-seal') || beat('medium');
         function facade() {
-          shuffled(panes).forEach(function (p, k) { p.style.setProperty('--d', staggerOf(k) + 'ms'); });
+          var rings = stepsBy(panes.map(function (p, i) {
+            return Math.hypot(i % 3 - index % 3, Math.floor(i / 3) - Math.floor(index / 3));
+          }), 0.01);
+          panes.forEach(function (p, i) { p.style.setProperty('--d', staggerOf(rings[i]) + 'ms'); });
           field.setAttribute('data-read', 'true');
           var wait = beat('long');
           if (wait) window.setTimeout(finish, wait); else finish();
@@ -1708,8 +1823,9 @@
   // The final division is the answer, not the order of presses. Undo never leaves a reading behind.
   // The balance settles in treads: a dropped weight falls from the spare row to halfway and into
   // its bowl, and the beam and the bowls step to their marks on the treads after, always forward
-  // and never past them; a weight taken back moves them at once. 'leave them hanging' seals the
-  // picture from the pivot it hangs from, and the beam is cut to the second accent.
+  // and never past them; a weight taken back lets them step back to theirs in three even treads.
+  // 'leave them hanging' seals the picture from the pivot it hangs from -- the reading's one seal
+  // -- and the beam is cut to the second accent; the spent controls grey once it has grown.
   function balanceProbe(probe, body, trace, answer, finish) {
     var counts = probe.bowls.map(function () { return 0; });
     var placed = [];
@@ -1773,7 +1889,8 @@
       else if (most === probe.total) add(answer, probe.gathered, 1);
       else if (least === 0) add(answer, probe.spare, 1);
       redraw({ seal: true });
-      finish();
+      var sealing = finish(beat('medium'));
+      buttons.concat([undo, leave]).forEach(function (button) { retire(button, sealing); });
     });
     controls.appendChild(undo);
     controls.appendChild(leave);
@@ -1889,9 +2006,9 @@
           tick(counters[index]);
         }
         button.setAttribute('aria-label', 'Give one weight to ' + bowl.label + '; ' + count + ' inside');
-        if (submitted) retire(button); else button.disabled = left === 0;
+        if (!submitted) button.disabled = left === 0;
       });
-      if (submitted) { retire(undo); retire(leave); } else {
+      if (!submitted) {
         undo.disabled = placed.length === 0;
         leave.disabled = left !== 0;
       }
@@ -1908,9 +2025,9 @@
   // second press on the same key tries it in the lock. The key tried is most of the answer, and
   // how many were weighed before trying is the rest. Nothing is hidden that matters: any key
   // turns, so the weighing is curiosity made visible, never a puzzle. Weighing cuts the detail in
-  // by the reveal; turning turns the key about its bow in even clicks (key-turn), and it stays
-  // turned while the other six go behind a slice, one after another in one stair, and only then
-  // are they disabled.
+  // by the reveal; turning turns the key about its bow in three or four even clicks (key-turn),
+  // and it stays turned while the other six go behind a slice, one after another in one stair,
+  // out from the turned key, the nearest first; only then are they disabled.
   function keysProbe(probe, body, trace, answer, finish) {
     var weighed = [];
     var held = -1;
@@ -1937,13 +2054,17 @@
           else if (others >= probe.keys.length - 1) add(answer, probe.all, 1);
           else if (others <= 2) add(answer, probe.few, 1);
           else add(answer, probe.many, 1);
+          var rest = buttons.filter(function (b) { return b !== button; });
+          var away = stepsFrom(rest, centreOf(button));
+          // The turn: three or four even clicks, as a lock's wards give under a key, cut for this
+          // turn alone.
           button.style.setProperty('--key-turn', (8 + Math.random() * 6).toFixed(1) + 'deg');
-          cutFor(button, 'key-turn', { family: 'ratchet', duration: 'long' });
+          cutFor(button, 'key-turn', { treads: 3 + Math.floor(Math.random() * 2), duration: 'long' });
           button.setAttribute('data-turned', 'true');
           var shed = 0;
           var gone = seedOf();
-          shuffled(buttons.filter(function (b) { return b !== button; })).forEach(function (other, k) {
-            shed = Math.max(shed, unmake(other, null, gone, staggerOf(k)));
+          rest.forEach(function (other, k) {
+            shed = Math.max(shed, unmake(other, null, gone, staggerOf(away[k])));
           });
           note(trace, key.label + ' turns in the lock');
           var wait = beat('long');
@@ -1979,11 +2100,11 @@
   }
   // The room answers the dial by area: ember and frost are two shades split by one edge, and the
   // dial moves the edge (data-warmth) in treads; the nearer end's word opens its tracking a step;
-  // 'leave it there' seals the panel from the point the dial was left at.
+  // 'leave it there' seals the panel from the point the dial was left at, the reading's one seal.
   function sliderProbe(probe, body, trace, answer, finish) {
     var wrap = el('div', 'probe-dial');
     // The panel's seal: a layer of its own that grows from the dial's thumb at data-set, in the
-    // treads the engine cuts for that seal, over the room at the share the dial gave it.
+    // treads the engine cuts for that seal on the panel, over the room at the share the dial gave it.
     var seal = el('span', 'probe-dial-seal');
     seal.setAttribute('aria-hidden', 'true');
     wrap.appendChild(seal);
@@ -2019,8 +2140,9 @@
       var warmth = Number(input.value) / 100;
       add(answer, probe.cold, 1 - warmth);
       add(answer, probe.warm, warmth);
-      // The dial is spent like any control (inert under the rite, disabled only after it), and
-      // the panel is sealed from where its thumb was left.
+      // The panel is sealed from where its thumb was left -- the reading's one seal, in treads cut
+      // for it -- and the dial and the button are spent like any control: inert at once, greyed
+      // once the seal has grown, disabled only after that.
       sealed = input.value;
       var panel = wrap.getBoundingClientRect();
       var track = input.getBoundingClientRect();
@@ -2028,10 +2150,11 @@
         wrap.style.setProperty('--dial-at', unit((track.left - panel.left + track.width * warmth) / panel.width) * 100 + '%');
         wrap.style.setProperty('--dial-y', unit((track.top - panel.top + track.height / 2) / panel.height) * 100 + '%');
       }
-      retire(input);
+      var seal = cutFor(wrap, 'seal', { duration: 'long' }) || beat('long');
       wrap.setAttribute('data-set', 'true');
-      retire(done);
-      finish();
+      var sealing = finish(seal);
+      retire(input, sealing);
+      retire(done, sealing);
     });
     body.appendChild(wrap);
     body.appendChild(done);
@@ -2043,8 +2166,10 @@
   // treads, and its line to the nearest star already out comes up with it, tread for tread. Night
   // falls by area: the sky rests in two shades, night above and dusk below, split by one slice
   // that steps down the sky as the stars come out. The stars a visitor hurried are warm, so their
-  // hand shows, and 'enough' seals the sky from the last star out. The sky is drawn only when a
-  // tread changes: no frame loop, and no twinkle.
+  // hand shows, and 'enough' seals the sky from the last star out -- the reading's one seal. The
+  // sky is drawn only when a tread lands: a star's own short stair is the only thing that waits on
+  // the frames, and only while that star is coming out; there is no twinkle, and nothing comes out
+  // while the sky is not on the page to be seen.
   function skyProbe(probe, body, trace, answer, finish) {
     var full = probe.full || 48;
     var sky = el('canvas', 'probe-pad');
@@ -2112,6 +2237,7 @@
       var star = { x: x, y: y, r: 0.9 + Math.random() * 1.5, own: !!own, k: 0, link: nearest(x, y) };
       stars.push(star);
       series({ ms: beat('medium') * between(1, 1.6), treads: 2 + Math.floor(Math.random() * 3), step: function (k, n) {
+        if (!k) return;
         star.k = k / n;
         paint();
       } });
@@ -2175,13 +2301,14 @@
       }
     }
     // The next star, after its pace; nothing comes out while the page is set aside behind a
-    // lightbox (it asks again in a while), and nothing at all once the sky has left the page.
+    // lightbox or the question is put away unanswered (a card pressed hides it), and it asks again
+    // in a while; nothing at all once the sky has left the page.
     function next(delay) {
       if (stopped || stars.length >= full) return;
       timer = window.setTimeout(function () {
         timer = 0;
         if (stopped || !sky.isConnected) return;
-        if (sky.closest('[data-lightbox-aside]')) { next(500); return; }
+        if (sky.closest('[data-lightbox-aside], [hidden]')) { next(500); return; }
         appear(0.04 + Math.random() * 0.92, 0.05 + Math.random() * 0.78, false);
         next(pace(stars.length));
       }, delay);
@@ -2205,13 +2332,14 @@
       if (n >= full) add(answer, probe.filled, 1);
       if (!hurried) add(answer, probe.waited, 1);
       else add(answer, hurried * 2 > n ? probe.hurried : probe.kindled, 1);
-      retire(enough);
-      retire(hurry);
       sky.style.cursor = 'default';
-      gauge(trace, '');
-      // Sealed from the last star out, in treads; the lines between the stars cut warm.
-      series({ ms: beat('medium'), treads: 3, step: function (k, n2) { sealed = k / n2; paint(); } });
-      finish();
+      // Sealed from the last star out, in treads; the lines between the stars cut warm. The two
+      // controls grey once it has grown.
+      var seal = beat('medium');
+      series({ ms: seal, treads: 3, step: function (k, n2) { if (k) { sealed = k / n2; paint(); } } });
+      var sealing = finish(seal);
+      retire(enough, sealing);
+      retire(hurry, sealing);
     });
     count();
     paint();
@@ -2220,13 +2348,12 @@
   // A door, and however the visitor knocks on it. The count is most of the answer -- one knock, two,
   // three, a handful, a volley -- and for a longer knock its rhythm is the rest: even, swung,
   // quickening or slowing, and whether they knocked at once or stood a moment first. Each knock
-  // rings on the door and leaves its tick on the strip above it, spaced as it fell, so the knock is
-  // written where it can be read back. No knock is wrong, and the door never answers on its own:
-  // saying the knock is done is the visitor's press. A knock rings out from where it landed as one
-  // circle that steps outward in a few treads and is gone after its last, never dimming; the door
-  // is set back a hair under it for that first tread, once, and is home; the newest tick on the
-  // strip is stamped; 'that is my knock' seals the door from the knocker out, its panels cut warm.
-  // The door is drawn only when a tread changes.
+  // leaves its tick on the strip above the door, spaced as it fell, so the knock is written where
+  // it can be read back. No knock is wrong, and the door never answers on its own: saying the knock
+  // is done is the visitor's press. A knock is a stamp and nothing more: the door is set back a hair
+  // and the newest tick stands tall for one tread, then both are home -- no ring goes out from it.
+  // 'that is my knock' seals the door from the knocker out, its panels cut warm: the reading's one
+  // seal. The door is drawn only when a knock lands, when its tread ends, and on the seal's treads.
   function knockProbe(probe, body, trace, answer, finish) {
     var KNOCKER = { x: 0.5, y: 0.42 };
     var door = el('canvas', 'probe-pad');
@@ -2280,9 +2407,9 @@
       g.fillRect(0, 0, w, h);
       g.fillStyle = 'rgba(0,0,0,0.35)';
       g.fillRect(0, bottom, w, h - bottom);
-      // Under a fresh knock (one still on its first tread) the door is set back a hair, once.
+      // Under a fresh knock (one still on its tread) the door is set back a hair, once.
       var last = knocks[knocks.length - 1];
-      var setBack = last && last.ring === 0 ? 1.5 : 0;
+      var setBack = last && last.fresh ? 1.5 : 0;
       g.strokeStyle = rgba(cool, 0.35);
       g.lineWidth = 3;
       g.strokeRect(left - 5, top - 5, right - left + 10, bottom - top + 5);
@@ -2311,19 +2438,8 @@
       g.arc(left + (right - left) * 0.78, top + (bottom - top) * 0.5, h * 0.012, 0, Math.PI * 2);
       g.fill();
       g.restore();
-      // Each knock rings out from where it landed, one circle a tread further out each tread, and
-      // is gone after its last.
-      g.strokeStyle = rgba(cool, 0.75);
-      g.lineWidth = 2;
-      for (i = 0; i < knocks.length; i++) {
-        var k = knocks[i];
-        if (k.ring >= 1) continue;
-        g.beginPath();
-        g.arc(k.x, k.y, h * 0.03 + k.ring * h * 0.25, 0, Math.PI * 2);
-        g.stroke();
-      }
       // The knock written down: one tick for each, spaced along the strip as they fell; the newest
-      // is stamped -- taller for its first tread, then its own height.
+      // is stamped -- taller for its tread, then its own height.
       if (knocks.length) {
         var span = knocks[knocks.length - 1].at - knocks[0].at;
         var scale = Math.min(0.11, (w * 0.84) / Math.max(1, span));
@@ -2336,7 +2452,7 @@
         g.strokeStyle = rgba(warm, 0.9);
         for (i = 0; i < knocks.length; i++) {
           var x = w * 0.08 + (knocks[i].at - knocks[0].at) * scale;
-          var fresh = knocks[i].ring === 0;
+          var fresh = i === knocks.length - 1 && knocks[i].fresh;
           g.lineWidth = fresh ? 3 : 2;
           g.beginPath();
           g.moveTo(x, fresh ? h * 0.03 : h * 0.05);
@@ -2346,27 +2462,21 @@
       }
       if (sealed) sealWash(g, w, h, sealed, { x: kx, y: ky }, warm);
     }
-    function rap(fx, fy) {
+    function rap() {
       if (stopped) return;
-      // Each knock rings out in treads cut for that knock alone.
-      var knocked = { at: Date.now(), x: fx * door.width, y: fy * door.height, ring: 0 };
+      // The stamp: down for one tread, the length of a short beat, then home.
+      var tread = beat('short');
+      var knocked = { at: Date.now(), fresh: !!tread };
       knocks.push(knocked);
-      series({ ms: beat('long'), treads: 2 + Math.floor(Math.random() * 3), step: function (k, n) {
-        knocked.ring = k / n;
-        paint();
-      } });
+      if (tread) window.setTimeout(function () { knocked.fresh = false; paint(); }, tread);
+      paint();
       done.disabled = false;
       note(trace, knocks.length === 1 ? 'one knock' : knocks.length + ' knocks');
       gauge(trace, pattern());
     }
     function sum(list) { return list.reduce(function (a, b) { return a + b; }, 0); }
-    door.addEventListener('click', function (ev) {
-      var box = door.getBoundingClientRect();
-      if (!box.width || !box.height) return;
-      rap(Math.min(1, Math.max(0, (ev.clientX - box.left) / box.width)),
-        Math.min(1, Math.max(0, (ev.clientY - box.top) / box.height)));
-    });
-    knock.addEventListener('click', function () { rap(KNOCKER.x, KNOCKER.y); });
+    door.addEventListener('click', function () { rap(); });
+    knock.addEventListener('click', function () { rap(); });
     done.addEventListener('click', function () {
       if (stopped || !knocks.length) return;
       stopped = true;
@@ -2390,13 +2500,14 @@
         else if (late > early * 1.6) add(answer, probe.slowing, 1);
         else add(answer, probe.swung, 1);
       }
-      retire(knock);
-      retire(done);
       door.style.cursor = 'default';
-      gauge(trace, '');
-      // The door is sealed from the knocker out, in treads, and its panels cut warm.
-      series({ ms: beat('medium'), treads: 3, step: function (k, n2) { sealed = k / n2; paint(); } });
-      finish();
+      // The door is sealed from the knocker out, in treads, and its panels cut warm; the two
+      // controls grey once it has grown.
+      var seal = beat('medium');
+      series({ ms: seal, treads: 3, step: function (k, n2) { if (k) { sealed = k / n2; paint(); } } });
+      var sealing = finish(seal);
+      retire(knock, sealing);
+      retire(done, sealing);
     });
     paint();
   }
@@ -2407,8 +2518,9 @@
   // a stone set far out simply hangs there, which is its own kind of answer. A stone is set, not
   // drawn: it drops from above in a few treads, each shorter than the last, onto the place it was
   // given and nowhere else, and rests in two shades split by one edge through its middle, lit from
-  // above; the guide for the next stone steps to its offset in two treads; 'leave it standing'
-  // seals the cairn from its top stone out, the stones' highlights cut warm.
+  // above; the guide for the next stone follows the arrow keys in stairs of two treads, never
+  // begun again before a tread has landed (follow); 'leave it standing' seals the cairn from its
+  // top stone out, the stones' highlights cut warm -- the reading's one seal.
   function cairnProbe(probe, body, trace, answer, finish) {
     var MAX = 14;
     var ground = el('canvas', 'probe-pad');
@@ -2443,7 +2555,16 @@
     var shownCursor = 0;
     var done = false;
     var sealed = 0; // how far the seal has grown from the top stone, 0 to 1
-    var cancelCursor = null;
+    // The guide for the next stone follows the keys in stairs of two treads (follow).
+    var guide = follow({
+      at: function () { return shownCursor; },
+      to: function () { return cursor; },
+      gap: function (a, b) { return b - a; },
+      put: function (v) { shownCursor = v; paint(); },
+      ms: function () { return beat('short'); },
+      treads: function () { return 2; },
+      near: 0.001
+    });
     function stoneW(i) { return Math.max(26, 86 - i * 4); }
     function topX() {
       var x = ground.width / 2;
@@ -2521,6 +2642,7 @@
       var o = stones.length ? Math.max(-0.42, Math.min(0.42, off)) : 0;
       var stone = { off: o, lift: 0 };
       stones.push(stone);
+      guide.halt();
       cursor = 0;
       shownCursor = 0;
       leave.disabled = false;
@@ -2538,16 +2660,6 @@
         paint();
       } });
     }
-    function steer() {
-      // The guide steps to the new offset in two treads.
-      var from = shownCursor;
-      var to = cursor;
-      if (cancelCursor) cancelCursor();
-      cancelCursor = series({ ms: beat('short'), treads: 2, step: function (k, n) {
-        shownCursor = k >= n ? to : from + (to - from) * (k / n);
-        paint();
-      } });
-    }
     ground.addEventListener('click', function (ev) {
       var box = ground.getBoundingClientRect();
       if (!box.width) return;
@@ -2562,7 +2674,7 @@
         cursor = Math.max(-0.42, Math.min(0.42, cursor + (ev.key === 'ArrowLeft' ? -0.14 : 0.14)));
         note(trace, cursor > 0.04 ? 'the next stone hangs east; enter sets it'
           : cursor < -0.04 ? 'the next stone hangs west; enter sets it' : 'the next stone sits square; enter sets it');
-        steer();
+        guide.go();
       } else if (ev.key === 'Enter' || ev.key === ' ') {
         ev.preventDefault();
         place(cursor);
@@ -2589,13 +2701,14 @@
         else if (turns * 2 >= offs.length) add(answer, probe.sway, 1);
         else add(answer, probe.leaning, 1);
       }
-      retire(set);
-      retire(leave);
       ground.style.cursor = 'default';
-      gauge(trace, '');
       // The cairn is sealed from its top stone out, in treads; the stones' highlights cut warm.
-      series({ ms: beat('medium'), treads: 3, step: function (k, n2) { sealed = k / n2; paint(); } });
-      finish();
+      // The two controls grey once it has grown.
+      var seal = beat('medium');
+      series({ ms: seal, treads: 3, step: function (k, n2) { if (k) { sealed = k / n2; paint(); } } });
+      var sealing = finish(seal);
+      retire(set, sealing);
+      retire(leave, sealing);
     });
     paint();
   }
@@ -2604,8 +2717,9 @@
   // The soot is one sheet over the print, two shades split by one slice through its centre, each
   // patch carrying its own part of it (--cell-at). A patch rubbed has its soot lifted behind a
   // slice from the side the hand came in by (--cut-angle, written from the rub's direction), so
-  // the print shows as the edge crosses; 'start over' lays the soot back the same way, patch after
-  // patch in a rolled order, all in one stair.
+  // the print shows as the edge crosses; 'start over' lays the sheet back by one slice at the
+  // soot's own angle (--soot-angle), patch after patch in the order that slice reaches them --
+  // those it reaches at once together -- all in one stair.
   function rubbingProbe(probe, body, trace, answer, finish) {
     var revealed = new Array(16).fill(false);
     var buttons = [];
@@ -2728,9 +2842,15 @@
         button.setAttribute('aria-label', 'uncover ' + patchLabel(index));
         button.textContent = '';
       });
+      // Each patch's place on the print (a 3:2 sheet in a four-by-four grid), along the soot's way.
+      var soot = angleOf(window.getComputedStyle(field), '--soot-angle', 112);
+      var turn = stepsBy(covering.map(function (button) {
+        var i = buttons.indexOf(button);
+        return reach({ x: (i % 4 + 0.5) * 1.5, y: Math.floor(i / 4) + 0.5 }, soot);
+      }), 0.01);
       var laid = seedOf();
-      shuffled(covering).forEach(function (button, k) {
-        button.style.setProperty('--d', staggerOf(k) + 'ms');
+      covering.forEach(function (button, k) {
+        button.style.setProperty('--d', staggerOf(turn[k]) + 'ms');
         cutFor(button, 'cover', { family: 'stair', duration: 'medium', seed: laid });
         button.setAttribute('data-covering', 'true');
       });
@@ -2748,9 +2868,10 @@
         add(answer, motif.weights, counts[index] / n);
       });
       add(answer, !n ? probe.untouched : n <= 4 ? probe.glimpse : n >= 12 ? probe.whole : probe.search, 1);
-      retire(done);
-      retire(reset);
-      finish();
+      // Sealed first; the two controls grey once the seal has grown.
+      var sealing = finish();
+      retire(done, sealing);
+      retire(reset, sealing);
     });
 
     if (g) {
@@ -2824,11 +2945,12 @@
   // -- then sets out. The bearing is most of the answer, blended between the two nearest of eight
   // unlettered points, and how far the needle travelled to get there is the rest: left as it lay,
   // nudged, swung round, or spun past a full turn. No bearing is wrong, and the compass never
-  // answers on its own: setting out is the visitor's press. The needle ratchets after the hand in
-  // two to four even clicks, always forward, never a glide; the face rests in two shades split by
-  // one slice through the hub at the register's angle; the meter tallies each eighth of a turn;
+  // answers on its own: setting out is the visitor's press. The needle follows the hand in stairs
+  // of two to four even clicks, each read afresh toward where the hand is now, so it turns while
+  // the hand turns, always forward and never a glide (follow); the face rests in two shades split
+  // by one slice through the hub at the register's angle; the meter tallies each eighth of a turn;
   // and 'set out' seals the compass from the needle's tip -- the way the visitor chose -- out, in
-  // treads, with the needle cut warm.
+  // treads, with the needle cut warm: the reading's one seal.
   function compassProbe(probe, body, trace, answer, finish) {
     var dial = el('canvas', 'probe-pad probe-compass');
     dial.width = 600;
@@ -2861,9 +2983,18 @@
     var sealed = 0;
     var lastHour = null;
     var lastMarks = 0;
-    var cancel = null;
     var split = { kind: 'slice', angle: angleOf(style) };
     function wrap(a) { return ((a % 360) + 360) % 360; }
+    // The needle after the hand: the shorter way round from where it points to the bearing.
+    var needle = follow({
+      at: function () { return shown; },
+      to: function () { return bearing; },
+      gap: function (a, b) { var d = wrap(b - a); return d > 180 ? d - 360 : d; },
+      put: function (v) { shown = v; paint(); },
+      ms: function () { return beat('short'); },
+      treads: function () { return 2 + Math.floor(Math.random() * 3); },
+      near: 0.5
+    });
     function hourOf(b) { var hr = Math.round(wrap(b) / 30) % 12; return hr === 0 ? 12 : hr; }
     function point(a, r, cx, cy) { var rad = a * Math.PI / 180; return [cx + Math.sin(rad) * r, cy - Math.cos(rad) * r]; }
     function paint() {
@@ -2958,17 +3089,6 @@
       g.stroke();
       if (sealed) sealWash(g, w, h, sealed, { x: tip[0], y: tip[1] }, warm);
     }
-    // The needle ratchets after the hand: from where it stands to the bearing, in two to four even
-    // clicks, always toward it, never a glide.
-    function ratchet() {
-      if (cancel) cancel();
-      var from = wrap(shown);
-      var d = ((bearing - from + 540) % 360) - 180;
-      cancel = series({ ms: beat('short'), treads: 2 + Math.floor(Math.random() * 3), step: function (k, n) {
-        shown = from + d * (k / n);
-        paint();
-      }, done: function () { shown = bearing; paint(); } });
-    }
     function turn(to) {
       if (set) return;
       to = wrap(to);
@@ -2986,7 +3106,7 @@
         lastMarks = marks;
         gauge(trace, marks ? tally(marks) : '');
       }
-      ratchet();
+      needle.go();
     }
     function bearingAt(ev) {
       var box = dial.getBoundingClientRect();
@@ -3037,14 +3157,14 @@
       add(answer, probe.points[i].weights, 1 - frac);
       add(answer, probe.points[j].weights, frac);
       add(answer, travelled < 1 ? probe.untouched : travelled < 60 ? probe.nudged : travelled < 300 ? probe.swung : probe.spun, 1);
-      retire(go);
       dial.style.cursor = 'default';
       dial.setAttribute('aria-disabled', 'true');
       dial.tabIndex = -1;
-      gauge(trace, '');
-      // Sealed from the needle's tip out, in treads; the needle cuts warm.
-      series({ ms: beat('medium'), treads: 3, step: function (k, n2) { sealed = k / n2; paint(); } });
-      finish();
+      // Sealed from the needle's tip out, in treads; the needle cuts warm. The button greys once
+      // the seal has grown.
+      var seal = beat('medium');
+      series({ ms: seal, treads: 3, step: function (k, n2) { if (k) { sealed = k / n2; paint(); } } });
+      retire(go, finish(seal));
     }
     go.addEventListener('click', setOut);
     paint();

@@ -263,10 +263,11 @@ function badgeOf(card, text) {
 // Things changing places move there: the engine's flip measures the settled cards near the screen
 // before `change` lays the columns again and after, and each that moved jumps from its old place to
 // its new one in the treads of one stair, all of them together (js/motion.js flip: never a glide).
-// Only a card the visitor can see is measured and moved: one anywhere else simply takes its new
-// place, as it would be drawn for no one. A card in the middle of arriving or leaving is left to
-// its own movement, and nothing new is marked dealt here: a card dealt develops when its own
-// watcher sees it.
+// Only a card the visitor can see, or is about to (its watcher's margin, as for every other
+// movement here, so a card stepping in from just past the edge comes in rather than appearing), is
+// measured and moved: one anywhere else simply takes its new place, as it would be drawn for no
+// one. A card in the middle of arriving or leaving is left to its own movement, and nothing new is
+// marked dealt here: a card dealt develops when its own watcher sees it.
 function flipCards(change) {
   const motion = engine();
   if (!laid || calm.matches || !motion || typeof motion.flip !== 'function') {
@@ -645,7 +646,8 @@ function place(card, cursors, size) {
 // A batch dealt goes on the ends of the columns, rolled up, to develop when its watcher sees it.
 // Its cards are put down in the first column together, and their heights and their own colours are
 // read in one pass -- the page laid out once for the lot -- before any of them is tinted; each then
-// goes to whichever column is shortest, by arithmetic on the heights already known.
+// goes to whichever column is shortest, by arithmetic on the heights already known (one that falls
+// to the first column is already in its place, after the others of the batch that fell there).
 function lay(batch) {
   if (!columns.length) {
     for (const card of batch) grid.appendChild(card);
@@ -656,7 +658,7 @@ function lay(batch) {
   tintAll(batch);
   batch.forEach((card, i) => {
     const s = shortest();
-    columns[s].appendChild(card);
+    if (s) columns[s].appendChild(card);
     heights[s] += sizes[i] + gap;
     placed(card);
   });

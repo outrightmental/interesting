@@ -32,8 +32,8 @@ html {
   scrollbar-color: color-mix(in oklab, var(--md-sys-color-primary) 38%, transparent) transparent;
 }
 
-// What a visitor selects is marked in the tertiary's container, the colour the register's
-// ornaments are drawn in.
+// What a visitor selects is marked in the tertiary container: the tertiary is the colour the
+// register's ornaments are drawn in (type.rite-dress), so a selection is in the page's own hand.
 ::selection {
   background-color: var(--md-sys-color-tertiary-container);
   color: var(--md-sys-color-on-tertiary-container);
@@ -59,7 +59,10 @@ body {
 }
 
 // A page's heading is one of the rite's words, so it wears the serif (type.rite); the overline a
-// world page writes its name as (.stage-world, _stage.scss) is a label and keeps the sans.
+// world page writes its name as (.stage-world, _stage.scss) is a label and keeps the sans. When
+// the register turns over, js/motion.js (shift) reveals a list page's or a prose page's heading
+// word by word and _mood.scss cuts the stage's head whole, so it does not ask for the rite's own
+// slice as well: one edge to a line.
 h1 {
   margin: 0;
   @include type.scale(headline-large);
@@ -115,9 +118,10 @@ a {
 // by (js/motion.js writes the angle; the register's stands for a key and for a page with no
 // script), and the underline steps up to the full primary in the same treads. When the pointer
 // leaves it wanes: the slice steps back out the way it came and the underline steps home. A press
-// stamps it: the ink grows over the plate as a curve from the point the press landed. A line of
-// words is no box, so it does not dip as a button does; the ink is the whole of its stamp. The
-// chips of the logo, the cards and a.action keep their own grammars elsewhere.
+// stamps it: the ink -- a layer of its own over the plate (::after), so it starts from nothing
+// whatever the plate is doing -- grows as a curve from the point the press landed. A line of words
+// is no box, so it does not dip as a button does; the ink is the whole of its stamp. The chips of
+// the logo, the cards and a.action keep their own grammars elsewhere.
 $word-links: (
   '.prose a:not(.action)', '.tagline a:not(.action)', '.page-purpose a:not(.action)',
   '.pages a:not(.action)', '.orientations a:not(.action)', '.panel-note a:not(.action)',
@@ -186,9 +190,18 @@ $word-links: (
 
 // The stamp: a solid of the ink growing over the plate as a curve from where the press landed
 // (--cut-x, --cut-y; the middle for a key or a page with no script, which plays it from :active).
-#{word-links('.is-stamping::before', ':active::before')} {
-  opacity: 0.24;
+// It is drawn on ::after and only while the press lasts, so each press makes the layer afresh and
+// its curve starts at nothing: on the plate it would share the plate's running cut-in, which a
+// change of class does not restart, and show whole at once.
+#{word-links('.is-stamping::after', ':active::after')} {
+  content: '';
+  position: absolute;
+  inset: -0.12em -0.25em;
+  z-index: -1;
+  border-radius: var(--md-sys-shape-corner-extra-small, 4px);
   background: currentColor;
+  opacity: 0.24;
+  pointer-events: none;
   mask: cut.curve();
   @include cut.play(in, ink, short, flicker);
 }
@@ -247,14 +260,15 @@ svg {
   // A link in the words takes every state at once and nothing steps or is cut: every state is
   // named, at the specificity of the rule it stills, so the stillness wins.
   #{word-links('', '.is-waxing', ':hover', ':focus-visible', '::before', '.is-waxing::before', ':hover::before',
-    ':focus-visible::before', '.is-waning::before', '.is-stamping::before', ':active::before')} {
+    ':focus-visible::before', '.is-waning::before', '.is-stamping::after', ':active::after')} {
     animation: none;
     transition: none;
   }
 
-  // Under the pointer, the focus or a press the plate is simply whole; waning, simply gone.
-  #{word-links('.is-waxing::before', ':hover::before', ':focus-visible::before', '.is-stamping::before',
-    ':active::before')} {
+  // Under the pointer or the focus the plate is simply whole, and under a press the ink; waning,
+  // the plate is simply gone.
+  #{word-links('.is-waxing::before', ':hover::before', ':focus-visible::before', '.is-stamping::after',
+    ':active::after')} {
     mask: none;
   }
 

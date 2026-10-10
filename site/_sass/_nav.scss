@@ -256,14 +256,14 @@ $turn: calc(var(--roll, var(--k, 0)) * var(--motion-stagger, 40ms) + var(--jit, 
 // The title: its room opens beside the mark and the name is uncovered by the room's own right
 // edge, which steps out over it in the treads of the pill's wax (--ease-wax and --motion-wax,
 // written on the pill and inherited here) and steps back over it in the wane's. One edge, and no
-// mask: the clip is the room. It is the one change in the nav that is laid out rather than drawn
-// by the compositor, and it is kept because the room is the point -- the pill has to grow for the
-// words to have somewhere to stand -- and because it is cheap: a stair holds its value between
-// treads, so the pill and its two children are laid out once a tread, not once a frame. It keeps
-// its place in the accessibility tree throughout -- clipped, never display:none -- so the logo is
-// always named. It is transparent at rest too, and turns opaque at once as its room starts to
-// open and back only once the room has shut, so the words are only ever shown or hidden by the
-// edge.
+// mask: the clip is the room. It is the one change in the nav that is laid out, and it is kept
+// because the room is the point -- the pill has to grow for the words to have somewhere to stand
+// -- and because it is cheap: the mark is fixed, so nothing of the page moves with it, and a stair
+// holds its value between treads, so the mark is laid out again once a tread rather than once a
+// frame. It keeps its place in the accessibility tree throughout -- clipped, never display:none --
+// so the logo is always named. It is transparent at rest too, and turns opaque at once as its room
+// starts to open and back only once the room has shut, so the words are only ever shown or hidden
+// by the edge.
 .sparknav-name {
   max-width: 0;
   margin-left: 0;
