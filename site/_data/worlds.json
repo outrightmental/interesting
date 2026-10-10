@@ -33,7 +33,7 @@
     { "file": "machine-shop.html", "name": "the machine shop", "orientation": "cold and clear", "mood": "analytic", "aspect": "3 / 4",
       "what": "Learn the automaton's rule, test it in a notebook and write the next rows, or find the one cell that changed." },
     { "file": "light-table.html", "name": "the light table", "orientation": "cold and clear", "mood": "analytic", "aspect": "4 / 3",
-      "what": "Light a lamp on purpose: measure a slit spacing from its fringes, or order three filters so the most light passes." },
+      "what": "Light a lamp on purpose: measure slit spacing, order polarising filters, or match two coloured lamps to a target." },
     { "file": "kinetic-floor.html", "name": "the kinetic floor", "orientation": "wound tight", "mood": "restless", "aspect": "16 / 10",
       "what": "Set the floor in motion: call the domino gaps, find a loaded plank's balance point, or choose and place a hanging counterweight to make it balance." },
     { "file": "loam.html", "name": "loam", "orientation": "low and slow", "mood": "rooted", "aspect": "4 / 5",

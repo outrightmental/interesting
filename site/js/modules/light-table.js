@@ -1,10 +1,10 @@
-/* The light table: a lamp, a pair of slits and a screen, or a lamp and three polarising filters,
-   each read as a puzzle with its numbers on the table. As a card it is one of the two puzzles
-   below, drawn as it stands (paint, spark); as a piece it is that puzzle, and the card it was
+/* The light table: slits, polarising filters, or six coloured lamps whose light adds under a
+   prism. Each puzzle puts its measurements on the table. As a card it is one of these three
+   puzzles, drawn as it stands (paint, spark); as a piece it is that puzzle, and the card it was
    opened from says which. See js/feed.js for what a module is and js/stage.js for what a piece
    is.
 
-   Two puzzles, both deduction with a little arithmetic:
+   Three puzzles, each deduction with a little arithmetic:
 
      the slit spacing   Light of a stated wavelength passes two slits and lands on a screen a
                         stated distance away as fringes, drawn over a millimetre ruler. The
@@ -19,6 +19,9 @@
                         cent. The angles are chosen so one middle filter beats the other two and
                         the rounding is never in doubt; the two orders with that filter in the
                         middle pass the same light, and the check accepts either.
+     the spectrum key Six lamps each show their red, green and blue strengths and their power.
+                        Choose two whose light adds to the three bars of a target, then add
+                        their power readings. Selecting lamps lights a comparison on the table.
 
    A card and the feature it opens as are one puzzle: the spark puts the whole plan on its spec as
    `of` -- the lamp, the distances, the angles -- and piece(env) opens on that rather than rolling
@@ -955,6 +958,232 @@ function filterPiece(env, plan) {
   };
 }
 
+/* ---- the spectrum key ----------------------------------------------------------------------- */
+
+const SPECTRUM_LAMPS = [
+  [1, 0, 0], [0, 1, 0], [0, 0, 1], [2, 1, 0], [0, 2, 1], [1, 0, 2]
+];
+const SPECTRUM_COLORS = ['#ff9d86', '#b5f4ad', '#a9c8ff'];
+const LAMP_NAMES = ['A', 'B', 'C', 'D', 'E', 'F'];
+
+function spectrumSum(plan, names) {
+  const sum = [0, 0, 0];
+  for (const name of names) {
+    const lamp = plan.lamps[LAMP_NAMES.indexOf(name)];
+    if (lamp) for (let channel = 0; channel < 3; channel++) sum[channel] += lamp.bars[channel];
+  }
+  return sum;
+}
+
+function spectrumPlan(env) {
+  const turn = env.int(0, 2);
+  const lamps = SPECTRUM_LAMPS.map((bars) => ({
+    bars: bars.map((_, channel) => bars[(channel + turn) % 3]),
+    watts: env.int(2, 9)
+  }));
+  for (let i = lamps.length - 1; i > 0; i--) {
+    const j = env.int(0, i);
+    [lamps[i], lamps[j]] = [lamps[j], lamps[i]];
+  }
+  const first = env.int(0, 5);
+  const other = env.int(0, 4);
+  const second = other >= first ? other + 1 : other;
+  return {
+    kind: 'spectrum', number: env.int(100, 999), lamps,
+    pair: [LAMP_NAMES[first], LAMP_NAMES[second]].sort()
+  };
+}
+
+function carriedSpectrum(env) {
+  const p = env.card && env.card.of;
+  if (!p || p.kind !== 'spectrum' || !Number.isInteger(p.number) || p.number < 100 || p.number > 999) return null;
+  if (!Array.isArray(p.lamps) || p.lamps.length !== 6 || !p.lamps.every((lamp) =>
+    lamp && Array.isArray(lamp.bars) && lamp.bars.length === 3 &&
+    lamp.bars.every((n) => Number.isInteger(n) && n >= 0 && n <= 2) &&
+    Number.isInteger(lamp.watts) && lamp.watts >= 2 && lamp.watts <= 9)) return null;
+  if (!Array.isArray(p.pair) || p.pair.length !== 2 || p.pair[0] === p.pair[1] ||
+    !p.pair.every((name) => LAMP_NAMES.includes(name))) return null;
+  const lamps = p.lamps.map((lamp) => ({ bars: lamp.bars.slice(), watts: lamp.watts }));
+  const plan = { kind: 'spectrum', number: p.number, lamps, pair: p.pair.slice() };
+  const sums = [];
+  for (let i = 0; i < 6; i++) for (let j = i + 1; j < 6; j++) {
+    sums.push(spectrumSum(plan, [LAMP_NAMES[i], LAMP_NAMES[j]]).join('/'));
+  }
+  return new Set(sums).size === sums.length ? plan : null;
+}
+
+function spectrumTitle(plan) {
+  return 'lamp ' + plan.number + ': the spectrum key';
+}
+
+function spectrumState() {
+  return {
+    selected: [], from: [], changedAt: -1, moves: 0, looks: 0, lookAt: -1,
+    open: false, openAt: -1, t: 0, drawn: null, drawnAt: -1
+  };
+}
+
+function spectrumBars(g, env, x, y, width, height, bars, size) {
+  const c = env.colors;
+  g.fillStyle = env.mix(c.bg, c.bg2, 0.7);
+  g.fillRect(x, y, width, height);
+  for (let channel = 0; channel < 3; channel++) {
+    const bx = x + channel * width / 3 + 2;
+    const bw = width / 3 - 4;
+    const value = bars ? bars[channel] : 0;
+    if (value) {
+      g.fillStyle = env.mix(c.bg, SPECTRUM_COLORS[channel], 0.85);
+      g.fillRect(bx, y + height * (1 - value / 4), bw, height * value / 4);
+    }
+    label(g, env, ['R', 'G', 'B'][channel] + (bars ? value : '?'), bx + bw / 2,
+      y + height + size * 0.9, size, 'center', c.fg);
+  }
+  g.strokeStyle = env.alpha(c.fg, 0.5);
+  g.lineWidth = 1;
+  g.strokeRect(x, y, width, height);
+}
+
+function drawSpectrum(g, w, h, env, plan, s, variant) {
+  const v = variant || PLAIN;
+  const c = env.colors;
+  const rite = riteOf(env);
+  const size = Math.max(9, Math.min(15, Math.round(Math.min(w, h) * 0.036)));
+  const target = spectrumSum(plan, plan.pair);
+  const left = w * 0.06;
+  const right = w * 0.54;
+  const chartY = h * 0.25;
+  const chartW = w * 0.4;
+  const chartH = h * 0.19;
+  background(g, w, h, env);
+  dust(g, w, h, env, v);
+  lamp(g, env, w * (0.5 + (v.turn - 0.5) * 0.08), h * 0.1, Math.min(w, h) * 0.085 * v.scale);
+  label(g, env, 'light through the prism', w * 0.5, h * 0.16, size, 'center', c.accent2);
+  label(g, env, 'target', left + chartW / 2, chartY - size, size, 'center', c.accent2);
+  label(g, env, 'your lamps', right + chartW / 2, chartY - size, size, 'center', c.accent2);
+  spectrumBars(g, env, left, chartY, chartW, chartH, target, size);
+  const before = s.from.length ? spectrumSum(plan, s.from) : null;
+  const after = s.selected.length ? spectrumSum(plan, s.selected) : null;
+  const own = roll(rite, 0x81c, s.moves);
+  wipe(g, own, right - 1, chartY - 1, chartW + 2, chartH + size * 1.6,
+    own.stair(came(s, s.changedAt, 1.2, !!env.reduced)),
+    () => spectrumBars(g, env, right, chartY, chartW, chartH, before, size),
+    () => spectrumBars(g, env, right, chartY, chartW, chartH, after, size));
+  if (s.looks) {
+    const highest = target.indexOf(Math.max(...target));
+    const x = left + highest * chartW / 3 + 2;
+    g.strokeStyle = c.accent2;
+    g.lineWidth = 2;
+    g.strokeRect(x, chartY - 2, chartW / 3 - 4, chartH + 4);
+  }
+  label(g, env, 'R / G / B     power in W', w * 0.5, h * 0.57, size, 'center', c.accent2);
+  plan.lamps.forEach((source, i) => {
+    const x = w * (0.04 + (i % 3) * 0.32);
+    const y = h * (0.64 + Math.floor(i / 3) * 0.17);
+    const cw = w * 0.28;
+    const ch = h * 0.14;
+    g.fillStyle = env.mix(c.bg, c.bg2, 0.65);
+    g.fillRect(x, y, cw, ch);
+    if (s.selected.includes(LAMP_NAMES[i])) {
+      g.fillStyle = env.alpha(c.accent2, 0.12);
+      own.paint(g, x, y, cw, ch, own.stair(came(s, s.changedAt, 1.2, !!env.reduced)));
+    }
+    g.strokeStyle = env.alpha(c.accent, 0.6);
+    g.lineWidth = 1;
+    g.strokeRect(x, y, cw, ch);
+    label(g, env, LAMP_NAMES[i] + '  ' + source.watts + ' W', x + cw / 2, y + ch * 0.33,
+      size, 'center', c.accent2);
+    label(g, env, 'R' + source.bars[0] + ' G' + source.bars[1] + ' B' + source.bars[2],
+      x + cw / 2, y + ch * 0.76, size, 'center', c.fg);
+  });
+  if (s.open) daybreak(g, rite, env, w, h, came(s, s.openAt, 1.8, !!env.reduced));
+}
+
+function spectrumPreview(g, w, h, env, plan) {
+  drawSpectrum(g, w, h, env, plan, spectrumState(), env.variant);
+}
+
+function spectrumPiece(env, plan) {
+  const helps = asked(env).helps;
+  const target = spectrumSum(plan, plan.pair);
+  const power = plan.pair.reduce((total, name) => total + plan.lamps[LAMP_NAMES.indexOf(name)].watts, 0);
+  const s = spectrumState();
+  const draw = (c) => {
+    drawSpectrum(c.g, c.w, c.h, c, plan, s, env.variant);
+    s.drawn = sizeOf(c);
+    s.drawnAt = s.t;
+  };
+  const hints = [
+    'Compare one channel at a time. The target bars are sums, not either lamp alone.',
+    'Start with the tallest target bar: find two lamp numbers that add to it.',
+    'A zero on one lamp leaves that channel entirely to its partner.',
+    'Check all three colour totals before you add the watts.',
+    'Once the bars match, add only the two selected watt labels.'
+  ];
+  return {
+    title: spectrumTitle(plan),
+    brief: 'Six lamps shine through a prism. Each shows red, green and blue strengths (R/G/B) and its power in watts. Two lamps add channel by channel. The target is R' + target[0] + ' G' + target[1] + ' B' + target[2] + '. The lamps are ' + plan.lamps.map((lamp, i) => LAMP_NAMES[i] + ': R' + lamp.bars[0] + ' G' + lamp.bars[1] + ' B' + lamp.bars[2] + ', ' + lamp.watts + ' W').join('; ') + '.',
+    goal: 'Choose two lamps whose red, green and blue totals match the target, then enter their combined power.',
+    aspect: '4 / 3',
+    checkLabel: 'check the table',
+    steps: [
+      { id: 'pair', ask: 'the two lamps to light', kind: 'pick', count: 2,
+        items: LAMP_NAMES.map((name) => ({ label: 'lamp ' + name, value: name })) },
+      { id: 'power', ask: 'their combined power, in watts', kind: 'number', min: 4, max: 18, step: 1, unit: 'W' },
+      { id: 'hint', ask: 'take a closer look at the prism', kind: 'press', count: helps,
+        label: 'look again', optional: true }
+    ],
+    solution: { pair: plan.pair.slice(), power },
+    check(c) {
+      const chosen = c.value('pair');
+      const valid = Array.isArray(chosen) && chosen.length === 2 && new Set(chosen).size === 2 &&
+        chosen.every((name) => LAMP_NAMES.includes(name));
+      const pairRight = valid && plan.pair.every((name) => chosen.includes(name));
+      const powerRight = Number(c.value('power')) === power;
+      if (pairRight && powerRight) return { solved: true, say: 'the three colours meet in the prism; the two lamps use ' + power + ' W together' };
+      const sum = valid ? spectrumSum(plan, chosen) : [0, 0, 0];
+      const matching = sum.filter((value, i) => value === target[i]).length;
+      const labelsAgree = valid && chosen.reduce((total, name) => total + plan.lamps[LAMP_NAMES.indexOf(name)].watts, 0) === Number(c.value('power'));
+      return { solved: false, say: matching + ' of 3 colour bars match the target; the power entry ' + (labelsAgree ? 'matches' : 'does not match') + ' the two lamp labels' };
+    },
+    start(c) {
+      c.status('the target is lit; choose two lamps to compare with it');
+      draw(c);
+    },
+    apply(id, value, c) {
+      if (id === 'pair' && Array.isArray(value) && value.every((name) => LAMP_NAMES.includes(name))) {
+        const rite = riteOf(c);
+        const showing = roll(rite, 0x81c, s.moves).stair(came(s, s.changedAt, 1.2, !!c.reduced));
+        s.from = (showing >= 0.5 ? s.selected : s.from).slice();
+        s.selected = value.slice();
+        s.changedAt = s.t;
+        s.moves += 1;
+        c.status(s.selected.length + ' lamps lighting the comparison');
+        draw(c);
+      }
+      if (id === 'power' && Number.isFinite(Number(value))) {
+        c.status(Number(value) + ' W for the two lamps, you say');
+      }
+      if (id === 'hint' && s.looks < helps) {
+        c.hint();
+        s.looks += 1;
+        s.lookAt = s.t;
+        c.status(hints[s.looks - 1]);
+        draw(c);
+      }
+    },
+    frame(t, dt, c) {
+      s.t += Math.max(0, dt);
+      return step(s, c, Math.max(s.changedAt, s.lookAt, s.openAt), draw);
+    },
+    end(c) {
+      s.open = true;
+      s.openAt = s.t;
+      c.status('the target and your two lamps carry the same three colours');
+      draw(c);
+    }
+  };
+}
+
 /* ---- the module ----------------------------------------------------------------------------- */
 
 // Which puzzle a seed is dealt, from the seed alone so that paint, spark and piece agree.
@@ -962,16 +1191,42 @@ function dealsFilters(env) {
   return (((Math.imul(env.seed >>> 0, 0x9E3779B1) >>> 0) >>> 3) & 1) === 1;
 }
 
+const PLANS = new WeakMap();
+function planFor(env) {
+  let plan = PLANS.get(env);
+  if (plan) return plan;
+  const hash = Math.imul(env.seed >>> 0, 0x9E3779B1) >>> 0;
+  plan = hash % 3 === 0 ? spectrumPlan(env) : dealsFilters(env) ? filterPlan(env) : slitPlan(env);
+  PLANS.set(env, plan);
+  return plan;
+}
+
 export default {
   id: 'light-table',
   needsSky: false,
   paint(g, w, h, env) {
-    if (dealsFilters(env)) filterPreview(g, w, h, env, filterPlan(env));
-    else slitPreview(g, w, h, env, slitPlan(env));
+    const plan = planFor(env);
+    if (plan.kind === 'spectrum') spectrumPreview(g, w, h, env, plan);
+    else if (plan.kind === 'filters') filterPreview(g, w, h, env, plan);
+    else slitPreview(g, w, h, env, plan);
+  },
+  animate(g, w, h, env, t) {
+    return false;
   },
   spark(env) {
-    if (dealsFilters(env)) {
-      const plan = filterPlan(env);
+    const plan = planFor(env);
+    if (plan.kind === 'spectrum') {
+      const target = spectrumSum(plan, plan.pair);
+      return {
+        title: spectrumTitle(plan),
+        text: 'Six coloured lamps, one target in the prism. Find the pair whose light adds up, then add their power readings.',
+        mono: 'R' + target[0] + ' / G' + target[1] + ' / B' + target[2],
+        aspect: '4 / 3',
+        paint: (ctx, cw, ch, cardEnv) => spectrumPreview(ctx, cw, ch, cardEnv, plan),
+        of: plan
+      };
+    }
+    if (plan.kind === 'filters') {
       return {
         title: filterTitle(plan),
         text: 'Three polarising filters, one lamp, one screen. Find the order that passes the most light, and how much that is.',
@@ -981,7 +1236,6 @@ export default {
         of: plan
       };
     }
-    const plan = slitPlan(env);
     return {
       title: slitTitle(plan),
       text: 'A lamp lit on purpose: fringes on a screen, a ruler beside them, the wavelength and distance written on the table. Find how far apart the slits are.',
@@ -996,6 +1250,10 @@ export default {
     if (filters) return filterPiece(env, filters);
     const slits = carriedSlits(env);
     if (slits) return slitPiece(env, slits);
-    return dealsFilters(env) ? filterPiece(env, filterPlan(env)) : slitPiece(env, slitPlan(env));
+    const spectrum = carriedSpectrum(env);
+    if (spectrum) return spectrumPiece(env, spectrum);
+    const plan = planFor(env);
+    if (plan.kind === 'spectrum') return spectrumPiece(env, plan);
+    return plan.kind === 'filters' ? filterPiece(env, plan) : slitPiece(env, plan);
   }
 };
