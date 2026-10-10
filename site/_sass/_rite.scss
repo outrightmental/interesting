@@ -7,10 +7,11 @@
 // All of it is paint behind or beside the content, and none of it is a control. Every ring is
 // pointer-events: none, so a press lands on the content it is drawn behind; nothing here is
 // pinned to the viewport, so the two-item rule of _nav.scss stands and at rest nothing floats over
-// a page but the logo and the persona; and the one slow turn in it stops under prefers-reduced-motion,
-// because an ornament that moves for a visitor who asked for stillness is an ornament that has
-// stopped giving way. The rite's words wear type.rite and what to do stays in the sans: that half
-// of the axiom lives where the type does, in _type.scss and the partials that set each heading.
+// a page but the logo and the persona; and nothing in it turns or loops: an ornament the size of
+// the feature that moved while nothing was asked of the visitor would be a movement made for no
+// reason, and the browser would draw it on every frame for as long as the page was open. The
+// rite's words wear type.rite and what to do stays in the sans: that half of the axiom lives where
+// the type does, in _type.scss and the partials that set each heading.
 //
 // The colours are the roles every mood derives (_tokens.scss), so the rings take the page's palette
 // -- the world's, the reading's, or the featured piece's -- and nothing here names a colour.
@@ -19,15 +20,18 @@
 @use 'cut';
 
 // ---- the circle a feature is drawn inside ------------------------------------------------
-// Two faint rings off the right-hand side of the feature: the solid one in the primary and the
-// dashed one in the tertiary, turning once in two minutes. They sit on the stage, the two list
-// pages and the two pages of prose -- every <main> there is -- as pseudo-elements, which an
-// absolutely positioned child keeps out of the grid main lays its children in, and the feature's
-// own overflow clips what falls off the edge, so a ring can never widen a phone's page.
+// Two faint rings off the right-hand side of the feature, at rest: the solid one in the primary
+// and the dashed one in the tertiary. They sit on the stage, the two list pages and the two pages
+// of prose -- every <main> there is -- as pseudo-elements, which an absolutely positioned child
+// keeps out of the grid main lays its children in, and the feature clips what falls off the edge,
+// so a ring can never widen a phone's page. It clips (overflow: clip) rather than hides: a box
+// that hides its overflow is still a scroll container, and the ring's overhang would be room a
+// scrollIntoView could slide the whole feature sideways into, where no visitor could scroll it
+// back.
 .stage,
 .list-page-main,
 .prose-main {
-  overflow: hidden;
+  overflow: clip;
 }
 
 .stage::before,
@@ -61,10 +65,6 @@
   width: 60vmin;
   height: 60vmin;
   border: 1px dashed color-mix(in oklab, var(--md-sys-color-tertiary) 26%, transparent);
-  // One turn in about two minutes, in a clock's clicks: a dozen or two even steps round, each
-  // held, never an even rotation (the clock family, the one loop that turns, README: "Motion
-  // axiom"). A transform, so the browser's compositor turns it and the page pays nothing for it.
-  animation: rite-turn var(--motion-rite-turn, var(--motion-turn, 120s)) var(--ease-rite-turn, var(--ease-clock)) infinite;
 }
 
 // The list pages and the prose pages lay their children out in flow, which a positioned ring at 0
@@ -73,12 +73,6 @@
 .prose-main > * {
   position: relative;
   z-index: 1;
-}
-
-@keyframes rite-turn {
-  to {
-    transform: rotate(360deg);
-  }
 }
 
 // ---- the plate ---------------------------------------------------------------------------
@@ -214,14 +208,8 @@ html[data-nav='live'] .sparknav[open]::after {
   mask: cut.slice(var(--reveal-angle, 100deg));
 }
 
-// Less motion asked for: every ring is where it is, nothing turns, and words are simply there.
+// Less motion asked for: words are simply there.
 @media (prefers-reduced-motion: reduce) {
-  .stage::after,
-  .list-page-main::after,
-  .prose-main::after {
-    animation: none;
-  }
-
   .is-revealing {
     mask: none;
   }

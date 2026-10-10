@@ -15,8 +15,9 @@
 // treads are --ease-<rite> and the length --motion-<rite>, which js/motion.js writes on the
 // element for each movement it starts (cut(), wax(), arrive() ...), with the family's baked stair
 // and the page's duration behind them for a page with no script.
-// The angle is --cut-angle (the register's, or the pointer's approach for a hover), the point of
-// a curve --cut-x and --cut-y (where a press landed), a set control's curve --seal-x and --seal-y.
+// The angle is --cut-angle (the register's, or square to the side the pointer crossed for a
+// hover), the point of a curve --cut-x and --cut-y (where a press landed), a set control's curve
+// --seal-x and --seal-y (where it was pressed, or low at the left, where a line of writing starts).
 // An arrival moves behind a slice at --arrive-angle (the direction it travels) and a leaving one
 // behind --leave-angle, and both move by `translate` in the same treads (lift-in, lift-out), so
 // the position never glides and never fights a transform of the element's own.

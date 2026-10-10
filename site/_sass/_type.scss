@@ -87,10 +87,10 @@ $typewriter: 'American Typewriter', 'Courier Prime', 'Courier New', Courier, 'Ni
 // of the temperament, --motion-tempo (how long its movements are), --motion-steps (a tread more
 // in each stair, where it is 1) and --motion-grain (how uneven an arrival's, a leaving's and a
 // press's treads are: 0 even, 1 as uneven as each family's rule allows); and the hand that
-// cuts, --cut-angle and --reveal-angle. The numeric axes are registered (_tokens.scss), so when
-// the register turns over they step to their new values along the stair, and the words at rest
-// in the page are cut into their new face by one slice at the new slant (rite, below) -- the
-// letterforms themselves a movement of the rite.
+// cuts, --cut-angle and --reveal-angle. When the register turns over, the words at rest in the
+// page are cut into their new face by one slice at the new slant, on the shift's one stair (rite,
+// below), and the axes, the size and the spacing land at once under that slice: one edge, one
+// layout.
 //
 //   rite / act / mono   the faces
 //   weight, opsz, soft, wonk   the axes
@@ -168,7 +168,7 @@ $registers: (
     act: ('Helvetica Neue', Helvetica, Roboto, Arial, system-ui, sans-serif),
     mono: $mono-stack,
     weight: 600, opsz: 36, soft: 0, wonk: 0,
-    tracking: -0.015, words: -0.02, style: normal, caps: normal, case: none,
+    tracking: -0.015, words: 0, style: normal, caps: normal, case: none,
     scale: 1, leading: 1.1, rule: hair, rule-width: 100%, before: '', after: '\00B1', cap: 1, glow: 0,
     grain: 0.55, tempo: 0.9, steps: 0,
     cut: 150deg, slant: 96deg
@@ -206,13 +206,14 @@ $registers: (
     grain: 0.5, tempo: 1, steps: 0,
     cut: 135deg, slant: 94deg
   ),
-  // The storm: black and tight, the display master, over a grotesque.
+  // The storm: black and tight, the display master, over a grotesque -- tight in its letters,
+  // never in its word spaces, which at this weight would close up into one run-on word.
   storm: (
     rite: $rite,
     act: ('Helvetica Neue', Helvetica, Roboto, Arial, sans-serif),
     mono: $mono-stack,
     weight: 800, opsz: 120, soft: 0, wonk: 0,
-    tracking: -0.03, words: -0.04, style: normal, caps: normal, case: none,
+    tracking: -0.02, words: 0, style: normal, caps: normal, case: none,
     scale: 1.1, leading: 1, rule: none, rule-width: 0, before: '', after: '', cap: 1, glow: 0,
     grain: 0.75, tempo: 1.1, steps: 0,
     cut: 160deg, slant: 98deg
@@ -223,19 +224,20 @@ $registers: (
     act: ('Helvetica Neue', Helvetica, Roboto, Arial, sans-serif),
     mono: $mono-stack,
     weight: 900, opsz: 120, soft: 0, wonk: 1,
-    tracking: -0.02, words: -0.02, style: italic, caps: normal, case: none,
+    tracking: -0.02, words: 0, style: italic, caps: normal, case: none,
     scale: 1.06, leading: 1, rule: none, rule-width: 0, before: '', after: '\00AC', cap: 1, glow: 0,
     grain: 0.9, tempo: 0.75, steps: 0,
     cut: 120deg, slant: 120deg
   ),
-  // Wire: the tiny optical master blown up -- heavy, low-contrast -- wound tight, with the fastest
-  // movements.
+  // Wire: the tiny optical master blown up -- heavy, low-contrast -- set a little tight, with the
+  // fastest movements. Its character is the weight and the optical size, never closed-up spaces:
+  // the words keep their gaps, or a heading reads as one run-on word.
   wire: (
     rite: $rite,
     act: (Roboto, 'Helvetica Neue', Arial, system-ui, sans-serif),
     mono: $mono-stack,
     weight: 700, opsz: 9, soft: 0, wonk: 0,
-    tracking: -0.04, words: -0.06, style: normal, caps: normal, case: none,
+    tracking: -0.02, words: 0, style: normal, caps: normal, case: none,
     scale: 1.02, leading: 1.05, rule: hair, rule-width: 100%, before: '', after: '', cap: 1, glow: 0,
     grain: 0.95, tempo: 0.65, steps: 0,
     cut: 0deg, slant: 96deg
@@ -350,25 +352,29 @@ $sans: var(--font-act, #{$sans-stack});
 $mono: var(--font-mono, #{$mono-stack});
 
 // The rite's words: the face at the register's axes (the same four tags in the same order
-// everywhere, so the value is one the stair can step between registers), the slant, the case, the
-// tracking, and the register's own scale and leading over the role's. font-weight is kept beside
-// the axis for the fallback faces, which have no axis to set. Small capitals are made from the
-// capitals (the vendored subset has no smcp of its own); a weight or a slant is never faked, so a
-// fallback face shows what it has. The size is the role's (--role-size, which type.scale writes)
-// taken by the register's scale, or the inherited size where a wearer sets no role.
+// everywhere), the slant, the case, the tracking, and the register's own scale and leading over
+// the role's. font-weight is kept beside the axis for the fallback faces, which have no axis to
+// set. Small capitals are made from the capitals (the vendored subset has no smcp of its own); a
+// weight or a slant is never faked, so a fallback face shows what it has. The size is the role's
+// (--role-size, which type.scale writes) taken by the register's scale, or the inherited size
+// where a wearer sets no role.
 //
 // When the register turns over (html[data-shifting], written by js/motion.js for one rolled
-// moment), the axes, the size and the spacing step to the new register's, but the face, the slant
-// and the case cannot step: they change at once. So the words that sit at rest in a page of words
-// -- a prose page's headings, a list line's name -- are cut into their new face by one slice at
-// the new register's slant (--reveal-angle), the hand the new register writes in, while the axes
-// step. A wearer asks for it with `type.rite($shift: true)`. The rest are left to what already
-// moves them, since the slice would replace their own mask and animation and fight them: a page's
-// heading and a section's or a panel's title, which js/motion.js (shift) reveals word by word
-// itself; the stage's head, which _mood.scss cuts whole; and the parts that arrive and leave on
-// their own (the threshold's question, the persona sheet, the unlock box) or wear their own
-// world's register (a card). Nothing is cut behind a lightbox ([inert]), where the page's
-// animations are held still and a held slice would hide the words.
+// moment), everything of the new register lands at once -- the face, the slant, the case, the
+// axes, the size, the spacing -- and the words that sit at rest in a page of words (a prose
+// page's headings, a list line's name) are cut into their new face by one slice at the new
+// register's slant (--reveal-angle), the hand the new register writes in, on the shift's one
+// stair (--ease-rite-shift and --motion-rite-shift, which js/motion.js writes on :root for the
+// whole shift). Nothing of it steps on a stair of its own: a size or a spacing stepped tread by
+// tread would lay the page out again at every tread and re-break a heading's lines three times,
+// a second change on words the slice is already changing. A wearer asks for the slice with
+// `type.rite($shift: true)`. The rest are left to what already moves them, since the slice would
+// replace their own mask and animation and fight them: a page's heading and a section's or a
+// panel's title, which js/motion.js (shift) reveals itself on the same stair; the stage's head,
+// which _mood.scss cuts whole; and the parts that arrive and leave on their own (the threshold's
+// question, the persona sheet, the unlock box) or wear their own world's register (a card).
+// Nothing is cut behind a lightbox ([inert]), where the page's animations are held still and a
+// held slice would hide the words.
 @mixin rite($shift: false) {
   font-family: var(--font-rite, #{$rite});
   font-weight: var(--rite-weight, 400);
@@ -381,19 +387,11 @@ $mono: var(--font-mono, #{$mono-stack});
   word-spacing: calc(var(--rite-words, 0) * 1em);
   text-transform: var(--rite-case, none);
   line-height: var(--rite-leading, 1.15);
-  // What steps when the register turns over: the axes, the size, the leading, the tracking and
-  // the word-spacing, each along the stair -- never a glide.
-  transition:
-    font-variation-settings var(--motion-shift) var(--ease-stair),
-    font-size var(--motion-shift) var(--ease-stair),
-    line-height var(--motion-shift) var(--ease-stair),
-    letter-spacing var(--motion-shift) var(--ease-stair),
-    word-spacing var(--motion-shift) var(--ease-stair);
 
   @if $shift {
     html[data-shifting] &:not([inert] *) {
       mask: cut.slice(var(--reveal-angle, 100deg));
-      @include cut.play(in, rite-shift, shift);
+      @include cut.play(in, rite-shift, shift, shift);
     }
   }
 

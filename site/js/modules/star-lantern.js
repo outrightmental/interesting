@@ -130,7 +130,11 @@ function sizeOf(c) {
 // state, and every change in that picture had come the whole of its way when it was drawn. The sky
 // at rest stands still, so drawing it again would spend a frame on nothing a visitor could see; a
 // new size (the stage clears the canvas to resize it), the solve, or a new change draws again. A
-// change made outside a draw clears s.drawn, so the next frame draws it.
+// change made outside a draw clears s.drawn, so the next frame draws it. Asked again once a frame
+// has drawn, it is what that frame answers (with a climb still under way): false when the sky is
+// at rest, which tells the stage to ask for no frame until a knob, a tap, a check, a new size or the
+// scene coming back sets something going again -- the only things that do, so the piece's clock,
+// advanced by the frames it is given, may stand still meanwhile.
 function settled(s, c) {
   return s.drawn === sizeOf(c) && s.drawnAt > (s.until == null ? -Infinity : s.until);
 }
@@ -747,8 +751,9 @@ function orderPiece(env, plan) {
           s.glow[i] = up * 0.9;
         }
       }
-      if (!rising && settled(s, c)) return;
+      if (!rising && settled(s, c)) return false;
       draw(c);
+      return (c.done && s.rose < 2) || !settled(s, c);
     },
     end(c) {
       if (s.doneAt < 0) s.doneAt = s.t;
@@ -1067,8 +1072,9 @@ function driftPiece(env, plan) {
       if (c.done && s.doneAt < 0) s.doneAt = s.t;
       const climbing = s.launched && s.flight < nb;
       if (climbing) s.flight = c.reduced ? nb : Math.min(nb, s.flight + dt * nb * 1.2);
-      if (!climbing && settled(s, c)) return;
+      if (!climbing && settled(s, c)) return false;
       draw(c);
+      return (s.launched && s.flight < nb) || !settled(s, c);
     },
     end(c) {
       if (s.doneAt < 0) s.doneAt = s.t;
@@ -1384,8 +1390,9 @@ function witnessPiece(env, plan) {
       if (c.done && s.doneAt < 0) s.doneAt = s.t;
       const climbing = !!s.run && s.flight < 1;
       if (climbing) s.flight = c.reduced ? 1 : Math.min(1, s.flight + dt * 1.2);
-      if (!climbing && settled(s, c)) return;
+      if (!climbing && settled(s, c)) return false;
       draw(c);
+      return (!!s.run && s.flight < 1) || !settled(s, c);
     },
     end(c) {
       if (s.doneAt < 0) s.doneAt = s.t;
@@ -1632,8 +1639,9 @@ function mirrorPiece(env, plan) {
         const own = roll(riteOf(c), 0x4a, 0);
         s.flight = s.flightFrom + (nb - s.flightFrom) * own.stair(came(s, s.doneAt, 2.2, c.reduced));
       }
-      if (settled(s, c)) return;
+      if (settled(s, c)) return false;
       draw(c);
+      return !settled(s, c);
     },
     end(c) {
       // The climb sets out from as far as the journeys show now, a hint's step under way included.

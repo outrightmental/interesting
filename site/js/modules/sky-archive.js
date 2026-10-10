@@ -84,7 +84,7 @@ function mod(n, m) {
    long as the page is open is a movement that goes back on itself, over the whole scene, for
    nothing a visitor waits on, so a card of the archive is a still picture and a piece's sky holds
    still between the visitor's moves -- and a frame redraws only while something is moving
-   (framed()), so a still sky is not drawn again at all. */
+   (framed()), so a still sky is not drawn again at all, and asks for no further frame. */
 
 // The rite of a scene handed none: every movement at its end and every surface whole.
 const STILL = {
@@ -117,12 +117,15 @@ function came(s, at, span, reduced) {
 
 // One frame of a piece: the scene is drawn again only when something on it is moving, when a
 // trigger changed it, or when it was sized again (which clears the canvas); otherwise the picture
-// on the canvas is the picture, and the frame answers false.
+// on the canvas is the picture. The frame answers whether anything is still moving once it is
+// drawn: false when the sky is at rest, which tells the stage to ask for no frame until a knob, a
+// tap, a check, a new size or the scene coming back sets something going again -- the only things
+// that do, so the clock may stand still meanwhile.
 function framed(s, c, draw) {
   const lost = !!(c.g && typeof c.g.isContextLost === 'function' && c.g.isContextLost());
   if (!s.dirty && !s.busy && !lost && s.on === c.g && s.w === c.w && s.h === c.h && s.dpr === c.dpr) return false;
   draw(c);
-  return true;
+  return s.busy;
 }
 
 // Draws with the bookkeeping framed() reads: whatever is moving marks itself busy as it is drawn.

@@ -11,8 +11,8 @@
   margin: 1.5rem 0 0.5rem;
   color: var(--md-sys-color-on-surface);
   @include type.scale(title-large);
-  // Revealed by js/motion.js (shift) word by word when the register turns over, so it does not
-  // ask for the rite's own slice as well: one edge to a line.
+  // Cut into its new face by js/motion.js (shift) when the register turns over, on the shift's
+  // one stair, so it does not ask for the rite's own slice as well: one edge to a line.
   @include type.rite;
 }
 
@@ -53,11 +53,43 @@
   @include type.scale(body-large);
 }
 
+// The atlas's line about the hour, which its script writes once threshold.js has read the clock,
+// a moment after the first paint. Where a script runs, its room is kept from the start, so its
+// words are cut in where they will stand and the page under them does not move down to make way:
+// as many lines as the sentence takes at that width for the time zones most visitors are in --
+// three on a phone, two on a tablet, one on anything wider. It is the usual length and no more,
+// since the zone's name and the part of the day make the sentence longer or shorter: a long name
+// at the middle of the day (America/Argentina/Buenos_Aires) can still take a line more than is
+// kept and move the page by that line, and on a wide phone a short one leaves a line to spare --
+// where a room kept for every name would leave one to spare for nearly everyone. A page with no
+// script keeps none, as nothing will be written there. The line is a twelve-pixel role on a
+// sixteen-pixel leading, so a line is a rem wherever lh is not understood.
 .signal-line {
   margin: 0.5rem 0 0;
   color: var(--md-sys-color-on-surface-variant);
   font-family: type.$mono;
   @include type.scale(body-small);
+}
+
+@media (scripting: enabled) {
+  .signal-line {
+    min-height: 3rem;
+    min-height: 3lh;
+  }
+}
+
+@media (scripting: enabled) and (min-width: 480px) {
+  .signal-line {
+    min-height: 2rem;
+    min-height: 2lh;
+  }
+}
+
+@media (scripting: enabled) and (min-width: 820px) {
+  .signal-line {
+    min-height: 1rem;
+    min-height: 1lh;
+  }
 }
 
 .orientations li {
@@ -127,6 +159,26 @@
   @include type.scale(title-large);
   @include type.rite($shift: true);
   --role-size: 1.2rem;
+}
+
+// A page's link under the pointer, or leaving it, as the register turns over: the shift cuts its
+// words into their new face (type.rite($shift), above, played here as there) while its underline
+// goes on in the wax's or the wane's own treads (_base.scss). The two are named together, since
+// the shift's slice alone would take the underline's movement off the link, and the movement would
+// start over from the beginning when the shift was done -- the line falling back to its rest and
+// stepping up again under a pointer that never moved.
+@media (prefers-reduced-motion: no-preference) {
+  html[data-shifting] .pages a:not(.action).is-waxing:not([inert] *) {
+    animation:
+      cut-in var(--motion-rite-shift, var(--motion-shift)) var(--ease-rite-shift, var(--ease-shift)) both,
+      underline-in var(--motion-wax, var(--motion-medium)) var(--ease-wax, var(--ease-stair)) both;
+  }
+
+  html[data-shifting] .pages a:not(.action).is-waning:not([inert] *) {
+    animation:
+      cut-in var(--motion-rite-shift, var(--motion-shift)) var(--ease-rite-shift, var(--ease-shift)) both,
+      underline-out var(--motion-wane, var(--motion-medium)) var(--ease-wane, var(--ease-leave)) both;
+  }
 }
 
 .pages .gloss {

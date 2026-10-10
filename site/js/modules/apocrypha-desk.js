@@ -78,8 +78,11 @@ function asked(env) {
    own clock, s.t, which frame() advances: a change made at `since` has come came() of its way,
    which is 1 at once for a visitor who asked for less motion and for whatever stood there from
    the start (since < 0), so less motion shows every end state. frame() draws only while something
-   is on its way, or when the canvas has been sized again. Rolled from the seed and never from
-   env.rnd, so the puzzle a seed deals is untouched by it. */
+   is on its way, or when the canvas has been sized again, and answers whether anything still is:
+   false at rest, which tells the stage to ask for no frame until a press, a knob, a check, a new
+   size or the scene coming back into view -- the only things that set the desk moving, so its
+   clock may stand still meanwhile. Rolled from the seed and never from env.rnd, so the puzzle a
+   seed deals is untouched by it. */
 
 // The rite of a piece handed none: every change already made, and a surface cut by a plain
 // upright slice from its left side.
@@ -173,7 +176,8 @@ function replace(r, value, now, span, reduced, roll) {
 }
 
 // Whether frame() has anything to draw: a movement that ends after the last picture drawn, or a
-// canvas sized again since (which clears it). `seen` records the picture just drawn.
+// canvas sized again since (which clears it). Asked again once it has drawn, it is what frame()
+// answers: whether anything is still on its way. `seen` records the picture just drawn.
 function due(s, c) {
   const z = s.drawn;
   return !z || z.g !== c.g || z.w !== c.w || z.h !== c.h || z.dpr !== c.dpr || z.t < s.until;
@@ -235,16 +239,28 @@ function deskTop(g, w, h, c) {
 // one hard edge -- a shadow drawn, not a blur computed every frame.
 const SHADOW = 'rgba(0,0,0,0.34)';
 
-function write(g, str, x, y, size, color, align, weight) {
-  g.font = (weight || 500) + ' ' + Math.max(9, Math.round(size)) + 'px system-ui, sans-serif';
+// Words at `size`, and never under `least` pixels (nine unless a card that must hold every word
+// it carries says less) where they fit. Given `room`, the width of what they are written on -- the
+// card, the drawer front up to its mark -- words that would run past it are set smaller until they
+// fit: never cut off at the edge, never run into what stands beside them.
+function write(g, str, x, y, size, color, align, weight, room, least) {
+  let px = Math.max(least || 9, Math.round(size));
+  g.font = (weight || 500) + ' ' + px + 'px system-ui, sans-serif';
+  if (room > 0) {
+    const wide = g.measureText(str).width;
+    if (wide > room) {
+      px = Math.max(Math.min(5, px), Math.floor((px * room) / wide));
+      g.font = (weight || 500) + ' ' + px + 'px system-ui, sans-serif';
+    }
+  }
   g.fillStyle = color;
   g.textAlign = align || 'left';
   g.textBaseline = 'middle';
   g.fillText(str, x, y);
 }
 
-function wrap(g, str, size, maxW) {
-  g.font = '500 ' + Math.max(9, Math.round(size)) + 'px system-ui, sans-serif';
+function wrap(g, str, size, maxW, least) {
+  g.font = '500 ' + Math.max(least || 9, Math.round(size)) + 'px system-ui, sans-serif';
   const lines = [];
   let line = '';
   for (const word of String(str).split(' ')) {
@@ -533,6 +549,10 @@ function drawCabinet(g, w, h, env, plan, s, look, variant) {
   g.fillStyle = env.mix(k.bg, k.bg2, 0.8);
   g.fillRect(geo.x - geo.cw * 0.04, geo.y - geo.slot * 0.12, geo.cw * 1.08, geo.ch + geo.slot * 0.24);
   const size = Math.max(9, Math.min(16, geo.slot * 0.26));
+  // A drawer front holds a specimen's name over the drawer's own word ('top', 'second'); one too
+  // shallow for two lines of legible words holds the name alone, in its middle, and the drawers'
+  // order top to bottom says the rest.
+  const named = geo.slot * 0.26 >= 9;
   for (let slot = 0; slot < 4; slot++) {
     const y = geo.y + slot * geo.slot;
     g.fillStyle = env.mix(k.bg2, k.accent2, 0.12 + slot * 0.03);
@@ -541,7 +561,7 @@ function drawCabinet(g, w, h, env, plan, s, look, variant) {
     g.fillRect(geo.x, y + geo.slot * 0.04, geo.cw, 1);
     g.fillStyle = env.alpha(k.accent2, 0.6);
     g.fillRect(geo.x + geo.cw * 0.78, y + geo.slot * 0.5 - 2, geo.cw * 0.12, 4);
-    write(g, DRAWERS[slot], geo.x + geo.cw * 0.34, y + geo.slot * 0.68, size * 0.8, env.alpha(k.muted, 0.8), 'left', 500);
+    if (named) write(g, DRAWERS[slot], geo.x + geo.cw * 0.34, y + geo.slot * 0.68, size * 0.8, env.alpha(k.muted, 0.8), 'left', 500, geo.cw * 0.4);
   }
   // A hinted specimen's drawer is a set surface: the mark's colour is cut across the drawer front
   // behind the piece's edge and rests there in two shades, and the dashed frame and its label are
@@ -559,7 +579,7 @@ function drawCabinet(g, w, h, env, plan, s, look, variant) {
       g.setLineDash([5, 4]);
       g.strokeRect(geo.x + 3, y + geo.slot * 0.08, geo.cw - 6, geo.slot * 0.84);
       g.setLineDash([]);
-      write(g, 'the ' + names[item] + ' goes here', geo.x + geo.cw - 6, y + geo.slot * 0.88, size * 0.75, k.accent2, 'right', 600);
+      write(g, 'the ' + names[item] + ' goes here', geo.x + geo.cw - 6, y + geo.slot * 0.88, size * 0.75, k.accent2, 'right', 600, geo.cw - 12);
     }
   }
   // The specimens, each in the drawer it holds just now -- or on its way there from where it
@@ -571,30 +591,41 @@ function drawCabinet(g, w, h, env, plan, s, look, variant) {
     g.translate(geo.x + geo.cw * 0.17, y + geo.slot * 0.5);
     specimen(g, env, SPECIMENS[plan.items[item]].kind, geo.slot * 0.3, env.alpha(k.accent, 0.6));
     g.restore();
-    write(g, 'the ' + names[item], geo.x + geo.cw * 0.34, y + geo.slot * 0.42, size, k.fg, 'left', 600);
+    write(g, 'the ' + names[item], geo.x + geo.cw * 0.34, y + geo.slot * (named ? 0.42 : 0.5), size, k.fg, 'left', 600, geo.cw * 0.4);
   }
-  // The card of clues, beside the cabinet.
+  // The card of clues, beside the cabinet. It carries every clue, at every size of the stage: the
+  // clues are the puzzle, and nothing else on the page shows them. Each is wrapped at the size it
+  // is written at, a ruled row to a line, so no line is written over another; a card too short for
+  // them grows down the desk, and one that would still not hold them sets them smaller -- under
+  // nine pixels only where it must -- rather than leave one off.
   const cx = w * 0.72 + (v.turn - 0.5) * w * 0.03;
   const cw = w * 0.46;
-  const ch = Math.min(h * 0.64, cw * 0.72);
   const fs = Math.max(9, Math.min(15, Math.min(w, h) * 0.032));
+  const m = Math.min(10, cw * 0.06);
+  const room = cw - m * 2 - 4;
+  const tall = h * 0.88;
+  const { f, lines } = linesFor(plan, w, h, () => {
+    for (let px = Math.round(fs); ; px--) {
+      const out = [];
+      plan.clues.forEach((clue, i) => wrap(g, clueText(clue, names), px, room - px * 1.3, 1).forEach((l, j) => out.push({ text: l, first: j === 0, n: i + 1 })));
+      if ((out.length + 1) * px * 1.5 <= tall || px <= 4) return { f: px, lines: out };
+    }
+  });
+  // A row is half as tall again as the words in it. The card is as tall as it always was where that
+  // holds the title, the clues and a row to spare, and ruled as closely as the configuration says
+  // where the words leave it empty.
+  const row = f * 1.5;
+  const ch = Math.min(tall, Math.max(Math.min(h * 0.64, cw * 0.72), (lines.length + 2) * row));
+  const rows = Math.max(lines.length + 1, Math.min(Math.max(Math.round(6 * v.density), lines.length + 2), Math.floor(ch / row)));
   g.save();
   g.translate(cx, h * 0.5);
   g.rotate(look.tilt + (v.turn - 0.5) * 0.06);
-  const m = Math.min(10, cw * 0.06);
-  const lines = linesFor(plan, w, h, () => {
-    const out = [];
-    plan.clues.forEach((clue, i) => wrap(g, clueText(clue, names), fs, cw - m * 2 - fs * 1.4).forEach((l, j) => out.push({ text: l, first: j === 0, n: i + 1 })));
-    return out;
-  });
-  const rows = Math.max(Math.round(6 * v.density), lines.length + 2);
   card(g, env, cw, ch, 0.3, rows);
   const rh = ch / rows;
-  const fsz = Math.min(fs, rh * 0.66);
-  write(g, plan.number + ' / the drawer', -cw / 2 + m + 2, -ch / 2 + rh * 0.5, fsz, k.accent2, 'left', 700);
+  write(g, plan.number + ' / the drawer', -cw / 2 + m + 2, -ch / 2 + rh * 0.5, f, k.accent2, 'left', 700, room, f);
   lines.forEach((l, i) => {
-    if (l.first) write(g, l.n + '.', -cw / 2 + m + 2, -ch / 2 + rh * (i + 1.5), fsz, k.accent2, 'left', 600);
-    write(g, l.text, -cw / 2 + m + 2 + fsz * 1.3, -ch / 2 + rh * (i + 1.5), fsz, k.fg, 'left', 500);
+    if (l.first) write(g, l.n + '.', -cw / 2 + m + 2, -ch / 2 + rh * (i + 1.5), f, k.accent2, 'left', 600, 0, f);
+    write(g, l.text, -cw / 2 + m + 2 + f * 1.3, -ch / 2 + rh * (i + 1.5), f, k.fg, 'left', 500, room - f * 1.3, f);
   });
   g.restore();
   // Over a solved cabinet the lock's colour is cut across the desk behind the piece's edge and
@@ -694,10 +725,12 @@ function drawerPiece(env, plan) {
       draw(c);
     },
     // The clock moves every frame; the desk is drawn only while something is on its way, or when
-    // the canvas has been sized again. A desk at rest is not drawn at all.
+    // the canvas has been sized again. A desk at rest is not drawn at all, and frame() answers
+    // false then, so the stage stops asking for frames until the visitor moves something.
     frame(t, dt, c) {
       if (!c.reduced) s.t += Math.max(0, Number(dt) || 0);
       if (due(s, c)) draw(c);
+      return due(s, c);
     },
     end(c) {
       s.solvedAt = s.t;
@@ -953,15 +986,16 @@ function drawTray(g, w, h, env, plan, s, look, variant) {
   g.rotate(look.tilt * 0.6 + (v.turn - 0.5) * 0.04);
   card(g, env, cw, ch, 0.25, 3);
   const m = Math.min(10, cw * 0.06);
-  write(g, plan.number + ' / the rule of this drawer', -cw / 2 + m + 2, -ch / 2 + ch / 6, fs * 0.85, k.accent2, 'left', 700);
-  write(g, ruleText(plan.rule), -cw / 2 + m + 2, -ch / 2 + ch / 2, fs, k.fg, 'left', 600);
+  const room = cw - m * 2 - 4;
+  write(g, plan.number + ' / the rule of this drawer', -cw / 2 + m + 2, -ch / 2 + ch / 6, fs * 0.85, k.accent2, 'left', 700, room);
+  write(g, ruleText(plan.rule), -cw / 2 + m + 2, -ch / 2 + ch / 2, fs, k.fg, 'left', 600, room);
   // The card's last line: the verdict is cut on in place of what the visitor said, which was cut
   // on in place of the card's own line -- or of what they said before -- each at its moment.
   const sayVal = showing(s.said, s.t, SPAN, reduced);
   const feature = FEATURES.find((f) => f.value === sayVal);
   const said = feature ? 'the rule disputes ' + feature.label + ', you say' : null;
   const line = opened ? 'specimen ' + (plan.odd + 1) + ' does not: ' + describe(plan.specs[plan.odd]) : said || 'five of the six keep it; one does not';
-  write(g, line, -cw / 2 + m + 2, -ch / 2 + ch * 5 / 6, fs * 0.85, opened ? k.accent : said ? k.fg : k.muted, 'left', 500);
+  write(g, line, -cw / 2 + m + 2, -ch / 2 + ch * 5 / 6, fs * 0.85, opened ? k.accent : said ? k.fg : k.muted, 'left', 500, room);
   g.restore();
   if (s.reveal) wash(g, env, rite, w, h, revealP, k.accent2, 0.1);
 }
@@ -1059,6 +1093,7 @@ function oddPiece(env, plan) {
     frame(t, dt, c) {
       if (!c.reduced) s.t += Math.max(0, Number(dt) || 0);
       if (due(s, c)) draw(c);
+      return due(s, c);
     },
     end(c) {
       s.reveal = true;
@@ -1148,43 +1183,58 @@ function drawFan(g, w, h, env, plan, s, look, variant) {
       g.setLineDash([]);
     }
     const m = Math.min(10, cw * 0.06);
-    write(g, 'card ' + (i + 1), -cw / 2 + m + 2, -ch / 2 + ch / 8, fs * 0.65, env.alpha(k.muted, 0.9), 'left', 500);
-    write(g, 'APC-' + number, -cw / 2 + m + 2, -ch / 2 + ch * 0.5, fs, opened && i === plan.odd ? k.accent : k.accent2, 'left', 700);
+    const room = cw - m * 2 - 4;
+    write(g, 'card ' + (i + 1), -cw / 2 + m + 2, -ch / 2 + ch / 8, fs * 0.65, env.alpha(k.muted, 0.9), 'left', 500, room);
+    write(g, 'APC-' + number, -cw / 2 + m + 2, -ch / 2 + ch * 0.5, fs, opened && i === plan.odd ? k.accent : k.accent2, 'left', 700, room);
     // The card's foot: the verdict, cut on at its moment; before it, what the visitor says the
     // picked card should end in -- replaced in one cut when they say another digit or pick another
     // card, the old words standing until the new ones' moment -- or "keeps the rule" over a rule
     // drawn in behind the piece's edge on a card the desk has vouched for, cut on at its own.
     const vouched = s.vouched.indexOf(i);
     if (opened && i === plan.odd) {
-      write(g, 'should end in ' + plan.digit, -cw / 2 + m + 2, -ch / 2 + ch * 0.8, fs * 0.65, k.accent, 'left', 600);
+      write(g, 'should end in ' + plan.digit, -cw / 2 + m + 2, -ch / 2 + ch * 0.8, fs * 0.65, k.accent, 'left', 600, room);
     } else if (foot && foot.card === i) {
-      write(g, 'ends in ' + foot.digit + ', you say', -cw / 2 + m + 2, -ch / 2 + ch * 0.8, fs * 0.65, k.fg, 'left', 500);
+      write(g, 'ends in ' + foot.digit + ', you say', -cw / 2 + m + 2, -ch / 2 + ch * 0.8, fs * 0.65, k.fg, 'left', 500, room);
     } else if (vouched >= 0) {
       const vp = got(s.vouchAt[vouched], SPAN);
       own.paint(g, -cw / 2 + m + 2, -ch / 2 + ch * 0.9, cw * 0.6, Math.max(2, ch * 0.03), own.stair(vp), env.alpha(k.accent, 0.5));
-      if (own.flicker(vp)) write(g, 'keeps the rule', -cw / 2 + m + 2, -ch / 2 + ch * 0.8, fs * 0.65, env.alpha(k.fg, 0.85), 'left', 500);
+      if (own.flicker(vp)) write(g, 'keeps the rule', -cw / 2 + m + 2, -ch / 2 + ch * 0.8, fs * 0.65, env.alpha(k.fg, 0.85), 'left', 500, room);
     }
     g.restore();
   });
-  // The rule, on a slip along the bottom of the desk.
+  // The rule, on a slip along the bottom of the desk, ruled a row to a line, each row half as tall
+  // again as its words, so no line is written over another: the heading, the rule, and the rule
+  // worked through on a number. A slip too short for all three at nine pixels or more leaves the
+  // worked number off; one too short for the rule even so sets it smaller -- the rule is what the
+  // forgery breaks, and the slip never leaves it off.
   const sw = w * 0.84;
   const sh = h * 0.24;
   const rs = Math.max(9, Math.min(15, Math.min(w, h) * 0.034));
   const m = Math.min(10, sw * 0.06);
-  const [rule, example] = linesFor(plan, w, h, () => [
-    wrap(g, 'a true number ends in the last digit of the sum of its first three digits', rs, sw - m * 2 - 4),
-    wrap(g, 'so 4172 is true: 4 + 1 + 7 = 12, and it ends in 2. one card on the desk is forged', rs, sw - m * 2 - 4)
-  ]);
-  const lines = [{ text: 'the rule of the desk', color: k.accent2, weight: 700 }];
-  rule.forEach((l) => lines.push({ text: l, color: k.fg, weight: 500 }));
-  example.forEach((l) => lines.push({ text: l, color: k.muted, weight: 500 }));
-  const rows = lines.length;
-  const rh = sh / rows;
+  const room = sw - m * 2 - 4;
+  const { f, lines } = linesFor(plan, w, h, () => {
+    const at = (px, worked) => {
+      const out = [{ text: 'the rule of the desk', kind: 'head' }];
+      wrap(g, 'a true number ends in the last digit of the sum of its first three digits', px, room, 1).forEach((l) => out.push({ text: l, kind: 'rule' }));
+      if (worked) wrap(g, 'so 4172 is true: 4 + 1 + 7 = 12, and it ends in 2. one card on the desk is forged', px, room, 1).forEach((l) => out.push({ text: l, kind: 'worked' }));
+      return { f: px, lines: out, fits: out.length * px * 1.5 <= sh };
+    };
+    for (let px = Math.round(rs); px >= 9; px--) {
+      const got = at(px, true);
+      if (got.fits) return got;
+    }
+    for (let px = Math.round(rs); ; px--) {
+      const got = at(px, false);
+      if (got.fits || px <= 4) return got;
+    }
+  });
+  const rh = sh / lines.length;
+  const tone = { head: [k.accent2, 700], rule: [k.fg, 500], worked: [k.muted, 500] };
   g.save();
   g.translate(w / 2, h * 0.86);
   g.rotate(-look.tilt * 0.5);
-  card(g, env, sw, sh, 0.1, rows);
-  lines.forEach((l, i) => write(g, l.text, -sw / 2 + m + 2, -sh / 2 + rh * (i + 0.5), Math.min(rs, rh * 0.66), l.color, 'left', l.weight));
+  card(g, env, sw, sh, 0.1, lines.length);
+  lines.forEach((l, i) => write(g, l.text, -sw / 2 + m + 2, -sh / 2 + rh * (i + 0.5), f, tone[l.kind][0], 'left', tone[l.kind][1], room, f));
   g.restore();
   if (s.reveal) wash(g, env, rite, w, h, revealP, k.accent2, 0.1);
 }
@@ -1285,6 +1335,7 @@ function forgedPiece(env, plan) {
     frame(t, dt, c) {
       if (!c.reduced) s.t += Math.max(0, Number(dt) || 0);
       if (due(s, c)) draw(c);
+      return due(s, c);
     },
     end(c) {
       s.reveal = true;

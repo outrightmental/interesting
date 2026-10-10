@@ -266,11 +266,13 @@ export function light(v) {
      rite.ease(t)           t -> y in a few treads that land: the first the longest way, each
                             after it shorter -- what a thing travelling to a new place moves by
      rite.stair(t, n)       t stepped onto n even treads after a hold (the roll's own count when n
-                            is not given): what a thing changing its state moves by
+                            is not given; two to five whatever n asks): what a thing changing its
+                            state moves by
      rite.ratchet(t)        t turned in even clicks, a clock's: how a wheel, a dial or a whole
                             scene turns, never a smooth rotation (rite.turn is the same)
      rite.flicker(t)        0 or 1: a thing arriving is cut on at the roll's moment and stays
-     rite.series(t, n)      the tread reached at t, 0 to n: a counter, a notch
+     rite.series(t, n)      the count reached at t, 0 to n, in at most five treads (a count of
+                            more than five takes several at a tread): a counter, a notch
      rite.kind, rite.angle  the piece's edge: 'slice' (a straight edge at `angle` degrees, 0 up,
                             90 right) or 'curve' (a circle grown from rite.origin, a corner or an
                             edge's middle of the box, as fractions) -- one per piece, its signature
@@ -318,10 +320,12 @@ function riteOf(seed, edge) {
     return out;
   };
   const clamp01 = (p) => (p <= 0 ? 0 : p >= 1 ? 1 : p);
+  // Two to five treads, whatever a caller asks: one is a cut, and past five a stair is a ladder.
+  const treadsOf = (n) => Math.min(5, Math.max(2, Math.floor(n || treads)));
   const stair = (p, n) => {
     const q = clamp01(p);
     if (q >= 1) return 1;
-    const k = Math.max(1, Math.floor(n || treads));
+    const k = treadsOf(n);
     const moments = momentsFor(k);
     let i = 0;
     while (i < k && moments[i] <= q) i++;
@@ -367,9 +371,11 @@ function riteOf(seed, edge) {
   const onAt = between(0.12, 0.4);
   const flicker = (p) => (clamp01(p) >= onAt && p > 0 ? 1 : 0);
 
+  // A count of n reached on the stair's treads: whole numbers only, never past n, and a count of
+  // more than five shared out over five treads rather than climbed one at a time.
   const series = (p, n) => {
-    const k = Math.max(1, Math.floor(n || treads));
-    return Math.round(stair(p, k) * k);
+    const m = Math.max(1, Math.floor(n || treads));
+    return Math.round(stair(p, treadsOf(m)) * m);
   };
 
   // The edge in a box: the slice's direction (0deg up, 90deg right), or the curve's centre.

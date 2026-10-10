@@ -54,8 +54,8 @@ main {
   margin: 0;
   color: var(--md-sys-color-on-surface);
   @include type.scale(title-large);
-  // Revealed by js/motion.js (shift) word by word when the register turns over, so it does not
-  // ask for the rite's own slice as well: one edge to a line.
+  // Cut into its new face by js/motion.js (shift) when the register turns over, on the shift's
+  // one stair, so it does not ask for the rite's own slice as well: one edge to a line.
   @include type.rite;
 }
 

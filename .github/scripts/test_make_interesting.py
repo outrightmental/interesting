@@ -3487,9 +3487,9 @@ class CadenceAxiomTest(SiteDirTestCase):
 
 class MotionAxiomTest(SiteDirTestCase):
     """The motion axiom: nothing on the site moves along a standard curve. Every transition and
-    animation runs along a curve js/motion.js rolled for that one movement -- a procedurally
-    generated glitch of a curve, never twice the same -- with where the thing moves from rolled
-    beside it, and the typography shifts its register with the mood. Stated in the prompt and
+    animation is one edge stepping across in a stair js/motion.js composed for that one movement
+    -- a few forward treads, never twice the same -- with where the thing moves from rolled beside
+    it, and the typography shifts its register with the mood. Stated in the prompt and
     held to by validate_plan, like the nine beside it: the engine's line on every page, and no
     linear, ease, ease-in, ease-out, ease-in-out, cubic-bezier or browser smoothing anywhere a
     page or the files it loads would move by them. The rest -- whether a curve feels like a
@@ -6882,7 +6882,10 @@ class RealSiteTest(unittest.TestCase):
         ornament = self.source[f"{mi.SASS_DIR}/_rite.scss"]
         self.assertIn("@use 'rite';", self.source["css/site.scss"], "the ornament is not shared")
         self.assertIn("prefers-reduced-motion: reduce", ornament)
-        self.assertIn("animation: none", ornament[ornament.index("prefers-reduced-motion: reduce"):])
+        # The ornament holds still for everyone now -- the rings rest -- and the one movement it
+        # carries, a line of words cut in, is simply there for a visitor who asked for less motion.
+        self.assertNotIn("infinite", ornament, "the ornament loops")
+        self.assertIn("mask: none", ornament[ornament.index("prefers-reduced-motion: reduce"):])
         self.assertNotRegex(ornament, r"(?m)^\s*position:\s*fixed\b", "the ornament floats over the page")
         self.assertIn("pointer-events: none", ornament, "the ornament takes a press meant for content")
         built = self.site["css/site.css"]
@@ -6913,7 +6916,7 @@ class RealSiteTest(unittest.TestCase):
                         "'(prefers-reduced-motion: reduce)'", "linear(", "steps("]:
             with self.subTest(offered=offered):
                 self.assertIn(offered, engine)
-        for family in ["arrive", "leave", "stair", "shift", "flicker", "pulse", "drift", "wipe", "ratchet", "clock"]:
+        for family in ["arrive", "leave", "stair", "shift", "flicker", "pulse", "drift", "wipe", "ratchet"]:
             with self.subTest(family=family):
                 self.assertIn(f"    {family}: function (rnd", engine, "the engine lost a family")
         # The tokens: the families, each a baked stair of a few treads for a page with no script, the
@@ -7030,7 +7033,6 @@ class RealSiteTest(unittest.TestCase):
         self.assertRegex(tokens, r"--ease-ratchet: linear\(0, .*, 1\);")
         self.assertIn("--ease-stair: steps(", tokens)
         self.assertIn("--ease-ratchet: steps(", tokens)
-        self.assertRegex(tokens, r"--ease-clock: linear\(0, .*, 1\);")
         for baked in ["@property --cut {", "syntax: '<percentage>';", "--cut-angle:", "--reveal-angle:",
                       "@property --range-pct"]:
             with self.subTest(baked=baked):
@@ -7166,6 +7168,45 @@ class RealSiteTest(unittest.TestCase):
                                         f"the loop {name} moves {props}, which the compositor cannot draw alone")
         self.assertGreater(found, 5, "the sweep found almost no keyframes, so it is reading the Sass wrong")
 
+    def test_every_family_is_a_forward_stair_of_two_to_five_treads(self):
+        # The engine's own arithmetic, and the stairs the tokens bake for a page with no script:
+        # every family, for any seed, any grain and either temperament, climbs from 0 to 1 in two
+        # to five treads that only go forward -- never an overshoot, a slip back or a ladder.
+        needs_node(self)
+        script = """
+          const fs = require('fs'), vm = require('vm');
+          const sandbox = { module: { exports: {} } };
+          vm.runInNewContext(fs.readFileSync(process.argv[1], 'utf8'), sandbox);
+          const M = sandbox.module.exports;
+          const out = { families: M.families, bad: [] };
+          const tempers = [{ grain: 0, tempo: 1, steps: 0 }, { grain: 1, tempo: 1, steps: 1 }, { grain: 0.45, tempo: 1.3, steps: 0 }];
+          for (const f of M.families) for (const temper of tempers) for (let seed = 1; seed <= 60; seed++) {
+            const c = M.curve(f, temper, seed);
+            const st = c.stops;
+            const forward = st.every((p, i) => i === 0 || (p[0] >= st[i - 1][0] && p[1] >= st[i - 1][1]));
+            const inside = st.every((p) => p[0] >= 0 && p[0] <= 1 && p[1] >= 0 && p[1] <= 1);
+            const levels = new Set(st.map((p) => p[1])).size - 1;
+            const ends = st[0][1] === 0 && st[st.length - 1][1] === 1;
+            if (!forward || !inside || !ends || levels < 2 || levels > 5) out.bad.push([f, seed, temper.steps, forward, inside, ends, levels]);
+          }
+          process.stdout.write(JSON.stringify(out));
+        """
+        run = subprocess.run([mi.NODE_BIN, "-e", script, "--", str(mi.REPO_ROOT / "site" / mi.MOTION_SCRIPT)],
+                             capture_output=True, text=True, timeout=60)
+        self.assertEqual(run.returncode, 0, run.stderr)
+        out = json.loads(run.stdout)
+        self.assertGreaterEqual(len(out["families"]), 9, "the engine offers too few families to check")
+        self.assertEqual(out["bad"][:10], [], "a family climbs a ladder, slips back or overshoots")
+        tokens = self.source[f"{mi.SASS_DIR}/_tokens.scss"]
+        baked = re.findall(r"(--ease-[\w-]+): linear\(([^)]*)\);", tokens)
+        self.assertGreaterEqual(len(baked), 9, "the tokens bake too few stairs to check")
+        for name, body in baked:
+            with self.subTest(token=name):
+                ys = [float(part.split()[0]) for part in body.split(",")]
+                self.assertEqual((ys[0], ys[-1]), (0.0, 1.0), f"{name} does not climb from 0 to 1")
+                self.assertTrue(all(b >= a for a, b in zip(ys, ys[1:])), f"{name} slips back")
+                self.assertTrue(2 <= len(set(ys)) - 1 <= 5, f"{name} is a ladder of {len(set(ys)) - 1} treads")
+
     def test_a_pieces_rite_is_a_stair_a_ratchet_a_cut_and_one_edge(self):
         # env.rite in arithmetic: the same seed rolls the same rite; the stair and the ratchet climb
         # from 0 to 1 in two to five forward treads and never glide or slip; the flicker is one cut,
@@ -7292,8 +7333,8 @@ class RealSiteTest(unittest.TestCase):
         self.assertIn("$sans: var(--font-act, #{$sans-stack});", types)
         self.assertIn("$mono: var(--font-mono, #{$mono-stack});", types)
         self.assertRegex(built, r"html\{[^}]*font-family:var\(--font-act,")
-        # And the shift of modality is a movement: the rite's words flicker as the register turns
-        # over, along a rolled curve, and hold still for a visitor who asked for less motion.
+        # And the shift of modality is a movement: the rite's words are cut into their new face by
+        # one slice as the register turns over, and hold still for a visitor who asked for less motion.
         self.assertIn("@keyframes rite-shift", moods)
         self.assertIn("html[data-shifting] .stage-head", moods)
         calm = moods[moods.index("@media (prefers-reduced-motion: reduce)"):]

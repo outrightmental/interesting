@@ -84,7 +84,8 @@ function asked(env) {
    for a visitor who asked for less motion, and for whatever stood there from the start
    (since < 0). Each lamp, slot or line moves on a roll of its own (rite.at, rolled once and kept):
    the same edge, with its own treads and its own moment. And the scene is drawn only while
-   something on it is moving (tick): a room at rest is the picture already on the canvas. */
+   something on it is moving (tick): a room at rest is the picture already on the canvas, and
+   frame() says so, so the stage asks for no frame until something moves it again. */
 
 // What stands in for a rite on an env that carries none: every movement already at its end, and
 // a surface painted whole.
@@ -124,14 +125,18 @@ function sizeOf(c) {
   return c.w + 'x' + c.h + 'x' + c.dpr;
 }
 
-// One frame of a piece. The clock always moves on, but the scene is drawn only while a movement on
-// it is under way -- up to the first frame past its end, so the picture left standing is the
-// landed one -- or when the stage has sized the canvas again, which clears it. Between movements
-// the canvas already holds the picture, and a room at rest costs its clock and nothing more.
+// One frame of a piece. The scene is drawn only while a movement on it is under way -- up to the
+// first frame past its end, so the picture left standing is the landed one -- or when the stage has
+// sized the canvas again, which clears it. What it answers is whether anything is still on its way
+// once this frame is drawn: false when the room is at rest, which tells the stage to stop asking
+// for frames until the visitor does something, the canvas is sized again or the scene comes back
+// into view. The clock stands still while no frames come, and nothing here waits on it then: every
+// movement starts from a press, a knob or the end, each of which wakes the frames again.
 function tick(s, dt, c, draw) {
   const moving = s.t <= s.until;
   s.t += dt;
   if (moving || s.size !== sizeOf(c)) draw(c);
+  return s.t <= s.until;
 }
 
 function came(s, since, span, reduced) {
@@ -227,10 +232,15 @@ function room(ctx, w, h, env) {
   const full = Math.min(w, h) * 0.28 * (v.scale || 1);
   const r = Math.min(w, h) * (0.17 + swell * 0.11) * (v.scale || 1);
   // The floor catching the light: a disc under the ring in two shades split by the piece's one
-  // edge, never a wash. The edge stands near the floor's middle, so both shades always read, and
-  // further across it the fuller the breath. It is laid before the glow, so the ring's light falls
-  // on it.
+  // edge, never a wash. The whole disc is laid in the lower shade, so its round edge reads against
+  // the ground, and the part the edge has passed in the upper; the edge stands near the floor's
+  // middle, so both shades always read, and further across it the fuller the breath. It is laid
+  // before the glow, so the ring's light falls on it.
   const reach = full * 1.45;
+  ctx.fillStyle = env.alpha(c.accent2, 0.08);
+  ctx.beginPath();
+  ctx.arc(w / 2, h / 2, reach, 0, Math.PI * 2);
+  ctx.fill();
   ctx.fillStyle = env.alpha(c.accent2, 0.2);
   within(ctx, rite, (p) => p.arc(w / 2, h / 2, reach, 0, Math.PI * 2),
     w / 2 - reach, h / 2 - reach, reach * 2, reach * 2, 0.34 + 0.32 * swell);
@@ -571,7 +581,7 @@ function lampsPiece(env, plan) {
       draw(c);
     },
     frame(t, dt, c) {
-      tick(s, dt, c, draw);
+      return tick(s, dt, c, draw);
     },
     end(c) {
       s.doneAt = s.t;
@@ -920,7 +930,7 @@ function shelfPiece(env, plan) {
       draw(c);
     },
     frame(t, dt, c) {
-      tick(s, dt, c, draw);
+      return tick(s, dt, c, draw);
     },
     end(c) {
       s.doneAt = s.t;
@@ -1186,7 +1196,7 @@ function secondLookPiece(env, plan) {
       c.status('tap a lamp in the first view to mark a switch, or compare it with the second view');
     },
     frame(t, dt, c) {
-      tick(s, dt, c, draw);
+      return tick(s, dt, c, draw);
     },
     end(c) {
       s.reveal = true;

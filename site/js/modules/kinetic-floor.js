@@ -64,7 +64,9 @@ function asked(env) {
    visitor who asked for less motion and for whatever stood there from the start. Every trigger
    rolls a fresh rite (rite.at(k) with the count of that trigger in k), so a second call on a lane,
    a second check, a second move of the pivot steps in another rhythm from the first, every roll
-   keeping the piece's edge. A frame with nothing new in it is not drawn at all (settled, below). */
+   keeping the piece's edge. A frame with nothing new in it is not drawn at all (settled, below),
+   and once nothing is on its way frame() answers false, so the stage asks for no frame until the
+   visitor moves something again. */
 
 // The rite of a piece handed none: everything stands where it ends, and a surface is cut by a
 // plain upright slice from its left side.
@@ -199,6 +201,15 @@ function settled(s, c, look, until) {
   return s.drawn === look && (!!c.reduced || s.drawnAt > until + 0.05);
 }
 
+// One frame: drawn unless it is settled, and answering whether anything is still on its way once
+// it has been -- false when the floor is at rest, which tells the stage to stop asking for frames
+// until a press, a knob, a check, a new size or the scene coming back into view. Every movement
+// here starts from one of those, so nothing waits on a frame that will not come.
+function paintFrame(s, c, look, until, draw) {
+  if (!settled(s, c, look(c), until())) draw(c);
+  return !settled(s, c, look(c), until());
+}
+
 // The moment, on the piece's clock, by which a change made at `since` and taking `span` seconds
 // has come the whole of its way; -Infinity for one never made.
 function over(since, span) {
@@ -238,6 +249,35 @@ function label(g, text, x, y, size, tone, align, weight) {
   g.textBaseline = 'middle';
   g.fillStyle = tone;
   g.fillText(text, x, y);
+}
+
+// How wide `text` is set at `size`, in the face label() sets it in.
+function wide(g, text, size, weight) {
+  g.font = (weight || '500') + ' ' + size + 'px system-ui, sans-serif';
+  return g.measureText(text).width;
+}
+
+// A line of words centred at x within `room` pixels: whole on one line where it fits; else broken
+// at the space nearest its middle onto two, the second under the first; and set smaller only if a
+// line still runs over. Words are never cut off at the canvas's edge or run into what stands
+// beside them.
+function fitted(g, text, x, y, size, room, tone) {
+  if (wide(g, text, size) <= room) {
+    label(g, text, x, y, size, tone);
+    return;
+  }
+  const mid = text.length / 2;
+  let at = -1;
+  for (let i = 0; i < text.length; i++) if (text[i] === ' ' && (at < 0 || Math.abs(i - mid) < Math.abs(at - mid))) at = i;
+  const lines = at < 0 ? [text] : [text.slice(0, at), text.slice(at + 1)];
+  const widest = Math.max(...lines.map((line) => wide(g, line, size)));
+  const set = widest > room ? Math.max(6, Math.floor(size * room / widest)) : size;
+  lines.forEach((line, i) => label(g, line, x, y + (i - (lines.length - 1) / 2) * set * 1.15, set, tone));
+}
+
+// What stands at a lane's call once the chains have had their time: the count of what fell.
+function fellWords(lane, n) {
+  return n === lane.n ? 'all ' + n + ' fell' : n + ' of ' + lane.n + ' fell';
 }
 
 /* ---- will it cross: four lanes, four gaps --------------------------------------------------- */
@@ -370,8 +410,22 @@ function drawLanes(g, w, h, env, plan, s, variant) {
   // asked for less motion sees the chains already down.
   const tipped = s.time >= 0 && reduced ? Infinity : s.time;
   if (s.time >= 0) daybreak(g, rite, env, w, h, reduced ? 1 : clamp01(s.time / 1.6), 0.08);
-  label(g, 'a falling domino crosses a gap narrower than four fifths of its height', w / 2, h * 0.05, small, env.alpha(c.muted, 0.85));
+  fitted(g, 'a falling domino crosses a gap narrower than four fifths of its height', w / 2, h * 0.05, small, w - small * 1.2, env.alpha(c.muted, 0.85));
   const every = v.density < 0.9 ? 2 : 1;
+  // The call's column, right of the longest lane. Its badge is as wide as the widest words it can
+  // sit under -- the call, or the count of what fell -- with a little room either side, so it
+  // frames the words and not a few stray letters of them; the column stands at 0.87 of the width,
+  // or further in where the badge or the shown answer under it would run off the edge, and the
+  // words in it are set smaller only where the column is too narrow to hold them.
+  const right = w - small * 0.4;
+  const left = geo.x0 + (geo.spanMax + 1.5) * u;
+  const counts = plan.lanes.map((lane, k) => wide(g, fellWords(lane, fallen(lane, Infinity, rite, k)), small));
+  const badgeW = Math.max(wide(g, 'crosses', size), ...counts) + small * 1.2;
+  const need = Math.max(badgeW, wide(g, 'shown: crosses', small));
+  const shrink = Math.min(1, (right - left) / need);
+  const callX = Math.min(w * 0.87, right - (need * shrink) / 2);
+  const callSize = Math.max(6, size * shrink);
+  const callSmall = Math.max(6, small * shrink);
   plan.lanes.forEach((lane, k) => {
     const lay = laneLayout(lane);
     const bandTop = geo.top + k * geo.band;
@@ -383,7 +437,6 @@ function drawLanes(g, w, h, env, plan, s, variant) {
     // its colour in over whatever stood there: every earlier call still showing (s.under, each
     // frozen where it had got to) stands wherever no later one has passed.
     const calledAt = s.calledAt ? s.calledAt[k] : -1;
-    const callX = w * 0.87;
     const tone = (call) => env.alpha(call ? c.accent : c.muted, 0.14);
     if (calledAt >= 0) {
       const bx = x0 - u;
@@ -495,28 +548,29 @@ function drawLanes(g, w, h, env, plan, s, variant) {
     if (badgeAt >= 0) {
       // The call's badge under the word: cut in with the first call, round where that call was
       // made on a piece whose edge is a curve, and there from then on, whatever the call becomes.
-      const bx = callX - u * 2.4;
-      const by = floorY - u * 3.1;
+      const bw = badgeW * shrink;
+      const bh = callSize * 1.5;
+      const bx = callX - bw / 2;
+      const by = floorY - u * 2 - bh / 2;
       const own = roll(rite, 0x180 + k);
       const pt = s.badgePoint[k];
       g.fillStyle = env.alpha(c.accent2, 0.22);
-      cover(g, rite, bx, by, u * 4.8, u * 2.2, own.stair(came(s, badgeAt, 0.9, reduced)),
-        within(pt ? pt.x * w : callX, pt ? pt.y * h : floorY - u * 2, bx, by, u * 4.8, u * 2.2));
+      cover(g, rite, bx, by, bw, bh, own.stair(came(s, badgeAt, 0.9, reduced)),
+        within(pt ? pt.x * w : callX, pt ? pt.y * h : floorY - u * 2, bx, by, bw, bh));
     }
     const word = wordShown(s, rite, k, reduced);
     if (countOn) {
-      const n = fallen(lane, tipped, rite, k);
-      label(g, n === lane.n ? 'all ' + n + ' fell' : n + ' of ' + lane.n + ' fell', callX, floorY - u * 2, small, c.accent2);
+      label(g, fellWords(lane, fallen(lane, tipped, rite, k)), callX, floorY - u * 2, callSmall, c.accent2);
     } else if (word >= 0) {
-      label(g, word ? 'crosses' : 'stops', callX, floorY - u * 2, size, c.accent2);
+      label(g, word ? 'crosses' : 'stops', callX, floorY - u * 2, callSize, c.accent2);
     } else {
-      label(g, '?', callX, floorY - u * 2, size, env.alpha(c.muted, 0.7));
+      label(g, '?', callX, floorY - u * 2, callSize, env.alpha(c.muted, 0.7));
     }
     if (s.hinted && s.hinted.includes(k)) {
       // The lane a hint names: its answer cut on at its moment.
       const hintAt = s.hintAt ? s.hintAt[k] : -1;
       if (roll(rite, 0x200 + k).flicker(came(s, hintAt, 0.8, reduced))) {
-        label(g, crosses(lane) ? 'shown: crosses' : 'shown: stops', callX, floorY - u * 2 + small * 1.4, small, env.alpha(c.muted, 0.9));
+        label(g, crosses(lane) ? 'shown: crosses' : 'shown: stops', callX, floorY - u * 2 + callSize * 0.75 + callSmall * 0.8, callSmall, env.alpha(c.muted, 0.9));
       }
     }
   });
@@ -646,8 +700,7 @@ function lanesPiece(env, plan) {
       const step = Math.max(0, dt);
       s.t += step;
       if (s.time >= 0) s.time += step;
-      if (settled(s, c, look(c), until())) return;
-      draw(c);
+      return paintFrame(s, c, look, until, draw);
     },
     end(c) {
       s.time = 0;
@@ -762,7 +815,11 @@ function drawPlank(g, w, h, env, plan, s, variant) {
   g.moveTo(geo.left - geo.u * 0.5, geo.rulerY);
   g.lineTo(geo.left + geo.u * 20.5, geo.rulerY);
   g.stroke();
-  const every = v.density < 0.9 ? 2 : 1;
+  // The ruler's numbers: at every mark, or every other and the tall marks as the configuration
+  // asks, where they fit side by side; on a ruler too short for that, every other, or at the tall
+  // marks only (every five), or at 0, 10 and 20 -- never one number run into the next.
+  const roomy = (n) => n * geo.u >= wide(g, '20', small) + small * 0.5;
+  const every = [v.density < 0.9 ? 2 : 1, 2, 5, 10].find((n) => roomy(n)) || 10;
   g.fillStyle = env.alpha(c.accent, 0.06 * v.density);
   g.fillRect(geo.left - geo.u * 0.5, geo.rulerY, geo.u * 21, h * 0.04);
   for (let i = 0; i <= 20; i++) {
@@ -773,7 +830,7 @@ function drawPlank(g, w, h, env, plan, s, variant) {
     g.moveTo(x, geo.rulerY);
     g.lineTo(x, geo.rulerY + (tall ? h * 0.035 : h * 0.02));
     g.stroke();
-    if (i % every === 0 || tall) label(g, String(i), x, geo.rulerY + h * 0.035 + small * 0.8, small, env.alpha(c.fg, tall ? 0.95 : 0.6));
+    if (i % every === 0 || (tall && roomy(1))) label(g, String(i), x, geo.rulerY + h * 0.035 + small * 0.8, small, env.alpha(c.fg, tall ? 0.95 : 0.6));
   }
   // The pivot, walking to where the knob has it, and the plank turned about it in treads by
   // whatever the last check earned.
@@ -796,13 +853,17 @@ function drawPlank(g, w, h, env, plan, s, variant) {
   g.lineWidth = 1;
   g.strokeRect(geo.left - geo.u * 0.3, geo.plankY - geo.thick / 2, geo.u * 20.6, geo.thick);
   const grow = Math.min(1.1, Math.max(0.9, v.scale));
+  // Where each block stands, written under it: 'at 7', or the bare number where blocks two marks
+  // apart leave no room for the word between them, so one never runs into the next.
+  const near = Math.min(...plan.blocks.slice(1).map((b, i) => b.x - plan.blocks[i].x)) * geo.u;
+  const at = (x) => (wide(g, 'at 20', small) + small * 0.4 <= near ? 'at ' + x : String(x));
   for (const b of plan.blocks) {
     const side = geo.u * (0.8 + 0.36 * Math.sqrt(b.m)) * grow;
     const x = geo.left + b.x * geo.u;
     const y = geo.plankY - geo.thick / 2 - side / 2;
     block(g, x, y, side, side, 0, env.alpha(env.mix(c.accent, c.accent2, b.m / 6), 0.88), env.alpha(c.fg, 0.5));
     label(g, String(b.m), x, y, Math.max(9, Math.round(side * 0.5)), c.bg, 'center', '600');
-    label(g, 'at ' + b.x, x, geo.plankY + geo.thick / 2 + small * 0.8, small, env.alpha(c.muted, 0.9));
+    label(g, at(b.x), x, geo.plankY + geo.thick / 2 + small * 0.8, small, env.alpha(c.muted, 0.9));
   }
   // The clamp's jaws: cut in by the edge when the clamp is put on, and given back the same way,
   // the region shrinking, when it is let go -- each from where the last had got to.
@@ -817,7 +878,7 @@ function drawPlank(g, w, h, env, plan, s, variant) {
   g.restore();
   // The caption: a new one replaces the old at one moment, the old standing until it is cut on.
   const said = captionShown(s, rite, reduced);
-  if (said) label(g, said, w / 2, h * 0.92, small, env.alpha(c.muted, 0.9));
+  if (said) fitted(g, said, w / 2, h * 0.92, small, w - small * 1.2, env.alpha(c.muted, 0.9));
 }
 
 function plankPreview(g, w, h, env, plan) {
@@ -938,8 +999,7 @@ function plankPiece(env, plan) {
         s.doneAt = s.t;
         s.v += 1;
       }
-      if (settled(s, c, look(c), until())) return;
-      draw(c);
+      return paintFrame(s, c, look, until, draw);
     },
     end(c) {
       clamp(c, false);

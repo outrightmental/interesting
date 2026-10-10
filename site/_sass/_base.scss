@@ -60,9 +60,9 @@ body {
 
 // A page's heading is one of the rite's words, so it wears the serif (type.rite); the overline a
 // world page writes its name as (.stage-world, _stage.scss) is a label and keeps the sans. When
-// the register turns over, js/motion.js (shift) reveals a list page's or a prose page's heading
-// word by word and _mood.scss cuts the stage's head whole, so it does not ask for the rite's own
-// slice as well: one edge to a line.
+// the register turns over, js/motion.js (shift) cuts a list page's or a prose page's heading into
+// its new face on the shift's one stair, and _mood.scss cuts the stage's head whole on the same
+// stair, so it does not ask for the rite's own slice as well: one edge to a line.
 h1 {
   margin: 0;
   @include type.scale(headline-large);
@@ -119,9 +119,28 @@ a {
 // script), and the underline steps up to the full primary in the same treads. When the pointer
 // leaves it wanes: the slice steps back out the way it came and the underline steps home. A press
 // stamps it: the ink -- a layer of its own over the plate (::after), so it starts from nothing
-// whatever the plate is doing -- grows as a curve from the point the press landed. A line of words
+// whatever the plate is doing -- grows as a curve from the point the press landed, and a press
+// that ends with nothing on the link (a tap) takes its ink back by the same curve. A line of words
 // is no box, so it does not dip as a button does; the ink is the whole of its stamp. The chips of
 // the logo, the cards and a.action keep their own grammars elsewhere.
+//
+// The underline moves only in a wax or a wane, and on keyframes of its own (underline-in,
+// underline-out) rather than by a transition: played in the treads and the length js/motion.js
+// writes on the link before the class that plays them goes on, they start in the same style pass
+// as the plate's cut and from the same end of it, so whatever the plate does the line does with
+// it, tread for tread -- a wax undone half-way, a hover come back during a wane. A transition
+// would set off from wherever the line had got to and, turned back, run shorter than the plate:
+// two stairs on one link. At rest the line has no movement of its own: a change of mood turns its
+// colour with the palette, at the shift's first tread, never on a stair beside the shift's. (A
+// link the shift cuts as well, a page's link in the site map, names both movements together:
+// _list-page.scss.)
+//
+// :hover, :focus-visible and :active play the same for a page with no script, on the baked stair,
+// and only there: the engine writes <html data-cut> as it starts and they stand aside under it
+// (html:not([data-cut])), since a rule matched beside the engine's own class would start the
+// underline on another stair than the slice's. :hover is asked only where a pointer can hover at
+// all (@media (hover: hover)): a touch screen leaves the link it tapped :hover, and a tap is a
+// press, not a hover.
 $word-links: (
   '.prose a:not(.action)', '.tagline a:not(.action)', '.page-purpose a:not(.action)',
   '.pages a:not(.action)', '.orientations a:not(.action)', '.panel-note a:not(.action)',
@@ -140,17 +159,25 @@ $word-links: (
   @return $out;
 }
 
+// The same, for a page with no script: the states the engine plays itself once it has started.
+@function unscripted($states...) {
+  $out: ();
+  @each $link in word-links($states...) {
+    $out: list.append($out, 'html:not([data-cut]) #{$link}', $separator: comma);
+  }
+  @return $out;
+}
+
+// The underline at rest: a hairline of the primary at a little over half its strength. Under the
+// pointer or the focus it is the full primary.
+$underline-rest: color-mix(in oklab, var(--md-sys-color-primary) 55%, transparent);
+
 #{word-links('')} {
   position: relative;
   z-index: 0; // its own stacking context, so the plate below sits over the card and under the words
   text-decoration-thickness: 1px;
-  text-decoration-color: color-mix(in oklab, var(--md-sys-color-primary) 55%, transparent);
+  text-decoration-color: $underline-rest;
   -webkit-tap-highlight-color: transparent;
-  // The underline's colour comes home in the wane's treads and length (js/motion.js writes both
-  // on the link as it wanes, so the line and the plate land in the same frame; the stair and the
-  // page's length stand in for a page with no script). Only its colour moves: a line that
-  // thickened would jump, since a browser does not step a thickness.
-  transition: text-decoration-color var(--motion-wane, var(--motion-medium)) var(--ease-wane, var(--ease-stair));
 }
 
 // The plate: the link's ink in two shades, split by a slice through its centre at the angle the
@@ -167,21 +194,63 @@ $word-links: (
 }
 
 // Waxing: the underline steps up to the full primary in the wax's treads, and stays while the
-// pointer or the focus is on the link. A page with no script plays it from :hover and
-// :focus-visible.
-#{word-links('.is-waxing', ':hover', ':focus-visible')} {
-  text-decoration-color: var(--md-sys-color-primary);
-  transition: text-decoration-color var(--motion-wax, var(--motion-medium)) var(--ease-wax, var(--ease-stair));
+// pointer or the focus is on the link; the plate is cut in by the slice stepping across it. Only
+// the underline's colour moves: a line that thickened would jump, since a browser does not step a
+// thickness.
+@keyframes underline-in {
+  from { text-decoration-color: $underline-rest; }
+  to { text-decoration-color: var(--md-sys-color-primary); }
 }
 
-// ... and the plate is cut in by the slice stepping across it.
-#{word-links('.is-waxing::before', ':hover::before', ':focus-visible::before')} {
+@keyframes underline-out {
+  from { text-decoration-color: var(--md-sys-color-primary); }
+  to { text-decoration-color: $underline-rest; }
+}
+
+@mixin waxed {
+  text-decoration-color: var(--md-sys-color-primary);
+  animation: underline-in var(--motion-wax, var(--motion-medium)) var(--ease-wax, var(--ease-stair)) both;
+}
+
+@mixin waxed-plate {
   opacity: 0.16;
   mask: cut.slice();
   @include cut.play(in, wax, medium);
 }
 
-// Waning: the slice steps back the way it came, and the plate is gone with it.
+#{word-links('.is-waxing')} {
+  @include waxed;
+}
+
+#{word-links('.is-waxing::before')} {
+  @include waxed-plate;
+}
+
+@media (hover: hover) {
+  #{unscripted(':hover')} {
+    @include waxed;
+  }
+
+  #{unscripted(':hover::before')} {
+    @include waxed-plate;
+  }
+}
+
+#{unscripted(':focus-visible')} {
+  @include waxed;
+}
+
+#{unscripted(':focus-visible::before')} {
+  @include waxed-plate;
+}
+
+// Waning: the underline steps home in the wane's treads, the slice steps back the way it came,
+// and the plate is gone with it. A page with no script has no wane: when the pointer leaves, the
+// plate and the underline's colour are put back at once, together.
+#{word-links('.is-waning')} {
+  animation: underline-out var(--motion-wane, var(--motion-medium)) var(--ease-wane, var(--ease-leave)) both;
+}
+
 #{word-links('.is-waning::before')} {
   opacity: 0.16;
   mask: cut.slice();
@@ -190,10 +259,11 @@ $word-links: (
 
 // The stamp: a solid of the ink growing over the plate as a curve from where the press landed
 // (--cut-x, --cut-y; the middle for a key or a page with no script, which plays it from :active).
-// It is drawn on ::after and only while the press lasts, so each press makes the layer afresh and
-// its curve starts at nothing: on the plate it would share the plate's running cut-in, which a
-// change of class does not restart, and show whole at once.
-#{word-links('.is-stamping::after', ':active::after')} {
+// It is drawn on ::after and only while the press and its going last, so each press makes the
+// layer afresh and its curve starts at nothing: on the plate it would share the plate's running
+// cut-in, which a change of class does not restart, and show whole at once.
+#{word-links('.is-stamping::after', '.is-uninking::after')},
+#{unscripted(':active::after')} {
   content: '';
   position: absolute;
   inset: -0.12em -0.25em;
@@ -203,7 +273,19 @@ $word-links: (
   opacity: 0.24;
   pointer-events: none;
   mask: cut.curve();
+}
+
+#{word-links('.is-stamping::after')},
+#{unscripted(':active::after')} {
   @include cut.ink;
+}
+
+// The ink going, when the press is over and nothing is on the link -- a tap, a key pressed on a
+// link the pointer is not over: the same curve steps back in to the point the press landed, in
+// the press's own quick treads, so the ink leaves by the edge it came by and is never switched
+// off at once. (Under the pointer or the focus it gives way to the plate the wax has cut in.)
+#{word-links('.is-uninking::after')} {
+  @include cut.play(out, unink, short, flicker);
 }
 
 // The one plain line of purpose under a page's heading: what the page is and what to do on it.
@@ -259,20 +341,21 @@ svg {
 
   // A link in the words takes every state at once and nothing steps or is cut: every state is
   // named, at the specificity of the rule it stills, so the stillness wins.
-  #{word-links('', '.is-waxing', ':hover', ':focus-visible', '::before', '.is-waxing::before', ':hover::before',
-    ':focus-visible::before', '.is-waning::before', '.is-stamping::after', ':active::after')} {
+  #{word-links('', '.is-waxing', '.is-waning', '::before', '.is-waxing::before', '.is-waning::before',
+    '.is-stamping::after', '.is-uninking::after')},
+  #{unscripted(':hover', ':focus-visible', ':hover::before', ':focus-visible::before', ':active::after')} {
     animation: none;
     transition: none;
   }
 
   // Under the pointer or the focus the plate is simply whole, and under a press the ink; waning,
-  // the plate is simply gone.
-  #{word-links('.is-waxing::before', ':hover::before', ':focus-visible::before', '.is-stamping::after',
-    ':active::after')} {
+  // the plate is simply gone, and the ink with the press.
+  #{word-links('.is-waxing::before', '.is-stamping::after')},
+  #{unscripted(':hover::before', ':focus-visible::before', ':active::after')} {
     mask: none;
   }
 
-  #{word-links('.is-waning::before')} {
+  #{word-links('.is-waning::before', '.is-uninking::after')} {
     opacity: 0;
   }
 }

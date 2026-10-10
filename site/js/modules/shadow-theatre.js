@@ -200,6 +200,16 @@ function settled(s, c, last, reduced) {
   return s.drawnAt >= (reduced || last < 0 ? last : last + LONGEST + 0.05);
 }
 
+// One frame: drawn unless it is settled, and answering whether anything is still on its way once
+// it has been -- false when the house is at rest, which tells the stage to ask for no frame until
+// a knob, a tap, a check, a new size or the scene coming back into view. The piece's clock is its
+// own, advanced by the frames it is given and standing still while none come, so a change made
+// after a rest is timed from where the clock stood and plays its whole way.
+function step(s, c, last, draw) {
+  if (!settled(s, c, last, !!c.reduced)) draw(c);
+  return !settled(s, c, last, !!c.reduced);
+}
+
 // A surface `k` of the way to being there, in the current fillStyle: the part of the box the
 // piece's edge has passed, and over the half behind the edge's middle a second coat of the same
 // colour. One edge moves while it comes, and at rest it is two shades of one colour split by that
@@ -686,9 +696,8 @@ function lampPiece(env, p) {
       draw(c);
     },
     frame(t, dt, c) {
-      s.t = t;
-      if (settled(s, c, Math.max(s.triedAt, s.revealAt, s.guessAt, s.changeAt), !!c.reduced)) return;
-      draw(c);
+      s.t += Math.max(0, dt);
+      return step(s, c, Math.max(s.triedAt, s.revealAt, s.guessAt, s.changeAt), draw);
     },
     end(c) {
       s.reveal = true;
@@ -925,9 +934,8 @@ function matchPiece(env, p) {
       draw(c);
     },
     frame(t, dt, c) {
-      s.t = t;
-      if (settled(s, c, Math.max(s.revealAt, ...s.movedAt, ...s.hintAt), !!c.reduced)) return;
-      draw(c);
+      s.t += Math.max(0, dt);
+      return step(s, c, Math.max(s.revealAt, ...s.movedAt, ...s.hintAt), draw);
     },
     end(c) {
       s.reveal = true;

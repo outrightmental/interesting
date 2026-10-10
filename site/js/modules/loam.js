@@ -82,7 +82,8 @@ function asked(env) {
    ends. Every trigger rolls its own treads (roll() with the count of that trigger), so a second
    reading, a second tap, a second mix steps differently from the first while cutting along the
    same edge. And a frame redraws only while something is moving (framed()): a still drawing is
-   left on the canvas as it stands, so nothing is computed that does not show. */
+   left on the canvas as it stands and asks for no further frame, so nothing is computed that does
+   not show. */
 
 // The rite of a drawing handed none: every movement at its end and every surface whole.
 const STILL = {
@@ -119,12 +120,15 @@ function roll(rite, base, n) {
 
 // One frame of a piece: the drawing is made again only when something on it is moving, when a
 // trigger changed it, or when the scene was sized again (which clears the canvas); otherwise the
-// picture already on the canvas is the picture, and the frame answers false.
+// picture already on the canvas is the picture. The frame answers whether anything is still moving
+// once it is drawn: false when the drawing is at rest, which tells the stage to ask for no frame
+// until a knob, a tap, a check, a new size or the scene coming back sets something going again --
+// the only things that do, so the clock may stand still meanwhile.
 function framed(s, c, draw) {
   const lost = !!(c.g && typeof c.g.isContextLost === 'function' && c.g.isContextLost());
   if (!s.dirty && !s.busy && !lost && s.on === c.g && s.w === c.w && s.h === c.h && s.dpr === c.dpr) return false;
   draw(c);
-  return true;
+  return s.busy;
 }
 
 // Draws with the bookkeeping framed() reads: whatever is moving marks itself busy as it is drawn.

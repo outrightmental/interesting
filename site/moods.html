@@ -8,7 +8,11 @@ description: 'A reading is what the site makes of your answer to one sideways qu
   <p class='page-purpose'>A reading is what this site makes of your answer to one sideways question, and each reading opens onto a world. Answer at <a href='index.html'>the threshold</a>, or choose any world card below.</p>
   <section class='atlas-state panel' aria-labelledby='state-heading'>
     <h2 id='state-heading' class='panel-title'>your reading</h2>
-    <p id='current' class='current'>No reading yet. Every world is on offer.</p>
+    {#- The sentence threshold.js's describe() writes for a visitor with no reading yet, word for
+        word: the script writes the same words over it and say() leaves an unchanged line alone,
+        so the page does not cut the line away and in again as it arrives. The line under it keeps
+        its room until the script writes the hour into it (_list-page.scss). #}
+    <p id='current' class='current'>No reading yet. Answer one sideways question and the site suggests a world to begin in, or take any world you like.</p>
     <p id='signal-line' class='signal-line'></p>
     <a class='action' id='current-world' href='index.html' hidden>the threshold</a>
   </section>
@@ -28,16 +32,23 @@ description: 'A reading is what the site makes of your answer to one sideways qu
     var worldLink = document.getElementById('current-world');
     var list = document.getElementById('orientations');
     // Words that change while a visitor reads are cut in by one slice at the register's slant
-    // (m.reveal). A line of the atlas arrives as every line of a list does, by the stylesheet
-    // alone (_list-page.scss): from the side the page's roll gives the whole list, behind a slice,
-    // in the page's one landing stair, one even stagger after the line above it -- so the list is
-    // one gesture, read down the page. The script only says each line's place (--k), since the
-    // list is longer than the stylesheet counts. README: "Motion axiom". Where nothing can play,
-    // the words and the lines are simply there.
+    // (m.reveal); words written again unchanged stand as they are. A line of the atlas arrives as
+    // every line of a list does, by the stylesheet alone (_list-page.scss): from the side the
+    // page's roll gives the whole list, behind a slice, in the page's one landing stair, one even
+    // stagger after the line above it -- so the list is one gesture, read down the page. The
+    // script only says each line's place (--k), since the list is longer than the stylesheet
+    // counts. README: "Motion axiom". Where nothing can play, the words and the lines are simply
+    // there.
     function engine() { var m = window.interestingMotion; return m && !m.reduced ? m : null; }
+    // Nothing is cut behind a lightbox, where the page is inert and its animations are held: a
+    // line rewritten there takes its new words where it stands, and they are simply there when
+    // the lightbox goes. Once the page has arrived that is the only way its reading changes -- it
+    // is forgotten from the persona's sheet, and made at the threshold, never here -- so the words
+    // a change of mood brings are never cut on a stair of their own beside the shift's.
     function say(node, text) {
       if (node.textContent === text) return;
       node.textContent = text;
+      if (typeof node.closest === 'function' && node.closest('[inert]')) return;
       var m = engine();
       if (m && typeof m.reveal === 'function') m.reveal(node);
     }

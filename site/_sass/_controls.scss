@@ -18,22 +18,24 @@
 // pattern. Every control has two layers under its words: ::after is the state layer and ::before
 // is the fill. Under the pointer or the focus a control waxes: its state layer -- two shades of
 // its ink split by a slice through its centre -- is cut in by a slice that steps across it from
-// the side the pointer came in by (js/motion.js writes the angle), and when the pointer leaves it
+// the side the pointer crossed (js/motion.js writes the angle), and when the pointer leaves it
 // wanes, the slice stepping back. A press stamps: the control dips in one cut and comes back in
-// two, and the ink grows as a curve from the point the press landed. A control that becomes set is
-// sealed: its fill -- two shades split by a curve round where it was pressed -- grows in from that
-// point and stays, so a set control reads as set and not merely tinted; unset, the fill is cut
-// away by a slice. js/motion.js puts the classes on (is-waxing, is-waning, is-stamping,
-// is-sealing, is-unsealing), writes each movement's treads on the control, and takes the passing
-// classes off; the :hover, :focus-visible and :active rules are the same rites for a page with no
-// script, along the baked stairs of _tokens.scss.
+// two, and the ink grows as a curve from the point the press landed; with no pointer on the
+// control when the press is over (a tap), the ink goes back the way it grew. A control that
+// becomes set is sealed: its fill -- two shades split by a curve round where it was pressed --
+// grows in from that point and stays, so a set control reads as set and not merely tinted; unset,
+// the fill is cut away by a slice. The seal is the one movement a set or an unset plays: the
+// control's colours change at once, as it starts. js/motion.js puts the classes on
+// (is-waxing, is-waning, is-stamping, is-uninking, is-sealing, is-unsealing), writes each
+// movement's treads on the control before its class goes on, and takes the passing classes off.
 //
-// .warning and .are-you-sure are two halves of one thing: the treatment every control that throws
-// a visitor's saved state away wears, and the modal that every press of one opens. Both are
-// rendered by window.interestingSite.destructive() in js/site.js, so the three parts of the
-// law -- a control that reads as destructive before it is pressed, a question that names what is
-// about to go, and a plain confirm/cancel -- are written here once and nowhere else. See the
-// README section "Destructive-caution axiom" for the threshold they apply beyond.
+// The :hover, :focus-visible and :active rules are the same rites for a page with no script,
+// along the baked stairs of _tokens.scss, and only there: the engine writes <html data-cut> as it
+// starts, and under it they stand aside (:where(html:not([data-cut])), which weighs nothing, so
+// each rule is as light as it was), since a rule matched beside the engine's own class would cut
+// the layer in a second time on another stair. :hover is asked only where a pointer can hover at
+// all (@media (hover: hover)): a touch screen keeps the control it tapped :hover until something
+// else is touched, and a tap is a press, not a hover.
 
 @use 'type';
 @use 'cut';
@@ -66,13 +68,20 @@ a.action {
   @include type.scale(label-large);
   cursor: pointer;
   -webkit-tap-highlight-color: transparent;
-  // A control changing its colour does so in treads (README: "Motion axiom"): the page's stair,
-  // three to five even treads after a hold, never a glide.
+}
+
+// A page with no engine changes a control's colours in treads (README: "Motion axiom"): the
+// page's stair, never a glide, the words and the ground they sit on on the same treads. With the
+// engine the colours change at once, as the seal starts -- the seal is the one movement a
+// set control plays, and a stair of the colours beside it would be a second (and on a middle
+// tread, words nearly the colour of their ground). Nothing steps a ring or a shadow: those land
+// with the seal's curve. :where() keeps the rule as light as `button` alone, so any control's own
+// transition still wins.
+:where(html:not([data-cut])) button,
+:where(html:not([data-cut])) a.action {
   transition:
     background-color var(--motion-short) var(--ease-stair),
-    color var(--motion-short) var(--ease-stair),
-    box-shadow var(--motion-short) var(--ease-stair),
-    outline-offset var(--motion-short) var(--ease-stair);
+    color var(--motion-short) var(--ease-stair);
 }
 
 // The two layers: the fill (::before, under) and the state layer (::after, over), both under the
@@ -88,8 +97,9 @@ a.action::after {
   pointer-events: none;
 }
 
-// The fill: two shades of the ink split by a curve round the point the control was set at
-// (--seal-x, --seal-y, written by js/motion.js; a corner of its own otherwise).
+// The fill: two shades of the ink split by a curve round the point the control was pressed at
+// (--seal-x, --seal-y, written by js/motion.js), or low at the left (18% 82%), where a line of
+// writing starts, when nothing pressed it.
 button::before,
 a.action::before {
   z-index: -2;
@@ -106,17 +116,42 @@ a.action::after {
   opacity: 0;
 }
 
+// A control whose fill is on already rests in two shades split by the fill's curve. Its state
+// layer is split by that same curve, so under the pointer both shades deepen together and the
+// control still shows the one edge -- never a slice through its centre crossing the curve, three
+// or four tones at two angles. Written before the press's ink below, which wins over it.
+button[aria-pressed='true']::after,
+button[aria-busy='true']::after,
+button[aria-selected='true']::after,
+button[aria-checked='true']::after,
+.btn-filled::after {
+  background: cut.shades-curve(currentColor);
+}
+
 // Waxing: the slice steps across and the layer stays while the pointer or the focus is on the
-// control. A page with no script plays it from :hover and :focus-visible.
-button.is-waxing::after,
-a.action.is-waxing::after,
-button:hover::after,
-a.action:hover::after,
-button:focus-visible::after,
-a.action:focus-visible::after {
+// control.
+@mixin waxed {
   opacity: var(--state-opacity, 0.12);
   mask: cut.slice();
   @include cut.play(in, wax, medium);
+}
+
+button.is-waxing::after,
+a.action.is-waxing::after {
+  @include waxed;
+}
+
+// A page with no script plays it from :hover, where a pointer can hover, and :focus-visible.
+@media (hover: hover) {
+  :where(html:not([data-cut])) button:hover::after,
+  :where(html:not([data-cut])) a.action:hover::after {
+    @include waxed;
+  }
+}
+
+:where(html:not([data-cut])) button:focus-visible::after,
+:where(html:not([data-cut])) a.action:focus-visible::after {
+  @include waxed;
 }
 
 button:focus-visible::after,
@@ -136,8 +171,8 @@ a.action.is-waning::after {
 // stamp for a page with no script.
 button.is-stamping,
 a.action.is-stamping,
-button:active,
-a.action:active {
+:where(html:not([data-cut])) button:active,
+:where(html:not([data-cut])) a.action:active {
   animation: rite-stamp var(--motion-stamp, var(--motion-short)) var(--ease-stamp, var(--ease-flicker)) both;
 }
 
@@ -159,14 +194,26 @@ a.action:active {
 // so when the press is over the layer is not cut in afresh.
 button.is-stamping::after,
 a.action.is-stamping::after,
-button:active::after,
-a.action:active::after {
+:where(html:not([data-cut])) button:active::after,
+:where(html:not([data-cut])) a.action:active::after {
   opacity: 0.2;
   background: currentColor;
   mask: cut.curve();
   animation:
     cut-in var(--motion-wax, var(--motion-medium)) var(--ease-wax, var(--ease-stair)) both,
     ink-in var(--motion-ink, var(--motion-short)) var(--ease-ink, var(--ease-flicker)) both;
+}
+
+// The ink going: a press over with no pointer on the control -- a tap, a key pressed on a control
+// the pointer is not over. The same curve steps back in to the point the press landed, in the
+// press's own two quick treads, so the ink leaves by the edge it came by: never switched off at
+// once, and never handed to a hover layer the control does not wear.
+button.is-uninking::after,
+a.action.is-uninking::after {
+  opacity: 0.2;
+  background: currentColor;
+  mask: cut.curve();
+  @include cut.play(out, unink, short, flicker);
 }
 
 // Set: filled, and sealed with the two shades, which is what makes a set control unmistakable at
@@ -204,13 +251,13 @@ a.action.is-unsealing::before {
   @include cut.play(out, unseal, medium, leave);
 }
 
-// A fill nobody seals -- a page with no script, a control the engine passes by (data-rite='none')
-// -- arrives in treads on its own. Sealed, the curve is its one movement: a stair of the fill's
-// opacity beside it would step the same layer twice. js/motion.js puts is-sealing on before a
-// control that has been set is next drawn, so the style it is drawn with carries no transition.
-button[aria-pressed='true']:not(.is-sealing)::before,
-[aria-selected='true']:not(.is-sealing)::before,
-[aria-checked='true']:not(.is-sealing)::before {
+// A fill on a page with no script, which nothing seals, arrives in treads on its own. With the
+// engine the seal's curve is its one movement, whoever set the control and whenever it is next
+// drawn: a stair of the fill's opacity beside it would step the same layer twice, and a control
+// the engine passes by (data-rite='none') is sealed by the script that set it or is simply set.
+:where(html:not([data-cut])) button[aria-pressed='true']::before,
+:where(html:not([data-cut])) [aria-selected='true']::before,
+:where(html:not([data-cut])) [aria-checked='true']::before {
   transition: opacity var(--motion-medium) var(--ease-stair);
 }
 
@@ -395,10 +442,19 @@ select {
     background-color var(--motion-short) var(--ease-stair);
 }
 
-select.is-waxing,
-select:hover {
+@mixin select-waxed {
   border-color: var(--md-sys-color-on-surface-variant);
   background: var(--md-sys-color-surface-container-high);
+}
+
+select.is-waxing {
+  @include select-waxed;
+}
+
+@media (hover: hover) {
+  :where(html:not([data-cut])) select:hover {
+    @include select-waxed;
+  }
 }
 
 // A text field, outlined (the word kiln's). The label sits above it in the page's own markup.
@@ -420,17 +476,26 @@ textarea {
     background-color var(--motion-short) var(--ease-stair);
 }
 
-input[type='text'].is-waxing,
-input[type='search'].is-waxing,
-textarea.is-waxing,
-input[type='text']:hover,
-input[type='search']:hover,
-textarea:hover {
+// A field has no pseudo-element to cut, so its own background is cut: a slice of its ink at 6%
+// steps across it as it is reached.
+@mixin field-waxed {
   border-color: var(--md-sys-color-on-surface-variant);
-  // A field has no pseudo-element to cut, so its own background is cut: a slice of its ink at 6%
-  // steps across it as it is reached.
   background-image: linear-gradient(var(--cut-angle, 112deg), color-mix(in oklab, var(--md-sys-color-on-surface) 6%, transparent) var(--cut), transparent var(--cut));
   @include cut.play(in, wax, medium);
+}
+
+input[type='text'].is-waxing,
+input[type='search'].is-waxing,
+textarea.is-waxing {
+  @include field-waxed;
+}
+
+@media (hover: hover) {
+  :where(html:not([data-cut])) input[type='text']:hover,
+  :where(html:not([data-cut])) input[type='search']:hover,
+  :where(html:not([data-cut])) textarea:hover {
+    @include field-waxed;
+  }
 }
 
 input[type='text']::placeholder,
@@ -577,9 +642,9 @@ a.action.warning:focus-visible {
 
   // A set control's fill steps in by a transition of its own where nothing seals it (above), on
   // selectors stronger than these, so it is stilled by the same names.
-  button[aria-pressed='true']:not(.is-sealing)::before,
-  [aria-selected='true']:not(.is-sealing)::before,
-  [aria-checked='true']:not(.is-sealing)::before {
+  :where(html:not([data-cut])) button[aria-pressed='true']::before,
+  :where(html:not([data-cut])) [aria-selected='true']::before,
+  :where(html:not([data-cut])) [aria-checked='true']::before {
     transition: none;
   }
 
@@ -587,14 +652,14 @@ a.action.warning:focus-visible {
   // outrank them: a layer that would have waited for its edge to pass shows whole, with no mask.
   button.is-waxing::after,
   a.action.is-waxing::after,
-  button:hover::after,
-  a.action:hover::after,
-  button:focus-visible::after,
-  a.action:focus-visible::after,
+  :where(html:not([data-cut])) button:hover::after,
+  :where(html:not([data-cut])) a.action:hover::after,
+  :where(html:not([data-cut])) button:focus-visible::after,
+  :where(html:not([data-cut])) a.action:focus-visible::after,
   button.is-stamping::after,
   a.action.is-stamping::after,
-  button:active::after,
-  a.action:active::after,
+  :where(html:not([data-cut])) button:active::after,
+  :where(html:not([data-cut])) a.action:active::after,
   button.is-sealing::before,
   a.action.is-sealing::before,
   .is-sealing > button::before,
@@ -605,13 +670,15 @@ a.action.warning:focus-visible {
 
   button.is-stamping,
   a.action.is-stamping,
-  button:active,
-  a.action:active {
+  :where(html:not([data-cut])) button:active,
+  :where(html:not([data-cut])) a.action:active {
     animation: none;
   }
 
   button.is-waning::after,
   a.action.is-waning::after,
+  button.is-uninking::after,
+  a.action.is-uninking::after,
   button.is-unsealing::before,
   a.action.is-unsealing::before {
     animation: none;
@@ -622,9 +689,9 @@ a.action.warning:focus-visible {
   input[type='text'].is-waxing,
   input[type='search'].is-waxing,
   textarea.is-waxing,
-  input[type='text']:hover,
-  input[type='search']:hover,
-  textarea:hover {
+  :where(html:not([data-cut])) input[type='text']:hover,
+  :where(html:not([data-cut])) input[type='search']:hover,
+  :where(html:not([data-cut])) textarea:hover {
     --cut: 100%;
     animation: none;
   }

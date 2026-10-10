@@ -62,9 +62,12 @@ function lcm(a, b) {
    rite.stair, a halo round each of its two strikes is cut in by the piece's edge up the same stair
    and rests as two shades of its colour split by that edge, and its knot is tied once the thread
    has reached the inner ring; the solved loop's band between the rings is cut in the same way and
-   rests in two shades. The wagon wheel turns in rite.turn's even clicks, a tooth at a time -- it is
-   the thing the puzzle is about, so it keeps turning while the piece is open, the one loop on the
-   loom, and stands for a visitor who asked for less motion. The camera's shutter falls on
+   rests in two shades. The wagon wheel turns in rite.turn's even clicks, a tooth at a time, when
+   there is something to see it do: for its first few teeth as the piece opens, so the way it goes
+   is seen, and for as long as each run of the camera goes, the pictures being of it turning. Then
+   it finishes the tooth it is on and stands -- on identical teeth, looking just as it did -- so the
+   loom never loops while nobody asks it anything, and it stands throughout for a visitor who asked
+   for less motion. The camera's shutter falls on
    rite.series's treads for as long as its run goes and then rests: before the solve on the run's
    last picture, after it on one lap that ends on a picture where a tooth is home again. Each
    picture is cut onto the plate at its shutter's moment, the old one standing until then; the
@@ -72,10 +75,13 @@ function lcm(a, b) {
    fills for the first time is cut in by the edge and rests in two shades. The omen's arrow is drawn
    round its arc up a stair; what the lamp tells is cut on at its moment over what it told before.
    A visitor who asked for less motion sees every run at its end at once. Every crossing, picture
-   and word moves on a roll of its own (rite.at), read against the piece's own clock, recorded in
-   frame(t); the harnesses hand a rite like the stage does, and a piece with none stands still.
-   Once everything has landed the loom is not drawn again until something changes -- for the wheel,
-   until it clicks round (settled, below). A card of the loom is a still picture. */
+   and word moves on a roll of its own (rite.at), read against the piece's own clock, which frame()
+   advances by the frames it is given and which stands still while none come; the harnesses hand a
+   rite like the stage does, and a piece with none stands still. Once everything has landed the
+   loom is not drawn again until something changes (settled, below), and a loom at rest answers
+   false from frame(), so the stage asks for no frame until a knob, a tap, a check, a new size or
+   the scene coming back sets something going.
+   A card of the loom is a still picture. */
 
 // The rite of a piece handed none: everything stands where it ends, and a surface is cut by a
 // plain upright slice from its left side.
@@ -165,6 +171,7 @@ const SPAN = 0.8;     // seconds a crossing takes to string, a halo to be cut in
 const REVEAL = 1.8;   // seconds the solved loop or the omen takes to be cut in
 const STAGGER = 0.18; // seconds between one crossing and the next when the loom lights them all
 const TOOTH = 1.1;    // seconds the wheel takes to click round one tooth
+const OPENING = 3;    // teeth the wheel turns as its piece opens, to show which way it goes
 const SHUTTER = 0.3;  // seconds a picture takes to land on the plate
 
 function ground(g, w, h, c) {
@@ -447,9 +454,10 @@ function crossPiece(env, plan) {
       draw(c);
     },
     frame(t, dt, c) {
-      s.t = t;
-      if (settled(s, c)) return;
+      s.t += Math.max(0, dt);
+      if (settled(s, c)) return false;
       draw(c);
+      return !settled(s, c);
     },
     end(c) {
       // The crossings not yet lit come in one after another round the loop, each in its turn;
@@ -600,7 +608,7 @@ function drawWheel(g, w, h, c, plan, s, variant) {
   text(g, c, 'the pictures: ' + plan.p + ' per turn', right, h * 0.09, size, col.fg, 'center', panel);
   const phase = v.turn * TAU;
   // The real wheel: its turn is the ratchet, a tooth at a time in even clicks (s.spin, set in
-  // frame(t) from the piece's clock).
+  // frame() from the piece's clock).
   wheel(g, c, left, cy, radius, plan.n, phase + s.spin, col.accent, 0.95);
   rotationArrow(g, c, left, cy, radius * 1.13, false, col.accent);
   // The latest picture: it is cut onto the plate at its shutter's moment, on a roll of its own --
@@ -693,10 +701,10 @@ const FILM = 8;
 // unread, and no clock yet (a card is drawn once and stands). `film` is the pictures taken, the
 // latest last, as many as the strip can show; `runAt` is when the camera started this run and
 // `index` the picture it took last in it, at `indexAt`; `shots` how many times the shutter has
-// fallen since the piece opened (each fall composes its own rite); `spinShown` the turn of the
-// wheel the canvas was last drawn at.
+// fallen since the piece opened (each fall composes its own rite); `turns` how many teeth the wheel
+// has turned, `spin` the angle that comes to, and `spinShown` the angle the canvas was last drawn at.
 function wheelBlank() {
-  return { spin: 0, spinShown: 0, index: 0, indexAt: null, film: [], runAt: null, reveal: false, revealAt: null, told: '', toldWas: '', toldAt: null, shown: 0, shots: 0, t: 0,
+  return { turns: 0, spin: 0, spinShown: 0, index: 0, indexAt: null, film: [], runAt: null, reveal: false, revealAt: null, told: '', toldWas: '', toldAt: null, shown: 0, shots: 0, t: 0,
     until: null, drawn: null, drawnAt: -Infinity };
 }
 
@@ -790,32 +798,42 @@ function wheelPiece(env, plan) {
       draw(c);
     },
     frame(t, dt, c) {
-      s.t = t;
+      const step = Math.max(0, dt);
+      s.t += step;
+      const last = c.done ? lap : roll;
       // The wheel turns a tooth every TOOTH seconds, in the ratchet's even clicks: never a smooth
       // rotation and never a click back, and every tooth on a roll of its own, so no two teeth
-      // click round in the same rhythm. Less motion asked for, it stands.
-      const turns = c.reduced ? 0 : t / TOOTH;
-      const tooth = Math.floor(turns);
-      s.spin = (tooth + own(rite, 0x500 + tooth).turn(fract(turns))) * TAU / plan.n;
+      // click round in the same rhythm. It turns for its first teeth as the piece opens and while
+      // the camera's run goes; after that it finishes the tooth it is on and stands. Less motion
+      // asked for, it stands throughout.
+      const turning = !c.reduced && (s.t < OPENING * TOOTH || (s.runAt != null && s.t - s.runAt < last * interval));
+      if (!c.reduced && (turning || s.turns > Math.floor(s.turns))) {
+        const on = s.turns + step / TOOTH;
+        s.turns = turning ? on : Math.min(Math.floor(s.turns) + 1, on);
+      }
+      const tooth = Math.floor(s.turns);
+      s.spin = (tooth + own(rite, 0x500 + tooth).turn(fract(s.turns))) * TAU / plan.n;
       if (s.runAt != null) {
         // The shutter falls on the stair's treads: the pictures of a run come after a hold at the
         // rite's own even intervals, as far as the run goes -- `roll` pictures before the solve,
         // one lap after it -- and the camera rests on the last. Less motion asked for, the run is
         // at its end at once.
-        const last = c.done ? lap : roll;
-        const run = Math.max(0, t - s.runAt);
+        const run = Math.max(0, s.t - s.runAt);
         const shot = c.reduced ? last : rite.series(Math.min(1, run / (last * interval)), last);
         if (shot > s.index) {
           for (let i = s.index + 1; i <= shot; i++) take(s, i);
           s.index = shot;
-          s.indexAt = t;
+          s.indexAt = s.t;
           s.shots += 1;
           s.drawn = null;
         }
       }
-      // Between the wheel's clicks and the camera's pictures nothing on the loom changes.
-      if (s.spin === s.spinShown && settled(s, c)) return;
-      draw(c);
+      // Between the wheel's clicks and the camera's pictures nothing on the loom changes, and it is
+      // not drawn. The frame answers whether anything is still moving: the wheel on its way round
+      // a tooth, or a picture, a word or the omen still to land. A standing wheel and a landed loom
+      // answer false, and the stage asks for no frame until the visitor sets something going.
+      if (!(s.spin === s.spinShown && settled(s, c))) draw(c);
+      return turning || s.turns > Math.floor(s.turns) || !settled(s, c);
     },
     end(c) {
       s.reveal = true;
