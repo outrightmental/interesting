@@ -85,8 +85,8 @@ $typewriter: 'American Typewriter', 'Courier Prime', 'Courier New', Courier, 'Ni
 // --rite-style, --rite-caps, --rite-case, --rite-scale, --rite-leading,
 // --rite-rule, --rite-rule-width, --rite-before, --rite-after, --rite-cap, --rite-glow; the three
 // of the temperament, --motion-tempo (how long its movements are), --motion-steps (a tread more
-// in each stair, where it is 1) and --motion-grain (read by js/motion.js with the other two,
-// though no stair is shaped by it now; kept so a register still names it); and the hand that
+// in each stair, where it is 1) and --motion-grain (how uneven an arrival's, a leaving's and a
+// press's treads are: 0 even, 1 as uneven as each family's rule allows); and the hand that
 // cuts, --cut-angle and --reveal-angle. The numeric axes are registered (_tokens.scss), so when
 // the register turns over they step to their new values along the stair, and the words at rest
 // in the page are cut into their new face by one slice at the new slant (rite, below) -- the

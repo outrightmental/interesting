@@ -203,7 +203,7 @@ $word-links: (
   opacity: 0.24;
   pointer-events: none;
   mask: cut.curve();
-  @include cut.play(in, ink, short, flicker);
+  @include cut.ink;
 }
 
 // The one plain line of purpose under a page's heading: what the page is and what to do on it.

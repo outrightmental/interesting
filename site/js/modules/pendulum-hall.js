@@ -968,17 +968,17 @@ function deal(env) {
   return got;
 }
 
-// How long a card moves, in seconds since it was painted. A card keeps the piece's own pace, and
-// its one count-out or its one swing is over before this -- the slowest pendulum's swing is at
-// most six beats of BEAT seconds, the pair's one swing OWN seconds -- and from then on nothing on
-// it moves, so it says so and the feed lets it go.
+// How long a card moves, in seconds since its first frame on screen. A card keeps the piece's own
+// pace, and its one count-out or its one swing is over before this -- the slowest pendulum's swing
+// is at most six beats of BEAT seconds, the pair's one swing OWN seconds -- and from then on
+// nothing on it moves, so it says so and the feed lets it go.
 const CARD_RUN = 2.2;
 
-// A card at `t` seconds since it was painted, playing once at the piece's pace and resting. The
-// rack counts out from the beat it was painted at through one swing of its slowest pendulum --
-// enough for every pendulum on it to be seen keeping its own period -- and stands there; the pair
-// plays one swing of its own (OWN seconds of the run its spring is set for) from where it was
-// painted, and stands there. `key` is its clock as the escapement reads it, which is all that
+// A card at `t` seconds since its first frame on screen, playing once at the piece's pace and
+// resting. The rack counts out from the beat it was painted at through one swing of its slowest
+// pendulum -- enough for every pendulum on it to be seen keeping its own period -- and stands
+// there; the pair plays one swing of its own (OWN seconds of the run its spring is set for) from
+// where it was painted, and stands there. `key` is its clock as the escapement reads it, which is all that
 // changes the picture, so two moments with one key are one drawing.
 function cardAt(env, d, t) {
   const v = env.variant || PLAIN;

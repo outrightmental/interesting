@@ -2984,7 +2984,8 @@ class CardVariantTest(unittest.TestCase):
                     self.assertTrue(card["steady"], "this card draws something else at the same t")
 
     def test_motion_begins_at_the_picture_the_still_card_left(self):
-        # The contract js/feed.js settles on: `t` is seconds since this card was painted, so the
+        # The contract js/feed.js settles on: `t` is seconds since this card's first frame on
+        # screen (not since it was painted a screen ahead, nor since the page opened), so the
         # first frame is t = 0, and t = 0 is the picture already on the canvas. Before this, the loop
         # passed seconds since the page opened, so a card painted after a long scroll cut straight
         # into an arbitrary phase of its own motion -- a visible jolt the moment it started moving,
@@ -6863,10 +6864,10 @@ class RealSiteTest(unittest.TestCase):
                         "'(prefers-reduced-motion: reduce)'", "linear(", "steps("]:
             with self.subTest(offered=offered):
                 self.assertIn(offered, engine)
-        for family in ["arrive", "leave", "stair", "shift", "flicker", "pulse", "drift", "wipe", "ratchet"]:
+        for family in ["arrive", "leave", "stair", "shift", "flicker", "pulse", "drift", "wipe", "ratchet", "clock"]:
             with self.subTest(family=family):
                 self.assertIn(f"    {family}: function (rnd", engine, "the engine lost a family")
-        # The tokens: seven families, each a baked piecewise curve for a page with no script, the
+        # The tokens: the families, each a baked stair of a few treads for a page with no script, the
         # three M3 names kept only as aliases of them, and a stair for a browser that knows no
         # linear() -- never `ease`, which is what an unreadable curve would otherwise fall back to.
         tokens = self.source[f"{mi.SASS_DIR}/_tokens.scss"]
@@ -6930,7 +6931,8 @@ class RealSiteTest(unittest.TestCase):
                 self.assertIn(part, stage)
         self.assertNotIn("behavior: 'smooth'", stage)
         self.assertNotIn("behavior: calm.matches ? 'auto' : 'smooth'", stage)
-        self.assertIn("style.setProperty('--jit', jitterFor(order) + 'ms');", self.source[mi.SITE_SCRIPT])
+        # The constellation's order is its rolled stride alone: no jitter on top of it.
+        self.assertNotIn("--jit", self.source[mi.SITE_SCRIPT])
         self.assertIn("motion.ms('medium')", self.source["js/feed.js"])
         self.assertIn("function rite(family)", self.source[mi.MOOD_SCRIPT])
 
@@ -6969,6 +6971,7 @@ class RealSiteTest(unittest.TestCase):
         self.assertRegex(tokens, r"--ease-ratchet: linear\(0, .*, 1\);")
         self.assertIn("--ease-stair: steps(", tokens)
         self.assertIn("--ease-ratchet: steps(", tokens)
+        self.assertRegex(tokens, r"--ease-clock: linear\(0, .*, 1\);")
         for baked in ["@property --cut {", "syntax: '<percentage>';", "--cut-angle:", "--reveal-angle:",
                       "@property --range-pct"]:
             with self.subTest(baked=baked):
@@ -6980,6 +6983,7 @@ class RealSiteTest(unittest.TestCase):
                      "linear-gradient(#{$angle}, #000 var(--cut, 0%), transparent var(--cut, 0%))",
                      "radial-gradient(circle farthest-corner at #{$x} #{$y}, #000 var(--cut, 0%), transparent var(--cut, 0%))",
                      "@keyframes cut-in", "@keyframes cut-out", "@keyframes lift-in", "@keyframes lift-out",
+                     "@keyframes ink-in", "@mixin ink(", "@mixin bleed(", "@function unpassed(",
                      "var(--ease-#{$rite}, var(--ease-#{$family}))"]:
             with self.subTest(part=part):
                 self.assertIn(part, cut)
@@ -6988,7 +6992,7 @@ class RealSiteTest(unittest.TestCase):
         controls = self.source[f"{mi.SASS_DIR}/_controls.scss"]
         for rule in [".is-waxing::after", ".is-waning::after", ".is-stamping", ".is-sealing::before",
                      ".is-unsealing::before", "@include cut.play(in, wax", "@include cut.play(out, wane",
-                     "@include cut.play(in, ink", "@include cut.play(in, seal", "@include cut.play(out, unseal",
+                     "ink-in var(--motion-ink", "@include cut.play(in, seal", "@include cut.play(out, unseal",
                      "mask: cut.slice();", "mask: cut.curve(", "background: cut.shades(", "background: cut.shades-curve(",
                      "@keyframes rite-stamp", "transition: --range-pct var(--motion-short) var(--ease-stair);"]:
             with self.subTest(rule=rule):

@@ -114,26 +114,6 @@ $registers-of: (
   }
 }
 
-// What a slice at `$angle` has not yet passed at --cut: the far side of cut.slice()'s edge. Where
-// one thing is cut in by a slice and another, in the same place, is cut away by it -- a landing
-// replacing the one before, soot lifted off a print -- this is the mask of what goes, so the two
-// changes are one edge.
-@function unpassed($angle) {
-  @return linear-gradient(#{$angle}, transparent var(--cut, 0%), #000 var(--cut, 0%));
-}
-
-// Room round a cut for what a box paints outside itself: its focus ring, and the focus rings and
-// seals of the controls in a landing. The mask an arrival leaves on is the size of the border box,
-// and held at the end of the arrival it would clip them for as long as the box stands; drawn over
-// the box and a margin round it, the one edge crosses them with the rest. Declared after the `mask`
-// shorthand, which resets these. (_persona.scss and _nav.scss keep the same four lines.)
-@mixin bleed($by: 16px) {
-  mask-clip: no-clip;
-  mask-repeat: no-repeat;
-  mask-size: calc(100% + #{2 * $by}) calc(100% + #{2 * $by});
-  mask-position: (-$by) (-$by);
-}
-
 // ---- the shift of modality -----------------------------------------------------------------
 // The site changing what it is wearing: js/motion.js writes <html data-shifting> for one moment
 // whenever the mood, the world or the featured piece changes on :root, rolls the page's stairs
@@ -141,12 +121,14 @@ $registers-of: (
 // The stage's head is cut in whole, with all its lines, by one slice at the register's slant
 // (--reveal-angle, the same edge a line of words is revealed by) stepping across it in the
 // shift's treads, while its axes, size and tracking step to the new register along the stair
-// (type.rite). Its title, which the engine reveals as well, is cut at the same slant, so it shows
-// only the edge that is behind -- one edge to a line -- and goes on to the end of its own reveal
-// when the head's has stopped, never back. Every other wearer of the rite is thrown by the mixin
-// itself (type.rite); the palette's own change (js/stage.js) and the sky's (_panel.scss) run under
-// it. A card's overline is not cut: a card wears its own world's register, which a shift of the
-// site does not change, so cutting it would cost the page and show nothing.
+// (type.rite). Its title is cut with it, and the engine leaves the title out of the words it
+// reveals on a shift: a second edge on the same words would be two changes on one thing.
+// Elsewhere type.rite cuts only the wearers that ask for it (type.rite($shift: true): a prose
+// page's headings, a list line's name), and the engine reveals a page's heading and a section's
+// or a panel's title by a slice of their own. The palette's own change (js/stage.js) runs under
+// it, the page's sky turning its colour in the corner it opened from (_panel.scss). A card's
+// overline is not cut: a card wears its own world's register, which a shift of the site does not
+// change, so cutting it would cost the page and show nothing.
 html[data-shifting] .stage-head {
   --cut: 100%;
   mask: cut.slice(var(--reveal-angle, 100deg));
@@ -209,7 +191,7 @@ html[data-shifting] .stage-head {
   --cut: 100%;
   mask: cut.slice(var(--arrive-angle, 0deg));
   @include cut.play(in, develop, medium, arrive);
-  @include bleed;
+  @include cut.bleed;
 }
 
 // The one before, left over the new one's place: cut away by the same edge in the same treads --
@@ -223,9 +205,9 @@ html[data-shifting] .stage-head {
   overflow: hidden;
   pointer-events: none;
   --cut: 100%;
-  mask: unpassed(var(--arrive-angle, 0deg));
+  mask: cut.unpassed(var(--arrive-angle, 0deg));
   @include cut.play(in, develop, medium, arrive);
-  @include bleed;
+  @include cut.bleed;
 }
 
 // A question skipped: behind a slice toward where it goes, lifting out with it.
@@ -347,7 +329,6 @@ html[data-shifting] .stage-head {
   --cut: 100%;
   @include cut.develop(develop, medium);
   animation-delay: var(--d, 0ms);
-  @include bleed;
 }
 
 // The ones not chosen go behind a slice toward where they go, out from the chosen one, the
@@ -385,7 +366,8 @@ html[data-shifting] .stage-head {
 
 // Words that leave -- the glass twin of the trace, the meter, a name taken out of the chosen
 // order and its arrow, the order itself -- go behind a slice like everything else here, never
-// cleared in a cut; at the end of a question, only once the reading's seal has grown (--d).
+// cleared in a cut; at the end of a question, only once the reading's seal has grown (--d). Words
+// paint no ring and no shadow, so the slice crosses them with no room round them (cut.unmake).
 .probe .probe-trace-glass.is-leaving,
 .probe .probe-meter.is-leaving,
 .probe .probe-order.is-leaving,
@@ -393,7 +375,7 @@ html[data-shifting] .stage-head {
 .probe .probe-order-arrow.is-leaving {
   --cut: 0%;
   pointer-events: none;
-  @include cut.unmake(unmake, medium);
+  @include cut.unmake(unmake, medium, $bleed: 0);
   animation-delay: var(--d, 0ms);
 }
 
@@ -772,7 +754,7 @@ html[data-shifting] .stage-head {
 
 .probe-rub-cell[data-uncovered='true']::before {
   --cut: 100%;
-  mask: unpassed(var(--cut-angle, 112deg));
+  mask: cut.unpassed(var(--cut-angle, 112deg));
   @include cut.play(in, lift, medium, leave);
   animation-delay: var(--d, 0ms);
 }
@@ -906,7 +888,7 @@ html[data-shifting] .stage-head {
   mask: none;
   transform-origin: 12% 50%;
   rotate: var(--key-turn, 12deg);
-  animation: key-turn var(--motion-long) var(--ease-key-turn, var(--ease-stair)) both;
+  animation: key-turn var(--motion-key-turn, var(--motion-long)) var(--ease-key-turn, var(--ease-stair)) both;
 }
 
 // A control spent (data-spent, written before it is disabled): inert at once. What shows of it

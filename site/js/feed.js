@@ -14,14 +14,17 @@
                                  was handed, stream and all, and that stream is already spent, so
                                  drawing from env.rnd here deals a different puzzle every frame --
                                  which is a card re-rolling itself thirty times a second, not an
-                                 ambient picture. `t` is seconds since this card was painted,
-                                 starting at zero, so animate(ctx, w, h, env, 0) draws exactly the
-                                 picture paint left behind and the motion carries on from it rather
-                                 than cutting into some arbitrary phase of a page-long clock; a
-                                 repaint (a resize, a new sky) starts the count again. This is the
-                                 same reading of time js/stage.js hands a piece's frame(t, dt, ctx),
-                                 counted from when that piece opened. Return false to say that
-                                 nothing on this card moves, and the loop lets it go.
+                                 ambient picture. `t` is seconds since this card first moved --
+                                 its first frame drawn on screen, not its painting, which is done
+                                 a screen ahead of the visitor -- starting at zero, so
+                                 animate(ctx, w, h, env, 0) draws exactly the picture paint left
+                                 behind and the motion carries on from it rather than cutting into
+                                 some arbitrary phase of a page-long clock, and a motion that plays
+                                 once is not over before the card is seen; a repaint (a resize, a
+                                 new sky) starts the count again. This is the same reading of time
+                                 js/stage.js hands a piece's frame(t, dt, ctx), counted from when
+                                 that piece opened. Return false to say that nothing on this card
+                                 moves, and the loop lets it go.
 
    .github/scripts/card_variant_harness.mjs holds every module to this, and CardVariantTest in
    test_make_interesting.py makes the assertions.
@@ -491,7 +494,7 @@ async function paint(card) {
   if (!ctx) return;
   const env = makeEnv(card, m.seed, m.world, m.variant, null, colors);
   const first = !m.painted;
-  Object.assign(m, { ctx, w, h, env, painted: true, dirty: false, animate: null, at: performance.now() });
+  Object.assign(m, { ctx, w, h, env, painted: true, dirty: false, animate: null, at: null });
   if (mod && mod.needsSky && !env.stars.length) {
     const ghost = makeEnv(card, m.seed, m.world, m.variant, ghostSky(m.seed, env.variant), Object.assign({}, colors));
     if (typeof mod.paint === 'function') mod.paint(ctx, w, h, ghost);
@@ -550,11 +553,13 @@ function frame(now) {
         continue;
       }
       try {
-        // Seconds since this card was painted, not since the page opened: the first frame is t = 0,
-        // which is the still picture already on the canvas, so the motion starts where it stands.
-        // A frame's timestamp can precede the performance.now() read paint took: never negative.
-        // A module that says nothing moves is let go rather than asked again.
-        const t = Math.max(0, (now - m.at) / 1000);
+        // Seconds since this card's first frame, not since the page opened nor since it was
+        // painted (a screen ahead, before it had developed in view): the first frame is t = 0,
+        // which is the still picture already on the canvas, so the motion starts where it stands
+        // and is seen from its start. A module that says nothing moves is let go rather than asked
+        // again.
+        if (m.at === null) m.at = now;
+        const t = (now - m.at) / 1000;
         if (m.animate(m.ctx, m.w, m.h, m.env, t) === false) still(card, m);
       } catch (error) {
         console.error('Could not animate a world card', error);

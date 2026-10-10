@@ -2059,7 +2059,7 @@
           // The turn: three or four even clicks, as a lock's wards give under a key, cut for this
           // turn alone.
           button.style.setProperty('--key-turn', (8 + Math.random() * 6).toFixed(1) + 'deg');
-          cutFor(button, 'key-turn', { treads: 3 + Math.floor(Math.random() * 2), duration: 'long' });
+          var turning = cutFor(button, 'key-turn', { treads: 3 + Math.floor(Math.random() * 2), duration: 'long' });
           button.setAttribute('data-turned', 'true');
           var shed = 0;
           var gone = seedOf();
@@ -2067,7 +2067,9 @@
             shed = Math.max(shed, unmake(other, null, gone, staggerOf(away[k])));
           });
           note(trace, key.label + ' turns in the lock');
-          var wait = beat('long');
+          // As long as this turn was cut for (--motion-key-turn, _mood.scss), and never shorter
+          // than the page's long beat.
+          var wait = Math.max(beat('long'), turning);
           // The turned key stays as it is, turned and filled, the mark of the answer, and is only
           // inert (the `done` guard ignores presses); the six are disabled once they have gone.
           function turned() {
@@ -2169,7 +2171,7 @@
   // hand shows, and 'enough' seals the sky from the last star out -- the reading's one seal. The
   // sky is drawn only when a tread lands: a star's own short stair is the only thing that waits on
   // the frames, and only while that star is coming out; there is no twinkle, and nothing comes out
-  // while the sky is not on the page to be seen.
+  // while the sky is not there to be seen.
   function skyProbe(probe, body, trace, answer, finish) {
     var full = probe.full || 48;
     var sky = el('canvas', 'probe-pad');
@@ -2201,6 +2203,7 @@
     var stopped = false;
     var sealed = 0; // how far the seal has grown from the last star, 0 to 1
     var timer = 0;
+    var due = 0; // when the next star is due, while its timer is set
     // Night falls from the zenith: a slice sweeping down the sky, as far as a stair rolled for this
     // sky says for the share of the stars that are out -- never the whole sky, so the dusk keeps
     // the horizon.
@@ -2302,9 +2305,11 @@
     }
     // The next star, after its pace; nothing comes out while the page is set aside behind a
     // lightbox or the question is put away unanswered (a card pressed hides it), and it asks again
-    // in a while; nothing at all once the sky has left the page.
+    // in a while; nothing while the sky is scrolled out of view (below); nothing at all once the
+    // sky has left the page.
     function next(delay) {
       if (stopped || stars.length >= full) return;
+      due = Date.now() + delay;
       timer = window.setTimeout(function () {
         timer = 0;
         if (stopped || !sky.isConnected) return;
@@ -2313,6 +2318,24 @@
         next(pace(stars.length));
       }, delay);
     }
+    // A sky scrolled out of view is still on the page, but no one is watching it: its wait for the
+    // next star is put away with what was left of it, and taken up again from there when the sky
+    // is back in view, so a visitor gone down the feed costs it nothing and comes back to the dusk
+    // as they left it. A browser without the observer keeps the sky going all the while.
+    var held = -1;
+    var watch = typeof window.IntersectionObserver === 'function' ? new window.IntersectionObserver(function (entries) {
+      var seen = entries[entries.length - 1].isIntersecting;
+      if (!seen && timer) {
+        window.clearTimeout(timer);
+        timer = 0;
+        held = Math.max(0, due - Date.now());
+      } else if (seen && held >= 0) {
+        var wait = held;
+        held = -1;
+        next(wait);
+      }
+    }) : null;
+    if (watch) watch.observe(sky);
     sky.addEventListener('click', function (ev) {
       var box = sky.getBoundingClientRect();
       if (!box.width || !box.height) return;
@@ -2327,6 +2350,7 @@
       stopped = true;
       if (timer) window.clearTimeout(timer);
       timer = 0;
+      if (watch) watch.disconnect();
       var n = stars.length;
       bucket(probe.buckets, n, answer);
       if (n >= full) add(answer, probe.filled, 1);

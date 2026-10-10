@@ -19,9 +19,13 @@
   front, and keeps dealing fresh cards -- the things the worlds make -- as the visitor scrolls,
   without end. The sentinel at the bottom is what tells it to deal more.
 
-  Each card carries its place in the list as --k, the fallback stagger for its development (a card
-  js/feed.js rolls up below the first screen develops through the matte ladder as the visitor
-  reaches it, after a delay the engine rolls per card; without that roll the stylesheet reads --k).
+  Each card carries its place in the list as --k, the fallback stagger for its development. A card
+  js/feed.js rolls up below the first screen develops as the visitor reaches it: it rises into
+  place behind one slice from the side it comes from -- up from below as the visitor scrolls down,
+  down from above when it is met scrolling back up. Of the cards met together, the first starts at
+  once and each of the others a stride after the one before it, the stride the engine rolled for
+  the page (feed.js writes that delay as --d; the stylesheet reads --k only where --d was never
+  written).
 -#}
 {%- set here = (page.filePathStem | replace('/', '')) + '.html' if page else '' -%}
 <section class='feed' id='feed' aria-labelledby='feed-title'>

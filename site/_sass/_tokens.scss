@@ -83,19 +83,25 @@
   // changes its mood) and on an element for each movement it starts. These are the baked stairs a
   // page with no script moves by, made once by the same maker. arrive lands in shrinking treads,
   // leave goes in growing ones, shift and stair hold and then step evenly, flicker is one quick
-  // step, pulse and drift are the slow stairs of a loop, wipe is the veil's, and the ratchet clicks
-  // evenly round. Every @keyframes animation reads its own --ease-<name> with one of these behind it.
+  // step, pulse is a loop's beat, drift a slow even stair, wipe is the veil's, and the ratchet
+  // turns a thing in a few even clicks -- each of them two to five treads; the clock, the one loop
+  // that turns (the ornament's ring, _rite.scss), clicks a dozen or two times round. Every
+  // @keyframes animation reads its own --ease-<name>, or the treads of the rite it plays (the
+  // edge's cut-in reads --ease-wax on a hover, a press's set-down --ease-stamp), with one of these
+  // behind it.
   --ease-arrive: linear(0, 0 11.5%, 0.513 11.5%, 0.513 27.9%, 0.783 27.9%, 0.783 52.5%, 0.925 52.5%, 0.925 87.3%, 1 87.3%, 1);
   --ease-leave: linear(0, 0 30.1%, 0.186 30.1%, 0.186 56.4%, 0.494 56.4%, 0.494 71.6%, 1 71.6%, 1);
   --ease-shift: linear(0, 0 34%, 0.333 34%, 0.333 52.2%, 0.667 52.2%, 0.667 70.5%, 1 70.5%, 1);
   --ease-flicker: linear(0, 0 27.2%, 0.678 27.2%, 0.678 74%, 1 74%, 1);
   --ease-pulse: linear(0, 0 25%, 0.333 25%, 0.333 50%, 0.667 50%, 0.667 75%, 1 75%, 1);
-  --ease-drift: linear(0, 0 9.1%, 0.1 9.1%, 0.1 18.2%, 0.2 18.2%, 0.2 27.3%, 0.3 27.3%, 0.3 36.4%, 0.4 36.4%, 0.4 45.5%, 0.5 45.5%, 0.5 54.5%, 0.6 54.5%, 0.6 63.6%, 0.7 63.6%, 0.7 72.7%, 0.8 72.7%, 0.8 81.8%, 0.9 81.8%, 0.9 90.9%, 1 90.9%, 1);
+  --ease-drift: linear(0, 0 16.7%, 0.2 16.7%, 0.2 33.3%, 0.4 33.3%, 0.4 50%, 0.6 50%, 0.6 66.7%, 0.8 66.7%, 0.8 83.3%, 1 83.3%, 1);
   --ease-wipe: linear(0, 0 15.9%, 0.25 15.9%, 0.25 39.6%, 0.5 39.6%, 0.5 63.2%, 0.75 63.2%, 0.75 86.8%, 1 86.8%, 1);
   // The stair: a state that changes changes in treads, never in a glide.
   --ease-stair: linear(0, 0 26.1%, 0.2 26.1%, 0.2 42%, 0.4 42%, 0.4 57.9%, 0.6 57.9%, 0.6 73.8%, 0.8 73.8%, 0.8 89.7%, 1 89.7%, 1);
-  // The ratchet: how anything turns -- even clicks, a clock's, never a slip or an even rotation.
-  --ease-ratchet: linear(0, 0 5%, 0.053 5%, 0.053 10%, 0.105 10%, 0.105 15%, 0.158 15%, 0.158 20%, 0.211 20%, 0.211 25%, 0.263 25%, 0.263 30%, 0.316 30%, 0.316 35%, 0.368 35%, 0.368 40%, 0.421 40%, 0.421 45%, 0.474 45%, 0.474 50%, 0.526 50%, 0.526 55%, 0.579 55%, 0.579 60%, 0.632 60%, 0.632 65%, 0.684 65%, 0.684 70%, 0.737 70%, 0.737 75%, 0.789 75%, 0.789 80%, 0.842 80%, 0.842 85%, 0.895 85%, 0.895 90%, 0.947 90%, 0.947 95%, 1 95%, 1);
+  // The ratchet: how a thing turns -- a few even clicks, a key's, never a slip or an even rotation.
+  --ease-ratchet: linear(0, 0 25%, 0.333 25%, 0.333 50%, 0.667 50%, 0.667 75%, 1 75%, 1);
+  // The clock: the slow ring's one turn, in a clock's even clicks, each held.
+  --ease-clock: linear(0, 0 5%, 0.053 5%, 0.053 10%, 0.105 10%, 0.105 15%, 0.158 15%, 0.158 20%, 0.211 20%, 0.211 25%, 0.263 25%, 0.263 30%, 0.316 30%, 0.316 35%, 0.368 35%, 0.368 40%, 0.421 40%, 0.421 45%, 0.474 45%, 0.474 50%, 0.526 50%, 0.526 55%, 0.579 55%, 0.579 60%, 0.632 60%, 0.632 65%, 0.684 65%, 0.684 70%, 0.737 70%, 0.737 75%, 0.789 75%, 0.789 80%, 0.842 80%, 0.842 85%, 0.895 85%, 0.895 90%, 0.947 90%, 0.947 95%, 1 95%, 1);
   // The cut (README: "Motion axiom", _cut.scss): the angle a slice cuts at and the slant words
   // are revealed at. The register writes both (_type.scss); these stand until one does.
   --cut-angle: 112deg;
@@ -104,18 +110,6 @@
   // rolls them; these stand until it has).
   --arrive-angle: 0deg;
   --leave-angle: 0deg;
-  // Kept for the stylesheets not yet moved to the cut: each old rung is a slice at the register's
-  // angle at rising coverage, the top a slice through the centre in two shades, the fill a solid
-  // in two shades -- one edge, never a pattern.
-  --matte-1: linear-gradient(var(--cut-angle), #000 20%, transparent 20%);
-  --matte-2: linear-gradient(var(--cut-angle), #000 40%, transparent 40%);
-  --matte-3: linear-gradient(var(--cut-angle), #000 60%, transparent 60%);
-  --matte-4: linear-gradient(var(--cut-angle), #000 80%, transparent 80%);
-  --matte-5: linear-gradient(#000, #000);
-  --matte-fill: linear-gradient(var(--cut-angle), currentColor 50%, transparent 50%);
-  --matte-fill-size: auto;
-  --matte-top: linear-gradient(var(--cut-angle), #000 50%, rgb(0 0 0 / 55%) 50%);
-  --matte-kind: slice;
   // The durations: rolled with a little jitter and scaled by the mood's tempo, these standing
   // until the script has rolled. --motion-turn is the slow ring's one turn (_rite.scss).
   --motion-short: 170ms;
@@ -126,7 +120,8 @@
   --motion-shift: 640ms;
   --motion-turn: 120s;
   // The temperament a mood lends its movements (_mood.scss sets all three beside each palette):
-  // how glitchy they are, how long they take, and whether they prefer a stair to a swoop.
+  // how uneven their treads are (0 even, 1 as uneven as each family's rule allows), how long they
+  // take, and whether their stairs take a tread more.
   --motion-grain: 0.45;
   --motion-tempo: 1;
   --motion-steps: 0;
@@ -140,35 +135,19 @@
   --md-sys-motion-duration-long: var(--motion-long);
   // The geometry of a movement, rolled beside its timing: where an arrival comes from and where a
   // departure goes (the stage, the cards, the constellation, the mark that flies home to the
-  // persona), the shape the veil wipes in from and the one it ends on, the edge a control's state
-  // layer sweeps in from, how far the rite's words are thrown as the site changes its modality,
-  // where the page's sky washes in from (_panel.scss), and the small particulars named where
-  // they are used. These stand until js/motion.js rolls them.
+  // persona), where the page's sky washes in from (_panel.scss), how far a card stands up under
+  // the pointer (_feed.scss), how far the sparkles turn past a sixth (_nav.scss) and how far a
+  // wrong answer's row is thrown aside before it steps back (_stage.scss). These stand until
+  // js/motion.js rolls them.
   --arrive-x: 0px;
   --arrive-y: 28px;
-  --arrive-rot: 0.6deg;
-  --arrive-scale: 0.96;
-  --arrive-skew: 0deg;
   --leave-x: 0px;
   --leave-y: -22px;
-  --leave-rot: -0.8deg;
-  --leave-scale: 0.92;
-  --wipe-from: inset(0 0 100% 0);
-  --wipe-to: inset(0);
-  --state-from: inset(0 100% 0 0);
-  --shift-x: 3px;
-  --shift-skew: -4deg;
-  --shift-blur: 5px;
   --sky-x: 12%;
   --sky-y: -14%;
   --lift-y: -2px;
-  --lift-rot: 0.3deg;
   --spark-extra: 0deg;
-  --pop-over: 1.1;
   --shake-x: 6px;
-  --beckon-spread: 8px;
-  --reject-grow: 1;
-  --ray-from: 0.2;
 
   // Elevation (m3.material.io/styles/elevation): in the dark the tone does most of the work, and
   // these shadows do the rest.
@@ -221,22 +200,6 @@
     --nav-h: 56px;
     --fold-peek: 2.25rem;
   }
-}
-
-// Registered, so the sky can move: a custom property a browser knows the type of is one it can
-// interpolate, and main's gradient (_panel.scss) reads these two for where the page's own sky
-// washes in from, so a change of modality is a sky washing across to a new corner rather than a
-// cut. A browser that knows no @property reads the same two as plain properties and cuts.
-@property --sky-x {
-  syntax: '<percentage>';
-  inherits: true;
-  initial-value: 12%;
-}
-
-@property --sky-y {
-  syntax: '<percentage>';
-  inherits: true;
-  initial-value: -14%;
 }
 
 // The register's numeric dimensions (_type.scss): registered so that when the register turns
@@ -315,10 +278,11 @@
     --ease-shift: steps(3, jump-end);
     --ease-flicker: steps(2, jump-end);
     --ease-pulse: steps(3, jump-end);
-    --ease-drift: steps(10, jump-end);
+    --ease-drift: steps(5, jump-end);
     --ease-wipe: steps(4, jump-end);
     --ease-stair: steps(5, jump-end);
-    --ease-ratchet: steps(19, jump-end);
+    --ease-ratchet: steps(3, jump-end);
+    --ease-clock: steps(19, jump-end);
   }
 }
 

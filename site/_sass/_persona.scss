@@ -65,30 +65,12 @@
 @use 'type';
 @use 'cut';
 
-// What a slice at `$angle` has not yet passed at --cut: the far side of cut.slice()'s edge. Where
-// one element is cut in by a slice and another, in the same box, is cut away by it, this is the
-// second one's mask, so the two changes are one edge.
-@function unpassed($angle) {
-  @return linear-gradient(#{$angle}, transparent var(--cut, 0%), #000 var(--cut, 0%));
-}
-
 // What a curve round a star's own point has passed at --cut, sized to the light it shows: the
 // light is 7px across the middle, times the gleam its words give it (--star-gleam), and a pixel to
 // spare, not the 44px button's far corner. Drawn to the corner, the light would be whole by the
 // first tread and every tread after it would cut nothing anyone can see.
 @function point() {
   @return radial-gradient(circle calc(1px + 7px * var(--star-gleam, 1)) at 50% 50%, #000 var(--cut, 0%), transparent var(--cut, 0%));
-}
-
-// Room round a cut for what a box paints outside itself, its shadow, its focus ring, a ring it
-// opens. A mask is the size of the border box, and would cut those away while the edge plays.
-// Drawn over the box and a margin round it, the same edge crosses them with the rest. Declared
-// after the mixin, whose `mask` shorthand resets these.
-@mixin bleed($by: 16px) {
-  mask-clip: no-clip;
-  mask-repeat: no-repeat;
-  mask-size: calc(100% + #{2 * $by}) calc(100% + #{2 * $by});
-  mask-position: (-$by) (-$by);
 }
 
 // ---- the avatar, floating in the corner --------------------------------------------------
@@ -127,7 +109,6 @@
 // _controls.scss stamps every control, dip, ink and all.
 .persona-avatar.is-arriving {
   @include cut.develop(avatar-in, long);
-  @include bleed;
 }
 
 .persona-portrait {
@@ -230,7 +211,7 @@ html[data-lightbox] .persona[data-state='empty'] .persona-portrait::after {
 }
 
 .persona.is-casting .persona-portrait::after {
-  mask: unpassed(45deg);
+  mask: cut.unpassed(45deg);
   @include cut.play(in, portrait-cast, long, arrive);
   animation-delay: var(--portrait-cast-after, 0ms);
 }
@@ -366,7 +347,7 @@ html[data-lightbox] .persona[data-state='empty'] .persona-portrait::after {
   pointer-events: none; // the avatar under it is what a press reaches, as it always is
   mask: cut.slice(var(--leave-angle, 0deg));
   animation: persona-flight 520ms var(--ease-persona-flight, var(--ease-arrive)) both, cut-out 160ms var(--ease-persona-sink, var(--ease-leave)) 360ms both;
-  @include bleed;
+  @include cut.bleed;
   @include type.scale(title-medium);
 }
 
@@ -495,7 +476,6 @@ html[data-lightbox] .persona[data-state='empty'] .persona-portrait::after {
 
 .persona-sheet[open].is-arriving {
   @include cut.develop(sheet-in, long);
-  @include bleed;
 }
 
 // Closing. A modal dialog has to close at once for the focus to go home and the veil to come
@@ -515,7 +495,6 @@ html[data-lightbox] .persona[data-state='empty'] .persona-portrait::after {
   pointer-events: none;
   overflow: hidden;
   @include cut.unmake(sheet-out, medium);
-  @include bleed;
 }
 
 // Nothing of its own behind it: the shared veil is what dims and blurs the page while the sheet is
@@ -649,14 +628,12 @@ html[data-lightbox] .persona[data-state='empty'] .persona-portrait::after {
 // it, and a part already in view keeps its place while its new words are cut in by the reveal.
 .persona-sheet .is-arriving {
   @include cut.develop(part-in, medium);
-  @include bleed;
 }
 
 .persona-sheet .is-unmaking,
 .persona-probe.is-unmaking {
   pointer-events: none;
   @include cut.unmake(part-unmake, medium);
-  @include bleed;
 }
 
 .persona-sky-answer {

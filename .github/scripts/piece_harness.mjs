@@ -413,7 +413,7 @@ function riteOf(seed, edge) {
   return {
     ease, stair, ratchet, flicker, matte, paint, region, series,
     turn: ratchet,
-    treads, kind: sig.kind, angle: sig.angle, origin: sig.origin.slice(), cell: 4,
+    treads, kind: sig.kind, angle: sig.angle, origin: sig.origin.slice(),
     at: (other) => riteOf(((seed >>> 0) ^ (other >>> 0) ^ 0x51a7c0de) >>> 0, sig)
   };
 }

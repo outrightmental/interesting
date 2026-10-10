@@ -425,9 +425,10 @@ itself.
   top of [`site/js/feed.js`](site/js/feed.js) now: `paint` is the one pass that may spend the
   card's seeded stream, and a module that deals a plan keeps it with the `env` it was dealt from,
   so every later pass gets the same card; `animate` is a function of `(w, h, env, t)` and nothing
-  else; `t` is seconds since *this card* was painted rather than since the page opened, so the
-  first frame is `t = 0` and `t = 0` is the picture `paint` left behind — a card painted after a
-  long scroll used to cut straight into an arbitrary phase of its own motion; and a module may
+  else; `t` is seconds since *this card*'s first frame on screen, rather than since it was painted
+  (a screen ahead) or since the page opened, so the first frame is `t = 0` and `t = 0` is the
+  picture `paint` left behind — a card painted after a long scroll used to cut straight into an
+  arbitrary phase of its own motion; and a module may
   answer `false` to say that nothing on this card moves — the cipher cabinet's grille, the weaver's
   moiré screens — and the loop lets the card go rather than asking it again forever.
   `CardVariantTest` holds every world to all four, over the three opposite configurations and sixty
@@ -868,13 +869,16 @@ code, and true of the site as committed.
   page, written once in [`site/_includes/layout.njk`](site/_includes/layout.njk) and not deferred,
   so it has rolled before the body is drawn. CSS cannot roll a die, but it can read a custom
   property, and the `linear()` easing function can express any stair, so the engine writes the
-  page's roll onto `:root`: nine **families**, each a stair with one rule — `--ease-arrive` (lands
-  with shrinking treads), `--ease-leave` (departs with growing ones), `--ease-stair` (holds, then
-  steps evenly; the curve every change of state climbs), `--ease-shift`, `--ease-flicker` (two
-  quick treads), `--ease-pulse`, `--ease-drift`, `--ease-wipe` and `--ease-ratchet` (how anything
-  turns: even clicks, never an even rotation); the durations; and the geometry, `--arrive-x`,
+  page's roll onto `:root`: the **families**, each a stair of two to five treads with one rule —
+  `--ease-arrive` (lands with shrinking treads), `--ease-leave` (departs with growing ones),
+  `--ease-stair` (holds, then steps evenly; the curve every change of state climbs),
+  `--ease-shift`, `--ease-flicker` (two quick treads), `--ease-pulse`, `--ease-drift`,
+  `--ease-wipe` and `--ease-ratchet` (how anything turns: two to five even clicks, never an even
+  rotation) — and one loop clock, `--ease-clock` (twelve to twenty-four even clicks), which only
+  the ornament's two-minute ring turns by; the durations; and the geometry, `--arrive-x`,
   `--arrive-y` and `--arrive-angle` (one clear direction a thing comes from and the slice it comes
-  in behind), `--leave-*`, `--wipe-from`, `--wipe-to`, `--state-from`, `--sky-x` and `--sky-y`.
+  in behind), `--leave-x`, `--leave-y` and `--leave-angle`, and the page's sky corner, `--sky-x`
+  and `--sky-y`, picked once per visit and held through a change of mood.
   Then, per movement, `cut(el, rite, options)` composes the movement and writes it on the element
   — `--ease-<rite>` and `--motion-<rite>`, with `--cut-angle` for a slice or `--cut-x` and `--cut-y`
   for a curve — and hands back its length. A script's own movements ask the same engine
@@ -916,10 +920,11 @@ code, and true of the site as committed.
   no `linear()` is given a `steps()` stair, the one easing such a browser has that is not a standard
   curve, and `<html data-motion='steps'>` says so.
 - **The temperament.** Each mood of [`site/_sass/_mood.scss`](site/_sass/_mood.scss) carries a
-  temperament beside its palette: `--motion-grain` (how uneven its treads are), `--motion-tempo`
-  (how long they take) and `--motion-steps` (whether it prefers fewer, longer treads). The engine
-  reads the three off `:root` on every full roll, so a movement is customised twice over — by the
-  mood of what is on the screen, and by the roll.
+  temperament beside its palette: `--motion-grain` (how uneven an arrival's, a leaving's and a
+  press's treads are: 0 even, 1 as uneven as the family's rule allows), `--motion-tempo` (how long
+  they take) and `--motion-steps` (one tread more in each stair, still never more than five). The
+  engine reads the three off `:root` once per mood, so a movement is customised twice over — by
+  the mood of what is on the screen, and by the roll.
 - **The registers.** [`site/_sass/_type.scss`](site/_sass/_type.scss) declares them (`$registers`),
   and every one is a *setting* of the vendored face rather than the name of a face a machine may
   or may not have: Fraunces at an optical size (`opsz` 9 to 144), a weight (`wght` 100 to 900), a

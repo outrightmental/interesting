@@ -66,8 +66,8 @@ a.action {
   @include type.scale(label-large);
   cursor: pointer;
   -webkit-tap-highlight-color: transparent;
-  // A control changing its colour does so in treads (README: "Motion axiom"): the stair family,
-  // rolled for that change -- three to seven cuts and never a glide, never the same stair twice.
+  // A control changing its colour does so in treads (README: "Motion axiom"): the page's stair,
+  // three to five even treads after a hold, never a glide.
   transition:
     background-color var(--motion-short) var(--ease-stair),
     color var(--motion-short) var(--ease-stair),
@@ -138,7 +138,7 @@ button.is-stamping,
 a.action.is-stamping,
 button:active,
 a.action:active {
-  animation: rite-stamp var(--motion-rite-stamp, var(--motion-short)) var(--ease-rite-stamp, var(--ease-flicker)) both;
+  animation: rite-stamp var(--motion-stamp, var(--motion-short)) var(--ease-stamp, var(--ease-flicker)) both;
 }
 
 @keyframes rite-stamp {
@@ -153,7 +153,10 @@ a.action:active {
   }
 }
 
-// The ink: a solid of the ink growing as a curve from where the press landed (--cut-x, --cut-y).
+// The ink: a solid of the ink growing as a curve from where the press landed (--cut-x, --cut-y),
+// on keyframes of its own (ink-in, _cut.scss), so it starts from nothing on every press even on
+// the layer a hover has already cut in. The wax's cut-in is listed first, held where it stands,
+// so when the press is over the layer is not cut in afresh.
 button.is-stamping::after,
 a.action.is-stamping::after,
 button:active::after,
@@ -161,7 +164,9 @@ a.action:active::after {
   opacity: 0.2;
   background: currentColor;
   mask: cut.curve();
-  @include cut.play(in, ink, short, flicker);
+  animation:
+    cut-in var(--motion-wax, var(--motion-medium)) var(--ease-wax, var(--ease-stair)) both,
+    ink-in var(--motion-ink, var(--motion-short)) var(--ease-ink, var(--ease-flicker)) both;
 }
 
 // Set: filled, and sealed with the two shades, which is what makes a set control unmistakable at
@@ -199,10 +204,13 @@ a.action.is-unsealing::before {
   @include cut.play(out, unseal, medium, leave);
 }
 
-// A page with no script: the fill arrives in treads on its own.
-button[aria-pressed='true']::before,
-[aria-selected='true']::before,
-[aria-checked='true']::before {
+// A fill nobody seals -- a page with no script, a control the engine passes by (data-rite='none')
+// -- arrives in treads on its own. Sealed, the curve is its one movement: a stair of the fill's
+// opacity beside it would step the same layer twice. js/motion.js puts is-sealing on before a
+// control that has been set is next drawn, so the style it is drawn with carries no transition.
+button[aria-pressed='true']:not(.is-sealing)::before,
+[aria-selected='true']:not(.is-sealing)::before,
+[aria-checked='true']:not(.is-sealing)::before {
   transition: opacity var(--motion-medium) var(--ease-stair);
 }
 
@@ -548,8 +556,8 @@ a.action.warning:focus-visible {
   flex: 1 1 9rem;
 }
 
-// Less motion: every state is simply there. The state layer sits at the top of the ladder for a
-// control under the pointer, the fill is on a set control, and nothing climbs, stamps or seals.
+// Less motion: every state is simply there. The state layer is whole on a control under the
+// pointer, the fill is on a set control, and nothing is cut in, stamped or sealed.
 @media (prefers-reduced-motion: reduce) {
   button,
   a.action,
@@ -565,6 +573,14 @@ a.action.warning:focus-visible {
   .are-you-sure[open] {
     transition: none;
     animation: none;
+  }
+
+  // A set control's fill steps in by a transition of its own where nothing seals it (above), on
+  // selectors stronger than these, so it is stilled by the same names.
+  button[aria-pressed='true']:not(.is-sealing)::before,
+  [aria-selected='true']:not(.is-sealing)::before,
+  [aria-checked='true']:not(.is-sealing)::before {
+    transition: none;
   }
 
   // Every end state is simply there. These name the same selectors the movements do, so they

@@ -1450,11 +1450,11 @@ export default {
     else driftPreview(g, w, h, env, plan);
   },
   // Only the memory's card moves, because its sky is the puzzle: the stars come out one at a time,
-  // once, as they do in the piece, and the sky rests. t is counted from when the card was painted
-  // (js/feed.js), which may be a little before it is on screen. Once the last line is written the
+  // once, as they do in the piece, and the sky rests. t is counted from the card's first frame on
+  // screen (js/feed.js), so the showing starts as it is seen. Once the last line is written the
   // card draws that resting sky and says nothing more moves, so the feed lets it go; the frame
-  // that says so still draws, because a card first animated after its showing is over has only
-  // the start of it on its canvas. The other two entries wait for a reader and hold still from the
+  // that says so still draws, because a card met again after its showing is over has only the
+  // start of it on its canvas. The other two entries wait for a reader and hold still from the
   // start.
   animate(g, w, h, env, t) {
     const plan = entry(env);

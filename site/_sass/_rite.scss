@@ -61,10 +61,10 @@
   width: 60vmin;
   height: 60vmin;
   border: 1px dashed color-mix(in oklab, var(--md-sys-color-tertiary) 26%, transparent);
-  // One turn in about two minutes, in a ratchet's clicks: a dozen or two even steps round, each
-  // held, never an even rotation (the ratchet family, README: "Motion axiom"). A transform, so the
-  // browser's compositor turns it and the page pays nothing for it.
-  animation: rite-turn var(--motion-rite-turn, var(--motion-turn, 120s)) var(--ease-rite-turn, var(--ease-ratchet)) infinite;
+  // One turn in about two minutes, in a clock's clicks: a dozen or two even steps round, each
+  // held, never an even rotation (the clock family, the one loop that turns, README: "Motion
+  // axiom"). A transform, so the browser's compositor turns it and the page pays nothing for it.
+  animation: rite-turn var(--motion-rite-turn, var(--motion-turn, 120s)) var(--ease-rite-turn, var(--ease-clock)) infinite;
 }
 
 // The list pages and the prose pages lay their children out in flow, which a positioned ring at 0

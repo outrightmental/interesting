@@ -1174,7 +1174,8 @@
   }
 
   // A slider let go of settles: .is-settling for one short movement after the finger lifts or
-  // the key comes up, which is what the stylesheet ratchets the fill on (never under the finger).
+  // the key comes up, which is what the stylesheet rings the thumb's halo on
+  // (_sass/_controls.scss), so the letting go is marked once and never under the finger.
   var settling = typeof WeakMap === 'function' ? new WeakMap() : null;
 
   function settleRange(ev) {
@@ -1304,26 +1305,15 @@
     style.setProperty('--len', Math.round(Math.sqrt(dx * dx + dy * dy)) + 'px');
     style.setProperty('--a', (Math.atan2(dy, dx) * 180 / Math.PI).toFixed(2) + 'deg');
     style.setProperty('--k', String(order));
-    // Where the chip starts from when it branches out: most of the way back to the logo.
+    // Where the chip starts from when it branches out, a little over half of the way back to the
+    // logo: kept on the option for aimAtLogo (below), which points the chip's arrival and its
+    // leaving along it.
     style.setProperty('--fx', Math.round(-dx * 0.55) + 'px');
     style.setProperty('--fy', Math.round(-dy * 0.55) + 'px');
     // The way the chip's edge runs: out along its ray, away from the logo's heart, so a slice that
     // cuts the chip -- reached by the keyboard, set, unset -- travels the way the chip itself
     // branched out (README: "Motion axiom", the cut). A pointer still brings its own angle in.
     style.setProperty('--cut-angle', angleOf(dx, dy));
-    // And a jitter of its own on top of its turn in the order (README: "Motion axiom"): the
-    // motion engine rolls one for each star on every press, so the constellation is cast a little
-    // differently every time; without the engine a star keeps to its turn and nothing more.
-    style.setProperty('--jit', jitterFor(order) + 'ms');
-  }
-
-  // The motion engine's roll for the k-th star's delay, less the step the stylesheet already adds
-  // for its place in the order: the stylesheet counts the steps, this is only the raggedness.
-  function jitterFor(order) {
-    var motion = window.interestingMotion;
-    if (!motion || typeof motion.stagger !== 'function' || typeof motion.ms !== 'function') return 0;
-    var step = motion.ms('stagger') || 0;
-    return Math.max(-step, motion.stagger(order) - order * step);
   }
 
   // The widest chip of an orbit, or 0 while the constellation has never been open: a chip that is
@@ -1549,10 +1539,11 @@
   }
 
   /* The constellation unmade (close below): each chip goes back toward the logo behind a slice
-     pointing that way and the rays retract (.is-unmaking, _sass/_nav.scss), and only then does
-     the <details> close. The lightbox, the inert page and aria-expanded are given back at once,
-     before it, because the page behind has to be live for whatever the press was for. Without
-     the engine, or for a visitor who asked for less motion, `then()` runs at once. */
+     pointing that way, its ray is cut back into the logo with it, and the rings and the sky go
+     back into the mark (.is-unmaking, _sass/_nav.scss); only then does the <details> close. The
+     lightbox, the inert page and aria-expanded are given back at once, before it, because the
+     page behind has to be live for whatever the press was for. Without the engine, or for a
+     visitor who asked for less motion, `then()` runs at once. */
   var unmaking = 0; // the clock on the unmaking under way, or 0
 
   function endUnmake() {
@@ -1573,8 +1564,8 @@
     }
     endUnmake();
     // Each chip's leaving rolled anew for this close (--ease-unmake and --motion-unmake, which the
-    // chip's cut.unmake reads), pointed back at the logo it branched from; the rings' and the
-    // rays' leave is the stylesheet's own.
+    // chip's cut.unmake reads), pointed back at the logo it branched from, and shared with its ray,
+    // which is cut back into the logo in the same treads.
     var longest = 0;
     for (i = 0; i < options.length; i++) {
       if (options[i].hidden) continue;
@@ -1582,11 +1573,16 @@
       if (!node) continue;
       aimAtLogo(node, options[i], 'leave', 0.72);
       longest = Math.max(longest, cutLeave(node));
+      shareTreads(node, options[i], 'unmake');
     }
-    // The rings go last (cast-ring-out, _sass/_nav.scss): as long as the longest leaving rolled
-    // above and the last chip's turn in the order, so no chip is left after the circle it was cast
-    // in has gone.
+    // The rings and the sky go last, in treads rolled for this close and as long as the longest
+    // leaving rolled above and the last chip's turn in the order, so no chip is left after the
+    // circle it was cast in has gone. cast-ring-out is no keyframes: it is only the name the rings'
+    // transitions and the sky's cut read these treads by (_sass/_nav.scss), on the mark they all sit
+    // in. The outer ring and the sky read this length; the dashed ring reads its own, a little
+    // shorter, so it is gone just before the outer one.
     if (nav.host.style && typeof nav.host.style.setProperty === 'function') {
+      cutOn(nav.host, 'cast-ring-out', { family: 'leave' });
       var rings = Math.max(riteMs('medium', 340), longest) + Math.ceil(count / 2) * riteMs('stagger', 44);
       nav.host.style.setProperty('--motion-cast-ring-out', rings + 'ms');
       nav.host.style.setProperty('--motion-cast-ring-dashed-out', Math.round(rings * 0.92) + 'ms');
@@ -1625,10 +1621,24 @@
     }
   }
 
+  /* A ray is its chip's sibling and cannot read what the engine wrote on the chip, so the chip's
+     treads and length for this movement (--ease-<rite>, --motion-<rite>) are copied onto the
+     option the two share, which the ray inherits (_sass/_nav.scss): a chip and its ray step as
+     one gesture, never in two stairs. */
+  function shareTreads(node, option, rite) {
+    if (!node.style || typeof node.style.getPropertyValue !== 'function'
+        || !option.style || typeof option.style.setProperty !== 'function') return;
+    var names = ['--ease-' + rite, '--motion-' + rite];
+    for (var i = 0; i < names.length; i++) {
+      var value = node.style.getPropertyValue(names[i]);
+      if (value) option.style.setProperty(names[i], value);
+    }
+  }
+
   /* Each chip's arrival rolled anew on every press (m.arrive: --ease-develop and --motion-develop,
-     read by the chip's cut.develop under .is-branching): its own treads and length, and the way
-     out of the logo as its direction. Without the engine the stylesheet's baked stair plays, from
-     the same place. */
+     read by the chip's cut.develop under .is-branching, and shared with its ray): its own treads
+     and length, and the way out of the logo as its direction. Without the engine the
+     stylesheet's baked stair plays, from the same place. */
   function cast() {
     var options = nav.sky.querySelectorAll('.sparknav-option');
     for (var i = 0; i < options.length; i++) {
@@ -1636,6 +1646,7 @@
       var node = typeof options[i].querySelector === 'function' ? options[i].querySelector('.sparknav-node') : null;
       if (!node || !cutArrival(node)) continue;
       aimAtLogo(node, options[i], 'arrive', 1);
+      shareTreads(node, options[i], 'develop');
     }
   }
 
@@ -1650,13 +1661,14 @@
      throughout and wrapped whole: a browser without the persona, or without the DOM to draw in,
      simply has no motes and the constellation is exactly what it was.
 
-     The sky is cast out of the logo, as the constellation is. Each mote comes out when the cast
-     reaches it -- later the farther it is from the logo's heart (--d), so the last of them comes
-     out DUST_SPREAD after the first -- and each thread is drawn out of the nearer of its two stars,
-     toward the farther, once that star has landed. Each star keeps a size of its own (--ms), worked
-     out from where it is, so a visitor's sky is the same sky on every press. */
-  var DUST_SPREAD = 720; // ms, from the logo's heart to the farthest corner of the viewport
-
+     The sky is cast out of the logo, as the constellation is, and the stylesheet does the casting:
+     one curve growing from the logo's heart uncovers the whole sky, so each mote comes out as the
+     curve reaches it, the nearer first, and nothing here keeps a clock for any of them. All this
+     writes is where each star and thread rests. A thread runs out of the nearer of its two stars
+     to the corner the mark sits in -- near enough the logo's heart, and with no layout read -- so
+     its bright end is the one the curve uncovers first and it is drawn out from there. Each star
+     keeps a size of its own (--ms), worked out from where it is, so a visitor's sky is the same sky
+     on every press. */
   function castDust() {
     try {
       if (!nav || !nav.sky) return;
@@ -1671,19 +1683,6 @@
       if (!stars || !stars.length) return;
       var vw = window.innerWidth || 1024;
       var vh = window.innerHeight || 700;
-      // The logo's heart, read once for the whole cast; a page that cannot say where it is casts
-      // from the corner the logo sits in.
-      var hx = 0;
-      var hy = 0;
-      if (nav.logo && typeof nav.logo.getBoundingClientRect === 'function') {
-        var mark = nav.logo.getBoundingClientRect();
-        if (mark && (mark.width || mark.height)) {
-          hx = mark.left + mark.width / 2;
-          hy = mark.top + mark.height / 2;
-        }
-      }
-      var far = Math.max(Math.sqrt(hx * hx + hy * hy), Math.sqrt((vw - hx) * (vw - hx) + hy * hy),
-        Math.sqrt(hx * hx + (vh - hy) * (vh - hy)), Math.sqrt((vw - hx) * (vw - hx) + (vh - hy) * (vh - hy))) || 1;
       var points = [];
       for (var i = 0; i < stars.length && points.length < 28; i++) {
         var s = stars[i];
@@ -1694,11 +1693,9 @@
         points.push({
           x: px,
           y: py,
-          d: Math.round(Math.min(1, Math.sqrt((px - hx) * (px - hx) + (py - hy) * (py - hy)) / far) * DUST_SPREAD),
           ms: 0.7 + (size - Math.floor(size)) * 0.8
         });
       }
-      var landed = riteMs('medium', 320); // a mote's landing (mote-in), before a thread leaves it
       // Each star reaches a thread toward its nearest neighbour, once per pair and only nearby,
       // which is what makes a scatter of motes read as the visitor's constellation.
       var reach = Math.min(vw, vh) * 0.36;
@@ -1717,21 +1714,21 @@
         var key = Math.min(i, near) + ':' + Math.max(i, near);
         if (paired[key]) continue;
         paired[key] = true;
-        var from = points[i].d <= points[near].d ? points[i] : points[near];
-        var to = from === points[i] ? points[near] : points[i];
+        var a = points[i];
+        var b = points[near];
+        var from = a.x * a.x + a.y * a.y <= b.x * b.x + b.y * b.y ? a : b;
+        var to = from === a ? b : a;
         var thread = el('span', 'sparknav-thread');
         thread.style.setProperty('--sx', from.x.toFixed(1) + 'px');
         thread.style.setProperty('--sy', from.y.toFixed(1) + 'px');
         thread.style.setProperty('--tlen', Math.round(Math.sqrt(best)) + 'px');
         thread.style.setProperty('--ta', (Math.atan2(to.y - from.y, to.x - from.x) * 180 / Math.PI).toFixed(2) + 'deg');
-        thread.style.setProperty('--d', (from.d + landed) + 'ms');
         nav.dust.appendChild(thread);
       }
       for (i = 0; i < points.length; i++) {
         var mote = el('span', 'sparknav-mote');
         mote.style.setProperty('--sx', points[i].x.toFixed(1) + 'px');
         mote.style.setProperty('--sy', points[i].y.toFixed(1) + 'px');
-        mote.style.setProperty('--d', points[i].d + 'ms');
         mote.style.setProperty('--ms', points[i].ms.toFixed(2));
         nav.dust.appendChild(mote);
       }
@@ -1764,6 +1761,36 @@
     }
   }
 
+  /* What had not landed when the close began -- a chip still on its turn or its way, a ray not
+     yet drawn out, the sky's curve still going out -- marked is-unlanded, read off each one's own
+     arrival before branch(false) takes the arrivals off. _sass/_nav.scss cuts a marked one away
+     at once as the unmaking begins, so only what had landed is unmade. Its own arrival only
+     (getAnimations() without the subtree), so a chip's wax on its ::after is not counted. Every
+     part is read before any is marked: getAnimations() brings style up to date, and a mark set
+     between two reads would make the next read work the whole sky's style out again. */
+  function markUnlanded() {
+    var parts = [nav.dust];
+    var options = nav.sky.querySelectorAll('.sparknav-option');
+    for (var i = 0; i < options.length; i++) {
+      if (typeof options[i].querySelector !== 'function') continue;
+      parts.push(options[i].querySelector('.sparknav-node'), options[i].querySelector('.sparknav-ray'));
+    }
+    var unlanded = [];
+    for (var p = 0; p < parts.length; p++) {
+      var part = parts[p];
+      unlanded[p] = false;
+      if (!part || !part.classList || typeof part.getAnimations !== 'function') continue;
+      var all = part.getAnimations();
+      for (var a = 0; a < all.length; a++) {
+        if (all[a].animationName === 'cut-in' && all[a].playState !== 'finished') unlanded[p] = true;
+      }
+    }
+    for (p = 0; p < parts.length; p++) {
+      if (!parts[p] || !parts[p].classList) continue;
+      if (unlanded[p]) parts[p].classList.add('is-unlanded'); else parts[p].classList.remove('is-unlanded');
+    }
+  }
+
   /* Closing it, and giving the page straight back: the <details> closes, and the lightbox comes
      down now rather than in the task the toggle event is queued in -- an adopted dialog opening
      on the next line has to find the page live, not inert. */
@@ -1771,6 +1798,7 @@
     // Only a constellation that is on screen is unmade: the state interface's close has nothing
     // of the sky to show, and a browser without the engine closes at once.
     var skyShown = nav.host.open && !nav.sky.hidden;
+    if (skyShown) markUnlanded();
     branch(false);
     if (skyShown) {
       unmakeSky(function () {
@@ -1996,7 +2024,7 @@
       if (unmaking) {
         endUnmake();
         nav.host.open = false;
-        void nav.host.offsetWidth; // a style pass with [open] gone, so the rings and the spark restart
+        void nav.host.offsetWidth; // a style pass with [open] gone, so the rings are cast again from nothing
         nav.host.open = true;
         return;
       }
@@ -2038,6 +2066,9 @@
       // The lightbox is not dropped and raised again: it stays up, the constellation is unmade
       // (never taken away at once), and the state interface takes its place inside it (issue #66).
       if (hostedStateMenu() && nav.modal) {
+        // What had not landed is marked here too, as close() marks it, so a mark left from an
+        // earlier close never hides a chip that has landed since.
+        markUnlanded();
         unmakeSky(function () {
           if (!stateModal(true)) corner();
         });

@@ -50,11 +50,12 @@
 //                  many there are: a column of stars down the left edge on a phone, two
 //                  interleaved columns on a wider screen, each star pushed out sideways by its
 //                  own amount so the set reads as a scatter rather than a list. The script writes
-//                  --x, --y, --len, --a, --mx, --my, --fx, --fy and --k on to each option (where
-//                  the star sits, the ray that reaches it and the point it reaches out from,
-//                  where it branches out from, and its place in the order), --jit and --roll on
-//                  every press (its own jitter, and its rolled place in the order the chips
-//                  arrive in), and the rules below are what consume them. <html data-nav>
+//                  --x, --y, --len, --a, --mx, --my and --k on to each option (where the star
+//                  sits, the ray that reaches it and the point it reaches out from, and its place
+//                  in the order) and --roll on every press (its rolled place in the order the
+//                  chips arrive in), and the rules below are what consume them; --fx and --fy,
+//                  where a chip branches out from, the script reads back itself, to aim each
+//                  chip's arrival and its leaving at the logo. <html data-nav>
 //                  says the script is here; it is set before the body is drawn, so there is no
 //                  flash of the other layout.
 //   without it     a plain cascade of the same chips under the logo, which is what the markup is
@@ -67,22 +68,9 @@
 @use 'cut';
 
 // A chip's turn in the order the constellation arrives in: its rolled place (--roll, or its place
-// in the markup) times the rolled step between stars, and a jitter of its own on top, so the
-// scatter comes out a little ragged, like a thing cast and not laid.
-$turn: calc(var(--roll, var(--k, 0)) * var(--motion-stagger, 40ms) + var(--jit, 0ms));
-
-// Room round a box's cut for what the box paints outside itself: its shadow and its focus ring.
-// The mask an arrival leaves on (cut.develop) is the size of the border box, and held at the end
-// of the arrival it would go on cutting the ring and the shadow away for as long as the box stands
-// -- a chip focused from the keyboard would show no ring at all. Drawn over the box and a margin
-// round it, the same edge crosses the ring and the shadow with the rest, and a box that has
-// arrived is whole. Declared after the mixin, whose `mask` shorthand resets these.
-@mixin cut-bleed($by: 16px) {
-  mask-clip: no-clip;
-  mask-repeat: no-repeat;
-  mask-size: calc(100% + #{2 * $by}) calc(100% + #{2 * $by});
-  mask-position: (-$by) (-$by);
-}
+// in the markup) times the step between stars, so the chips come out one after another in an
+// order of the press's own.
+$turn: calc(var(--roll, var(--k, 0)) * var(--motion-stagger, 40ms));
 
 // The skip link drops in when a keyboard reaches it: down from the top edge it waits behind, cut
 // in by a slice that sweeps downward the way it travels, in the arrival's treads. When the focus
@@ -113,7 +101,6 @@ $turn: calc(var(--roll, var(--k, 0)) * var(--motion-stagger, 40ms) + var(--jit, 
   // The arrival is the movement; the transition above is only for going back up.
   transition: none;
   @include cut.develop(develop, medium);
-  @include cut-bleed;
 }
 
 // The wrapper the skip link lands on spans the page; the feature inside it is full-bleed.
@@ -220,10 +207,9 @@ $turn: calc(var(--roll, var(--k, 0)) * var(--motion-stagger, 40ms) + var(--jit, 
   animation: rite-stamp var(--motion-stamp, var(--motion-short)) var(--ease-stamp, var(--ease-flicker)) both;
 }
 
-// The ink is a second cut-in, listed after the wax's: a press under the pointer keeps the wax as
-// it is (the first in the list carries on) and the ink starts from nothing on every press (the
-// second is new each time). Were the ink the only one, a press that followed a hover would take
-// over the wax's finished cut and the ink would show whole at once.
+// The ink plays keyframes of its own (ink-in, _cut.scss), so it starts from nothing on every
+// press even on the layer a hover has already cut in; the wax's cut-in is listed first and carries
+// on as it is, so when the press is over the layer is not cut in afresh.
 .sparknav-logo.is-stamping::after,
 .sparknav-logo:active::after {
   opacity: 0.2;
@@ -231,7 +217,7 @@ $turn: calc(var(--roll, var(--k, 0)) * var(--motion-stagger, 40ms) + var(--jit, 
   mask: cut.curve();
   animation:
     cut-in var(--motion-wax, var(--motion-medium)) var(--ease-wax, var(--ease-stair)) both,
-    cut-in var(--motion-ink, var(--motion-short)) var(--ease-ink, var(--ease-flicker)) both;
+    ink-in var(--motion-ink, var(--motion-short)) var(--ease-ink, var(--ease-flicker)) both;
 }
 
 // The sparkles turn as the menu opens, by a sixth of a turn and the roll's extra (--spark-extra,
@@ -434,8 +420,8 @@ html[data-nav] .sparknav-sky[hidden] {
 }
 
 // The ink of a press: a solid of the chip's ink growing as a curve from where the press landed
-// (--cut-x, --cut-y), at the pressed opacity. :active is the same for a page with no script. A
-// second cut-in after the wax's, as on the logo, so it starts from nothing on every press.
+// (--cut-x, --cut-y), at the pressed opacity. :active is the same for a page with no script. Its
+// own keyframes after the wax's cut-in, as on the logo, so it starts from nothing on every press.
 .sparknav-node.is-stamping::after,
 .sparknav-node:active::after {
   opacity: var(--md-sys-state-pressed-opacity);
@@ -443,7 +429,7 @@ html[data-nav] .sparknav-sky[hidden] {
   mask: cut.curve();
   animation:
     cut-in var(--motion-wax, var(--motion-medium)) var(--ease-wax, var(--ease-stair)) both,
-    cut-in var(--motion-ink, var(--motion-short)) var(--ease-ink, var(--ease-flicker)) both;
+    ink-in var(--motion-ink, var(--motion-short)) var(--ease-ink, var(--ease-flicker)) both;
 }
 
 // The stamp: the chip goes down in one cut and comes back in two (rite-stamp, _controls.scss).
@@ -583,7 +569,6 @@ html:not([data-nav='live']) .sparknav-node {
 // so a press held on a chip without the engine (:active) never stops its arrival half-way.
 .sparknav-sky.is-branching .sparknav-node {
   @include cut.develop(develop, long);
-  @include cut-bleed;
   animation-delay: $turn, $turn;
 }
 
@@ -606,7 +591,6 @@ html:not([data-nav='live']) .sparknav-node {
 // closed the constellation goes with the rest.
 .sparknav-sky.is-unmaking .sparknav-node {
   @include cut.unmake(unmake, medium);
-  @include cut-bleed;
   animation-delay:
     calc(var(--roll, var(--k, 0)) * var(--motion-stagger, 40ms) * 0.5),
     calc(var(--roll, var(--k, 0)) * var(--motion-stagger, 40ms) * 0.5);

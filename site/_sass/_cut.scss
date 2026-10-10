@@ -11,9 +11,10 @@
 //     }
 //
 // The edge moves by --cut (registered in _tokens.scss, not inherited): cut-in steps it from 0% to
-// 100%, cut-out back. The treads are --ease-<rite> and the length --motion-<rite>, which
-// js/motion.js writes on the element for each movement it starts (cut(), wax(), arrive() ...),
-// with the family's baked stair and the page's duration behind them for a page with no script.
+// 100%, cut-out back, and ink-in is cut-in again under a name of its own, for a press's ink. The
+// treads are --ease-<rite> and the length --motion-<rite>, which js/motion.js writes on the
+// element for each movement it starts (cut(), wax(), arrive() ...), with the family's baked stair
+// and the page's duration behind them for a page with no script.
 // The angle is --cut-angle (the register's, or the pointer's approach for a hover), the point of
 // a curve --cut-x and --cut-y (where a press landed), a set control's curve --seal-x and --seal-y.
 // An arrival moves behind a slice at --arrive-angle (the direction it travels) and a leaving one
@@ -23,6 +24,14 @@
 // What a slice at `$angle` has passed at --cut: black behind the edge, nothing beyond it.
 @function slice($angle: var(--cut-angle, 112deg)) {
   @return linear-gradient(#{$angle}, #000 var(--cut, 0%), transparent var(--cut, 0%));
+}
+
+// What a slice at `$angle` has not yet passed at --cut: the far side of slice()'s edge. Where one
+// thing is cut in by a slice and another, in the same place, is cut away by it -- a landing
+// replacing the one before, soot lifted off a print, a portrait giving way to a star -- this is
+// the mask of what goes, so the two changes are one edge.
+@function unpassed($angle) {
+  @return linear-gradient(#{$angle}, transparent var(--cut, 0%), #000 var(--cut, 0%));
 }
 
 // What a curve round (`$x`, `$y`) has passed at --cut: a disc growing from the point to the
@@ -46,17 +55,49 @@
   animation: cut-#{$dir} var(--motion-#{$rite}, var(--motion-#{$base})) var(--ease-#{$rite}, var(--ease-#{$family})) both;
 }
 
-// An arrival: the slice it comes in behind and the way it comes, in one stair.
-@mixin develop($rite: develop, $base: long, $family: arrive) {
+// The ink of a press: a curve growing from where the press landed, on keyframes of its own (ink-in)
+// so it starts from nothing on every press. This is the whole animation of a layer the ink has to
+// itself. A layer the ink shares with a hover's wax lists the wax's cut-in first and ink-in after
+// it (_controls.scss): the mixin alone there would take the wax's cut-in off the layer, and when
+// the press was over the wax would be cut in all over again.
+@mixin ink($rite: ink, $base: short, $family: flicker) {
+  animation: ink-in var(--motion-#{$rite}, var(--motion-#{$base})) var(--ease-#{$rite}, var(--ease-#{$family})) both;
+}
+
+// Room round a cut for what a box paints outside itself: its focus ring, its shadow, the rings and
+// seals of what it holds. A mask is the size of the border box, and one held at the end of a
+// movement would go on clipping them for as long as the box stands -- a box focused from the
+// keyboard would show no ring at all. Drawn over the box and a margin round it, the one edge
+// crosses them with the rest. Included after the `mask` shorthand, which resets these.
+@mixin bleed($by: 16px) {
+  mask-clip: no-clip;
+  mask-repeat: no-repeat;
+  mask-size: calc(100% + #{2 * $by}) calc(100% + #{2 * $by});
+  mask-position: (-$by) (-$by);
+}
+
+// An arrival: the slice it comes in behind and the way it comes, in one stair, with room round
+// the box (bleed) so its ring and its shadow arrive with it and are not clipped once it stands.
+// A box that paints nothing outside itself -- a badge, a word -- passes `$bleed: 0`, and the edge
+// crosses the box alone. Round a box a line high the room is most of the way: the edge would spend
+// its last treads crossing nothing, while the box still lifted in them.
+@mixin develop($rite: develop, $base: long, $family: arrive, $bleed: 16px) {
   mask: slice(var(--arrive-angle, 0deg));
+  @if $bleed > 0 {
+    @include bleed($bleed);
+  }
   animation:
     cut-in var(--motion-#{$rite}, var(--motion-#{$base})) var(--ease-#{$rite}, var(--ease-#{$family})) both,
     lift-in var(--motion-#{$rite}, var(--motion-#{$base})) var(--ease-#{$rite}, var(--ease-#{$family})) both;
 }
 
-// A leaving: the slice it goes behind and the way it goes, in one stair.
-@mixin unmake($rite: unmake, $base: medium, $family: leave) {
+// A leaving: the slice it goes behind and the way it goes, in one stair, its ring and its shadow
+// going with it behind the same edge (bleed; `$bleed: 0` for a box with neither, as above).
+@mixin unmake($rite: unmake, $base: medium, $family: leave, $bleed: 16px) {
   mask: slice(var(--leave-angle, 0deg));
+  @if $bleed > 0 {
+    @include bleed($bleed);
+  }
   animation:
     cut-out var(--motion-#{$rite}, var(--motion-#{$base})) var(--ease-#{$rite}, var(--ease-#{$family})) both,
     lift-out var(--motion-#{$rite}, var(--motion-#{$base})) var(--ease-#{$rite}, var(--ease-#{$family})) both;
@@ -70,6 +111,11 @@
 @keyframes cut-out {
   from { --cut: 100%; }
   to { --cut: 0%; }
+}
+
+@keyframes ink-in {
+  from { --cut: 0%; }
+  to { --cut: 100%; }
 }
 
 @keyframes lift-in {

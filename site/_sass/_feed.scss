@@ -198,7 +198,7 @@
 .card-link:active::before {
   opacity: 0.2;
   mask: cut.curve();
-  @include cut.play(in, ink, short, flicker);
+  @include cut.ink;
 }
 
 // A key brings the focus to a card: the ring in the primary just inside its edge, there with the
@@ -399,12 +399,13 @@
 }
 
 .card-badge.is-dealt {
-  @include cut.develop(develop, long);
+  // A badge paints no ring and no shadow, so its edge needs no room round it.
+  @include cut.develop(develop, long, $bleed: 0);
 }
 
 .card-badge.is-gone {
   pointer-events: none;
-  @include cut.unmake(unmake, medium);
+  @include cut.unmake(unmake, medium, $bleed: 0);
 }
 
 .card-actions {

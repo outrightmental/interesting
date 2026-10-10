@@ -273,7 +273,7 @@ function ruleTable(g, env, x0, y, span, rule, v, reveal) {
   const each = span / 8;
   const mini = Math.min(each / 4.2, span * 0.03);
   const inset = mini * clamp(0.1 / v.density, 0.05, 0.16);
-  g.font = '500 ' + Math.max(8, Math.round(mini * 1.3)) + 'px system-ui, sans-serif';
+  face(g, '500 ' + Math.max(8, Math.round(mini * 1.3)) + 'px system-ui, sans-serif');
   g.textAlign = 'center';
   g.textBaseline = 'middle';
   for (let i = 0; i < 8; i++) {
@@ -307,8 +307,16 @@ function ruleTable(g, env, x0, y, span, rule, v, reveal) {
   }
 }
 
+// The face words are set in, set only when it is not the one the canvas already holds: setting a
+// canvas's font, even to the face it has, makes the browser bring the page's style up to date
+// first, and a redraw labels its rows half a dozen times over. The canvas itself is asked what it
+// holds, so a face the rule table set, or a canvas resized back to its defaults, is never mistaken.
+function face(g, font) {
+  if (g.font !== font) g.font = font;
+}
+
 function label(g, env, text, x, y, size, align, tone) {
-  g.font = '500 ' + size + 'px system-ui, sans-serif';
+  face(g, '500 ' + size + 'px system-ui, sans-serif');
   g.textAlign = align || 'left';
   g.textBaseline = 'middle';
   g.fillStyle = tone || env.colors.fg;
