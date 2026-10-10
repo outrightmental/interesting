@@ -951,8 +951,9 @@ code, and true of the site as committed.
   every fallback; the axes, the tracking and the word-spacing are registered properties (the
   last two as ems of the words' own size, never lengths), so when the register turns over the
   axes, the size, the leading, the tracking and the word-spacing step to their new values along
-  the stair, the letterforms themselves a movement of the rite, and every wearer of `type.rite`
-  is cut into its new face by one slice at the new register's slant (`rite-shift`) as it turns. Small capitals are made from the
+  the stair, the letterforms themselves a movement of the rite, and the words that carry a page —
+  the stage's head, a page's heading — are cut into their new face by one slice at the new
+  register's slant (`rite-shift`) as it turns. Small capitals are made from the
   capitals: the vendored subset carries no small-cap or figure features, and no weight or slant
   is ever faked. `type.rite-dress` draws the register's
   ornaments and rule on the words that carry a page (its heading, the stage's title), and
@@ -961,8 +962,8 @@ code, and true of the site as committed.
   the engine reads the temperament again, rolls everything to it, and writes `<html data-shifting>`
   for one rolled moment, during which the rite's words — the stage's head, a page's heading, a
   card's name — are cut into their new face by one slice (`@keyframes rite-shift` in
-  `_mood.scss`), the register's axes step to their new values along the stair, the palette changes
-  underneath in treads and the page's sky moves across to the new corner the roll gave it. The
+  `_mood.scss`), the register's axes step to their new values along the stair, and the palette
+  changes underneath in treads; the page's sky keeps the corner it was given as the page loaded. The
   words are cut and never a control: an instruction stays where a visitor can read it. A visitor
   who asked for less motion gets the change and not the cut, as everywhere: every transition and
   animation is turned off under `prefers-reduced-motion`, every state is simply there (the state

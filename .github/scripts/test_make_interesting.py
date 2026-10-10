@@ -2338,6 +2338,11 @@ def eval_ratio(aspect):
     return float(parts[0]) / (float(parts[1]) if len(parts) > 1 else 1.0)
 
 
+# The rites js/motion.js composes for a movement and writes on the element that plays it
+# (cut(el, rite)): a stylesheet's keyframes may read one of these as their spell.
+ENGINE_RITES = ["wax", "wane", "stamp", "ink", "seal", "unseal", "develop", "unmake", "reveal", "veil", "veil-out"]
+
+
 def needs_node(test):
     """Skip a test that runs Node when Node is not installed; in CI that is a failure instead."""
     if shutil.which(mi.NODE_BIN) is None:
@@ -6899,7 +6904,10 @@ class RealSiteTest(unittest.TestCase):
                             self.assertRegex(text, rf"{re.escape(name.split('-')[0])}-(?:#\{{\$dir\}}|{re.escape(name.split('-')[1])}) var\(--motion-#\{{\$rite\}}, var\(--motion-#\{{\$base\}}\)\) var\(--ease-#\{{\$rite\}}, var\(--ease-#\{{\$family\}}\)\)",
                                              f"{name} plays along a family's curve rather than a rite of its own")
                         else:
-                            self.assertRegex(text, rf"animation: {re.escape(name)} [^;]*var\(--ease-{re.escape(name)}, var\(--ease-\w+\)\)",
+                            # Its own spell, or the rite the engine composes for the movement it plays
+                            # (a press is the stamp, whatever keyframes a stylesheet stamps it with).
+                            spell = rf"(?:{re.escape(name)}|{'|'.join(ENGINE_RITES)})"
+                            self.assertRegex(text, rf"animation:\s*(?:[^;]*,\s*)?{re.escape(name)} [^;]*?var\(--ease-{spell}, var\(--ease-\w+\)\)",
                                              f"{name} plays along a family's curve rather than a spell of its own")
         # The geometry is read where the movements are: an arrival comes from the roll's --arrive-*
         # behind a slice at --arrive-angle, a departure goes to its --leave-* behind --leave-angle, a
