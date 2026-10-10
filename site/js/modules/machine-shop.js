@@ -108,7 +108,8 @@ function clamp(v, lo, hi) {
                        moment (rite.flicker: nothing before it, the whole mark after) and held. A
                        hinted dot then grows to its size on its stair.
      the lens moved    it stays on the cell it was on until its moment, and is then cut over to
-                       the cell last tapped in one cut: never gone in between.
+                       the cell last tapped in one cut: never gone in between. On the changed
+                       cell's two tapes, the outline of the place inspected moves the same way.
      a surface set     a marked difference, the flipped column once it is found, the solved rows:
                        cut in behind the edge and resting in two shades, as a lit cell does.
      the solved table  read out pattern by pattern, 111 down to 000: each "?" gives way to its
@@ -223,12 +224,31 @@ function showing(r, now, span, reduced) {
   return r.roll.flicker(came(now, r.at, span, reduced)) ? r.now : r.was;
 }
 
-// Whether frame() has anything to draw: a movement that ends after the last picture drawn, or a
-// canvas sized again since (which clears it). `seen` records the picture just drawn, so once a
+// A lens moved to `now`, a place on the bench, on a tap: what stood there stays until this tap's
+// moment and is then cut over, on a roll of the tap's own. The place it is already going to changes
+// nothing; nor does the place it still shows when a tap away has not reached its moment yet -- the
+// move away is called off and the lens stays where it is, at rest. A bench has one lens, so its
+// movement keeps an end of its own (`lensUntil`) apart from the bench's: a move called off is
+// then over at once, and the bench is not drawn on for a cut that will never come.
+function moved(r, now, s, c) {
+  const same = (p) => p && p.r === now.r && p.u === now.u;
+  if (r && same(r.now)) return r;
+  const was = showing(r, s.t, SPAN, c.reduced);
+  if (same(was)) {
+    s.lensUntil = -Infinity;
+    return { was, now, at: null, roll: STILL };
+  }
+  s.taps += 1;
+  s.lensUntil = c.reduced ? -Infinity : s.t + SPAN;
+  return { was, now, at: s.t, roll: riteOf(c).at(0x5c0 + s.taps) };
+}
+
+// Whether frame() has anything to draw: a movement that ends after the last picture drawn (the
+// bench's or the lens's), or a canvas sized again since (which clears it). `seen` records the picture just drawn, so once a
 // frame has drawn, due() is also whether the bench is still on its way (true) or at rest.
 function due(s, c) {
   const z = s.drawn;
-  return !z || z.g !== c.g || z.w !== c.w || z.h !== c.h || z.dpr !== c.dpr || z.t < s.until;
+  return !z || z.g !== c.g || z.w !== c.w || z.h !== c.h || z.dpr !== c.dpr || z.t < s.until || z.t < s.lensUntil;
 }
 function seen(s, c) {
   s.drawn = { g: c.g, w: c.w, h: c.h, dpr: c.dpr, t: s.t };
@@ -528,9 +548,10 @@ function cellLevel(s, i, reduced) {
 
 // The scene's state before anyone has touched it: no cell lit, nothing shown, the rule unread,
 // and no clock yet (a card is drawn once and stands). `cells` holds each pressed cell's movement,
-// `until` the end of the last movement in flight and `drawn` the last picture frame() drew.
+// `until` the end of the last movement in flight, `lensUntil` the end of the lens's, and `drawn`
+// the last picture frame() drew.
 function nextBlank(plan) {
-  return { row: new Array(plan.width * (plan.depth || 1)).fill(0), shown: [], shownAt: [], cells: [], flips: [], taps: 0, open: false, openAt: null, t: 0, lens: null, until: -Infinity, drawn: null };
+  return { row: new Array(plan.width * (plan.depth || 1)).fill(0), shown: [], shownAt: [], cells: [], flips: [], taps: 0, open: false, openAt: null, t: 0, lens: null, until: -Infinity, lensUntil: -Infinity, drawn: null };
 }
 
 function nextPreview(g, w, h, env, plan, lens) {
@@ -631,6 +652,17 @@ function nextPiece(env, plan) {
       const geo = nextGeometry(c.w, c.h, width, env.variant || PLAIN);
       const y0 = geo.top + shown * geo.size + geo.gap;
       const col = Math.floor((x * c.w - geo.left) / geo.size);
+      const scanRow = Math.floor((y * c.h - geo.top) / geo.size);
+      if (col >= 0 && col < width && scanRow >= 0 && scanRow < shown) {
+        const hood = hoodOf(rows[scanRow], col);
+        const pattern = [(hood >> 2) & 1, (hood >> 1) & 1, hood & 1].join('');
+        // A shown cell inspected: the lens is cut over to it, its three cells bracketed, the cell
+        // they made pointed at below and their pattern marked in the table.
+        s.lens = moved(s.lens, { r: scanRow, u: col }, s, c);
+        c.status('row ' + (scanRow + 1) + ', column ' + (col + 1) + ': pattern ' + pattern + (scanRow < shown - 1 ? ' makes a ' + (rows[scanRow + 1][col] ? 'lit' : 'dark') + ' cell below' : '; find what this pattern made in an earlier row'));
+        draw(c);
+        return;
+      }
       const rel = (y * c.h - y0) / geo.size;
       if (col < 0 || col >= width || rel < -0.4 || rel > depth + 0.4) {
         c.status((depth === 2 ? 'rows four and five are' : 'row five is') + ' outlined; tap a cell there');
@@ -646,9 +678,7 @@ function nextPiece(env, plan) {
       write(next, c, { i, u, v });
       // The lens moves to the tapped cell, its three parents bracketed and their pattern marked:
       // it stays where it was until its moment and is then cut over, on a roll for this tap.
-      s.taps += 1;
-      s.lens = { was: showing(s.lens, s.t, SPAN, c.reduced), now: { r: shown - 1 + row, u: col }, at: s.t, roll: riteOf(c).at(0x5c0 + s.taps) };
-      busy(s, c, SPAN);
+      s.lens = moved(s.lens, { r: shown - 1 + row, u: col }, s, c);
       c.set('row', next.slice());
       c.status('cell ' + (col + 1) + ' of row ' + rowName(i) + ' ' + (next[i] ? 'lit' : 'dark') + '; its three parents are bracketed above and their pattern is marked in the table');
       draw(c);
@@ -741,7 +771,8 @@ function apexGeometry(w, h, plan, v) {
   return { size, left: [left1, left1 + tapeW + gap + labelW], top: h * 0.3, labelW, tapeW };
 }
 
-// `s`: the rows whose differences are marked, whether the flip is pointed out (solved).
+// `s`: the rows whose differences are marked, the place inspected on both tapes, whether the flip
+// is pointed out (solved).
 function drawApex(g, w, h, env, plan, s, variant) {
   const v = variant || PLAIN;
   const c = env.colors;
@@ -752,6 +783,7 @@ function drawApex(g, w, h, env, plan, s, variant) {
   const small = Math.max(9, Math.min(15, Math.round(Math.min(w, h) * 0.036)));
   const box = geo.size - inset * 2;
   const pointedP = s.pointed ? came(s.t, s.pointedAt, REVEAL, env.reduced) : 0;
+  const inspected = showing(s.inspected, s.t, SPAN, env.reduced);
   background(g, w, h, env, v);
   label(g, env, 'rule ' + plan.rule, w * 0.5, h * 0.06, small + 2, 'center', c.accent2);
   ruleTable(g, env, w * 0.08, h * 0.1, w * 0.84, plan.rule, v);
@@ -793,6 +825,14 @@ function drawApex(g, w, h, env, plan, s, variant) {
         }
       }
     }
+    // The place inspected, outlined at once on both tapes: it stays where it was until a tap's
+    // moment and is then cut over to the place tapped, never gone in between.
+    if (inspected) {
+      g.strokeStyle = c.accent2;
+      g.lineWidth = Math.max(1.5, geo.size * 0.1);
+      g.strokeRect(left + inspected.u * geo.size + inset * 0.3, geo.top + inspected.r * geo.size + inset * 0.3,
+        geo.size - inset * 0.6, geo.size - inset * 0.6);
+    }
     g.strokeStyle = env.alpha(c.muted, 0.25);
     g.lineWidth = 1;
     g.strokeRect(left - inset, geo.top - inset, geo.tapeW + inset * 2, geo.size * (plan.rows + 1) + inset * 2);
@@ -815,11 +855,12 @@ function drawApex(g, w, h, env, plan, s, variant) {
   }
 }
 
-// The scene's state before anyone has touched it: no row marked, the flip not pointed out, and
-// no clock yet (a card is drawn once and stands). `until` is the end of the last movement in
-// flight and `drawn` the last picture frame() drew.
+// The scene's state before anyone has touched it: no row marked, no place inspected, the flip not
+// pointed out, and no clock yet (a card is drawn once and stands). `until` is the end of the last
+// movement in flight, `lensUntil` the end of the outline's, and `drawn` the last picture frame()
+// drew.
 function apexBlank() {
-  return { marked: [], markedAt: [], pointed: false, pointedAt: null, t: 0, until: -Infinity, drawn: null };
+  return { marked: [], markedAt: [], inspected: null, taps: 0, pointed: false, pointedAt: null, t: 0, until: -Infinity, lensUntil: -Infinity, drawn: null };
 }
 
 function apexPreview(g, w, h, env, plan) {
@@ -857,7 +898,7 @@ function apexPiece(env, plan) {
       return { solved: false, say: colRight ? 'the column is right; the count is off' : 'the count is right; the column is off' };
     },
     start(c) {
-      c.status('compare the two tapes row by row');
+      c.status('compare the two tapes row by row; tap a shown cell to inspect the same place on both');
       draw(c);
     },
     apply(id, value, c) {
@@ -889,6 +930,22 @@ function apexPiece(env, plan) {
           c.status('every row between the first and the last is marked; the rest is yours');
         }
       }
+      draw(c);
+    },
+    // A shown cell tapped on either tape: the same place is outlined on both, so the two can be
+    // compared there, the outline cut over from the place inspected before as the lens is.
+    tap(x, y, c) {
+      const geo = apexGeometry(c.w, c.h, plan, env.variant || PLAIN);
+      const px = x * c.w;
+      const tape = geo.left.findIndex((left) => px >= left && px < left + geo.tapeW);
+      const row = Math.floor((y * c.h - geo.top) / geo.size);
+      const col = tape < 0 ? -1 : Math.floor((px - geo.left[tape]) / geo.size);
+      if (row < 1 || row > plan.rows || col < 0 || col >= plan.width) {
+        c.status('Tap a cell in a shown row on either tape to compare the two.');
+        return;
+      }
+      s.inspected = moved(s.inspected, { r: row, u: col }, s, c);
+      c.status('row ' + row + ', column ' + (col + 1) + ': first tape ' + (hist.a[row][col] ? 'lit' : 'dark') + ', second tape ' + (hist.b[row][col] ? 'lit' : 'dark'));
       draw(c);
     },
     // As on the next row: the clock moves on by every frame's dt, the tapes are drawn only while

@@ -13,12 +13,14 @@
                          say what the shadow does when something moves. The heights and distances
                          are chosen so the shadow comes out whole. A wrong check says how tall the
                          shadow would be from where the lamp was put, and whether the movement is
-                         right, and no more.
+                         right, and no more; comparing the heights, as many times as the difficulty
+                         allows, walks the similar triangles one step further each time.
      match the shadows   Four or six cutouts on the bench and as many shadows on the screen, each
                          scaled by a stated factor and leaned sideways by the lamp, numbered in a
                          shuffled order. A cast of six stands in two rows; the brief describes
                          every shadow's outline in words as well as the picture showing it. Say
-                         which cutout made which shadow. A wrong check says how many are matched;
+                         which cutout made which shadow. A tap on a shadow inspects it: its outline,
+                         its factor and its lean, in words. A wrong check says how many are matched;
                          a hint, at a price, names one.
 
    A card and the feature it opens as are one night at the theatre: the spark puts the whole plan on
@@ -114,17 +116,21 @@ function asked(env) {
      at rest         the house is waiting, so nothing in it moves: the lamp burns at one size and
                      the shadows on the screen hold their lean. A frame with nothing new in it is
                      not drawn at all (settled, below).
+     a lamp struck   -- on a card that moves, the one movement it has -- catches from the flame
+                     the still card shows to the one it burns with, in rite.ease's landing treads,
+                     and burns at that size from then on (caught, below).
      a thing said    -- a distance read, a guess written, a name under a shadow -- is cut on at its
                      moment (rite.flicker) in place of what stood there, never blinking out between.
      a line moved    -- the height the wall would show from a wrong lamp -- travels to its new
                      place in rite.ease's landing treads, the first the longest, never a glide.
      a thing shown   -- the shadow the visitor predicts, the band a wrong lamp would add, the frame
-                     round a hinted shadow, the chip behind a matched name, the wall and the screen
-                     lit over a solved night -- is cut in behind the piece's edge as its stair
-                     climbs (rite.paint, one path; a frame through one clip), never a fade and
-                     never cells, and rests as two shades of its colour split by that edge
-                     through its middle. A new prediction is cut in over the last by the same
-                     edge, so the wall gives one up as it takes the other.
+                     round a hinted shadow or a shadow being inspected, the chip behind a matched
+                     name, the wall and the screen lit over a solved night -- is cut in behind the
+                     piece's edge as its stair climbs (rite.paint, one path; a frame through one
+                     clip), never a fade and never cells, and rests as two shades of its colour
+                     split by that edge through its middle. A new prediction is cut in over the
+                     last by the same edge, so the wall gives one up as it takes the other, and a
+                     newly inspected shadow's frame takes the screen as the last one's gives it up.
      a thing done    -- the prediction and the wrong lamp's marks, once the lamp is lit for good --
                      is cut away behind the same edge on a roll of its own, one way: drawn through
                      the part of its box the edge has not reached yet, until there is none.
@@ -220,13 +226,11 @@ function cover(g, rite, x, y, w, h, k) {
   rite.paint(g, x, y, w, h, Math.min(k, 0.5));
 }
 
-// A surface arriving, `p` of the way through its time, on the roll handed in: cut in behind the
-// piece's edge as the roll's stair climbs, and two shades at rest. `shape`, if given, adds a path
-// inside the box (a frame, say) that the surface is clipped to, filled even-odd. Gives back how
-// far it has come.
-function surface(g, own, x, y, bw, bh, p, fill, shape) {
-  const k = own.stair(p);
-  if (k <= 0) return 0;
+// A surface standing `k` of the way there, in `fill`: the part of the box the piece's edge has
+// passed, and two shades once it is all there. `shape`, if given, adds a path inside the box (a
+// frame, say) that the surface is clipped to, filled even-odd.
+function standing(g, own, x, y, bw, bh, k, fill, shape) {
+  if (k <= 0) return;
   g.fillStyle = fill;
   if (shape) {
     g.save();
@@ -236,6 +240,13 @@ function surface(g, own, x, y, bw, bh, p, fill, shape) {
   }
   cover(g, own, x, y, bw, bh, k);
   if (shape) g.restore();
+}
+
+// A surface arriving, `p` of the way through its time, on the roll handed in: cut in behind the
+// piece's edge as the roll's stair climbs, and two shades at rest. Gives back how far it has come.
+function surface(g, own, x, y, bw, bh, p, fill, shape) {
+  const k = own.stair(p);
+  standing(g, own, x, y, bw, bh, k, fill, shape);
   return k;
 }
 
@@ -346,6 +357,30 @@ function lampDot(g, c, x, y, r) {
   g.fill();
 }
 
+// The flame's radius in a house whose shorter side is m: the size it is struck at, and as much
+// again as it has caught (`lit`, 0 just struck to 1 burning). Every piece, every card that does
+// not move and every card for a visitor who asked for less motion shows it burning; only a card
+// playing its one movement shows it short of that (caught, below).
+function flame(m, struck, lit) {
+  return struck + Math.max(3.2, m * 0.008) * Math.max(0, Math.min(1, lit));
+}
+
+/* A card that moves (js/feed.js) is the lamp being lit: its still picture is the flame just struck,
+   and from its first frame on screen the flame catches -- in the landing treads of a roll of its
+   own, the first the longest, each after it shorter -- until it burns at the size the piece opens
+   on, and holds. That is the whole of the card's motion: nothing else on it moves, and once the
+   flame burns the card says so and the loop lets it go. */
+const CATCH = 2; // seconds the flame takes to catch, and so how long a card moves
+
+// How far a card's flame has caught t seconds into its motion: 0 to 1, in the roll's landing
+// treads. The clock is read a quarter of the way ahead, so the hold before the landing's first
+// tread is spent before the card is seen: the flame takes on the first moving frame, and burns
+// whole well before the run is over.
+function caught(rite, t) {
+  if (!(t > 0)) return 0;
+  return roll(rite, 0x1a5, 0).ease(Math.min(1, 0.25 + t / CATCH));
+}
+
 // One cutout's polygon, transformed point by point: `map` takes [x, y] in the unit box and gives
 // a point on the canvas.
 function polygon(g, points, map) {
@@ -411,7 +446,7 @@ function lampState() {
   return {
     tried: null, triedFrom: null, triedAt: -1, tries: 0, reveal: false, revealAt: -1,
     guess: null, guessWas: null, guessAt: -1, guesses: 0,
-    change: null, changeWas: null, changeAt: -1, changes: 0, t: 0, drawn: null, drawnAt: -1
+    change: null, changeWas: null, changeAt: -1, changes: 0, lit: 1, t: 0, drawn: null, drawnAt: -1
   };
 }
 
@@ -527,7 +562,7 @@ function sideView(g, w, h, c, p, s, variant) {
   g.strokeStyle = c.alpha(col.accent2, 0.7);
   g.lineWidth = 1;
   g.stroke();
-  lampDot(g, c, lampX, floor - 3, Math.max(3, m * 0.012));
+  lampDot(g, c, lampX, floor - 3, flame(m, Math.max(3, m * 0.012), s.lit));
   // The measurements: the cutout's height, the gap to the wall, the shadow's height, and the
   // one that is asked.
   const dim = (x1, y1, x2, y2) => {
@@ -612,15 +647,28 @@ function sideView(g, w, h, c, p, s, variant) {
   if (s.reveal) daybreak(g, rite, c, w, h, revealP);
 }
 
-function lampPreview(g, w, h, env, p) {
-  sideView(g, w, h, env, p, lampState(), env.variant);
+// The lamp as a card shows it, its flame `lit` of the way caught (burning, unless a card in motion
+// says otherwise).
+function lampPreview(g, w, h, env, p, lit = 1) {
+  const s = lampState();
+  s.lit = lit;
+  sideView(g, w, h, env, p, s, env.variant);
 }
 
 function lampPiece(env, p) {
   // The distance is a length in spans off the drawing, so it is a measured answer: the difficulty
   // says how many spans out it may be and still light the lamp.
-  const margin = asked(env).margin;
+  const settings = asked(env);
+  const margin = settings.margin;
   const H = shadowHeight(p, p.d);
+  let helped = 0;
+  const hints = [
+    'The shadow is ' + (H - p.h) + ' spans taller than the cutout. That extra height comes from the gap to the wall.',
+    'The two triangles match: extra shadow height times lamp distance equals cutout height times gap to the wall.',
+    'Here, ' + (H - p.h) + ' times lamp distance equals ' + (p.h * p.a) + '.',
+    'Divide ' + (p.h * p.a) + ' by ' + (H - p.h) + ' to find the distance behind the cutout.',
+    'Check your distance by seeing whether it makes a shadow ' + H + ' spans tall.'
+  ];
   const move = MOVES[p.move];
   const s = lampState();
   const draw = (c) => {
@@ -637,7 +685,8 @@ function lampPiece(env, p) {
     checkLabel: 'light the lamp',
     steps: [
       { id: 'distance', ask: 'the lamp\'s distance behind the cutout', kind: 'number', min: 1, max: 20, step: 1, value: 1, unit: 'spans' },
-      { id: 'change', ask: 'the shadow, when ' + move.text, kind: 'choice', options: CHANGES }
+      { id: 'change', ask: 'the shadow, when ' + move.text, kind: 'choice', options: CHANGES },
+      { id: 'hint', ask: 'help with the measurements', kind: 'press', count: 1, label: 'compare the heights', optional: true }
     ],
     solution: { distance: p.d, change: move.answer },
     check(c) {
@@ -692,6 +741,13 @@ function lampPiece(env, p) {
             s.changes += 1;
           }
         }
+      }
+      if (id === 'hint') {
+        if (helped < settings.helps) {
+          c.status(hints[helped]);
+          helped += 1;
+          c.hint();
+        } else c.status('No comparisons left at this difficulty; use the heights and the gap on the drawing.');
       }
       draw(c);
     },
@@ -749,14 +805,36 @@ function matchTitle(p) {
 // The bench's state as a scene opens: the visitor's matching (none on a card), nothing hinted,
 // nothing revealed, and every change timed against the piece's clock from here on (-1 is "there
 // from the start"). `from` is the name each shadow showed before its latest change, and the
-// counts roll each move afresh.
+// counts roll each move afresh. `leaving` holds the inspection frames being given up, each as the
+// screen showed it when it was handed over (handOver, below).
 function matchState(order) {
   // Sized to the cast; a card has no matching to time, and is given room for the largest.
   const each = (v) => new Array(order ? order.length : 6).fill(v);
   return {
     order: order ? order.slice() : null, from: order ? order.slice() : null, movedAt: each(-1),
-    moves: each(0), hinted: [], hintAt: each(-1), reveal: false, revealAt: -1, t: 0, drawn: null, drawnAt: -1
+    moves: each(0), hinted: [], hintAt: each(-1), inspected: null, leaving: [], inspectAt: -1, inspects: 0,
+    reveal: false, revealAt: -1, lit: 1, t: 0, drawn: null, drawnAt: -1
   };
+}
+
+// How far the frame of the shadow being inspected has been cut in, 0 to 1.
+function inspection(s, rite, reduced) {
+  return s.inspected === null ? 0 : roll(rite, 0x1e5, s.inspects).stair(came(s, s.inspectAt, 1.1, reduced));
+}
+
+// A new inspection hands the screen's frames over from where they stand. The frame being cut in
+// is given up at the coverage it has reached (none, while its stair still holds: nothing of it was
+// seen, so nothing of it is kept), and every frame already being given up keeps the part the last
+// roll had not yet cut away. The new roll's edge then cuts each away from there, one way: a frame
+// never grows back as it goes, nor vanishes at the tap. A frame `from` of the way in and `cut` of the
+// way away shows the part of its box between the two. The parts kept never overlap -- a frame
+// handed over is cut away up to where the frame after it had come -- so a shadow tapped again
+// while its last frame leaves is filled by the new frame as the old one goes, and is never two
+// frames thick.
+function handOver(s, rite, reduced) {
+  const k = inspection(s, rite, reduced);
+  s.leaving = s.leaving.map((e) => ({ n: e.n, from: e.from, cut: Math.max(e.cut, k) })).filter((e) => e.cut < e.from);
+  if (k > 0) s.leaving.push({ n: s.inspected, from: k, cut: 0 });
 }
 
 // The cutout whose name stands under shadow n: the new one once its moment has come, the one before
@@ -776,7 +854,7 @@ function bench(g, w, h, c, p, s, variant) {
   const lampX = w * (0.1 + v.turn * 0.1);
   const revealP = s.reveal ? came(s, s.revealAt, 2.2, reduced) : 0;
   house(g, w, h, c, v, lampX, h * 0.12);
-  lampDot(g, c, lampX, h * 0.12, Math.max(3, m * 0.013));
+  lampDot(g, c, lampX, h * 0.12, flame(m, Math.max(3, m * 0.013), s.lit));
   const fs = Math.max(9, Math.min(14, m * 0.03));
   // Four cutouts stand in one row of four; six in two rows of three, the screen below them divided
   // the same way, so each shadow sits in the slot of the screen under the slot of the bench.
@@ -834,6 +912,30 @@ function bench(g, w, h, c, p, s, variant) {
     g.fill();
     text(g, String(n + 1), (column + 0.5) * slot, rowY + fs * 1.1, fs * 1.1, col.bg, 'center', 700);
     text(g, 'x ' + (f % 1 ? f.toFixed(1) : f), (column + 0.5) * slot, rowY + rowH - fs * 2.1, fs * 0.9, col.bg, 'center', 600);
+    // The shadow being inspected: a thin frame round it, inside its slot, cut in behind the
+    // piece's edge on the roll of this inspection through one clip (the frame's outline less its
+    // inside), and resting in two shades. The frames handed over before it (handOver, above) are
+    // cut away behind the same edge on the same roll, one way, each from what the screen showed
+    // of it, so the screen takes one frame as it gives up the others and never holds two at rest.
+    const going = s.leaving.filter((e) => e.n === n);
+    if (s.inspected === n || going.length) {
+      const own = roll(rite, 0x1e5, s.inspects);
+      const ip = inspection(s, rite, reduced);
+      const x0 = (column + 0.08) * slot - 1;
+      const y0 = rowY + 1;
+      const bw = slot * 0.84 + 2;
+      const bh = rowH - 2;
+      const fill = c.alpha(col.accent, 0.7);
+      const ring = (q) => {
+        q.rect(x0, y0, bw, bh);
+        q.rect(x0 + 2, y0 + 2, bw - 4, bh - 4);
+      };
+      if (s.inspected === n) standing(g, own, x0, y0, bw, bh, ip, fill, ring);
+      going.forEach((e) => {
+        const away = Math.max(e.cut, ip);
+        if (away < e.from) wipe(g, own, x0, y0, bw, bh, away, () => standing(g, own, x0, y0, bw, bh, e.from, fill, ring), null);
+      });
+    }
     // The visitor's matching, written under each shadow in its slot once it has been set: a name
     // that changes is cut over to the new one at its moment, on this shadow's own roll for the
     // move; a name proved right has a chip cut in behind it by the piece's edge, and is set bold
@@ -862,8 +964,12 @@ function bench(g, w, h, c, p, s, variant) {
   if (s.reveal) daybreak(g, rite, c, w, h, revealP);
 }
 
-function matchPreview(g, w, h, env, p) {
-  bench(g, w, h, env, p, matchState(null), env.variant);
+// The bench as a card shows it, its lamp's flame `lit` of the way caught (burning, unless a card
+// in motion says otherwise).
+function matchPreview(g, w, h, env, p, lit = 1) {
+  const s = matchState(null);
+  s.lit = lit;
+  bench(g, w, h, env, p, s, env.variant);
 }
 
 function matchPiece(env, p) {
@@ -901,7 +1007,7 @@ function matchPiece(env, p) {
       };
     },
     start(c) {
-      c.status(WORDS[count] + ' cutouts and ' + WORDS[count] + ' shadows; match by outline, not size');
+      c.status(WORDS[count] + ' cutouts and ' + WORDS[count] + ' shadows; tap a shadow to inspect its outline');
       draw(c);
     },
     apply(id, value, c) {
@@ -933,9 +1039,32 @@ function matchPiece(env, p) {
       }
       draw(c);
     },
+    tap(x, y, c) {
+      const columns = count > 4 ? 3 : 4;
+      const rows = Math.ceil(count / columns);
+      const screenY = rows === 2 ? 0.51 : 0.44;
+      const screenH = rows === 2 ? 0.42 : 0.5;
+      const column = Math.floor(x * columns);
+      const row = Math.floor((y - screenY) / (screenH / rows));
+      const n = row * columns + column;
+      if (x < 0.02 || x > 0.98 || y < screenY || y >= screenY + screenH || n < 0 || n >= count) {
+        c.status('Tap one of the numbered shadows on the screen to inspect it.');
+        return;
+      }
+      if (s.inspected !== n) {
+        // The new frame is cut in in place of whatever the screen shows now.
+        handOver(s, riteOf(c), !!c.reduced);
+        s.inspected = n;
+        s.inspectAt = s.t;
+        s.inspects += 1;
+      }
+      const sh = p.shadows[n];
+      c.status('shadow ' + (n + 1) + ': ' + OUTLINES[p.items[sh.cut]] + '; enlarged ' + (sh.f / 10) + ' times and leaning ' + (sh.k < 0 ? 'left' : 'right'));
+      draw(c);
+    },
     frame(t, dt, c) {
       s.t += Math.max(0, dt);
-      return step(s, c, Math.max(s.revealAt, ...s.movedAt, ...s.hintAt), draw);
+      return step(s, c, Math.max(s.revealAt, s.inspectAt, ...s.movedAt, ...s.hintAt), draw);
     },
     end(c) {
       s.reveal = true;
@@ -949,6 +1078,9 @@ function matchPiece(env, p) {
 /* ---- the module ----------------------------------------------------------------------------- */
 
 const plans = new WeakMap();
+// What each card's canvas holds, by its env: the canvas, its size and how far the flame on it had
+// caught, so a frame that would draw the same picture over itself draws nothing.
+const shown = new WeakMap();
 function deal(env) {
   let plan = plans.get(env);
   if (!plan) {
@@ -962,16 +1094,35 @@ function dealsLamp(env) {
   return deal(env).kind === 'lamp';
 }
 
+// A card's picture, its flame `lit` of the way caught, noted as what its canvas now holds.
+function preview(g, w, h, env, lit) {
+  const p = deal(env);
+  if (p.kind === 'lamp') lampPreview(g, w, h, env, p, lit);
+  else matchPreview(g, w, h, env, p, lit);
+  shown.set(env, { g, w, h, lit });
+}
+
 export default {
   id: 'shadow-theatre',
   needsSky: false,
+  // The still card: the flame just struck, the first picture of the card's one movement -- or,
+  // for a visitor who asked for less motion, whose card never moves, the lamp burning.
   paint(g, w, h, env) {
-    const p = deal(env);
-    if (dealsLamp(env)) lampPreview(g, w, h, env, p);
-    else matchPreview(g, w, h, env, p);
+    preview(g, w, h, env, env.reduced ? 1 : 0);
   },
+  // A card in motion: the flame catching (caught), read off t, at t = 0 the picture paint left.
+  // Between two treads nothing on the card has changed and its canvas already holds the picture,
+  // so a frame draws only when the flame has stepped on: the same picture for the same t, and
+  // nothing drawn between treads. Once the run is over the flame burns and nothing on the card
+  // moves, so it says so -- drawing the burning lamp first if a scroll took the card away before
+  // its last tread, so the lamp is never left half caught.
   animate(g, w, h, env, t) {
-    return false;
+    if (env.reduced) return false;
+    const over = !(t < CATCH);
+    const lit = over ? 1 : caught(riteOf(env), t);
+    const last = shown.get(env);
+    if (!(last && last.g === g && last.w === w && last.h === h && last.lit === lit)) preview(g, w, h, env, lit);
+    return !over;
   },
   spark(env) {
     const p = deal(env);
