@@ -750,7 +750,7 @@ function echoPiece(env, plan) {
       s.treadAt = 0;
       s.doneAt = time;
       s.v += 1;
-      c.status('the echoes come back ' + order.map((i) => LETTERS[i]).join(', ') + '; the pulse keeps going out');
+      c.status('the echoes come back ' + order.map((i) => LETTERS[i]).join(', ') + '; the pulse went out to the farthest star and rests there');
       draw(c);
     }
   };
