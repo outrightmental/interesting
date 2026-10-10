@@ -132,7 +132,9 @@ function develop(g, rite, x0, y0, bw, bh, k, inside, size) {
       const py = cy * cell;
       if (inside && !inside(px + cell / 2, py + cell / 2)) continue;
       if (k < 1 && !rite.matte(cx, cy, k)) continue;
-      g.fillRect(px, py, cell, cell);
+      const left = Math.max(px, x0);
+      const top = Math.max(py, y0);
+      g.fillRect(left, top, Math.min(px + cell, x0 + bw) - left, Math.min(py + cell, y0 + bh) - top);
     }
   }
 }
@@ -377,7 +379,6 @@ function rackBlank() {
 function rackPreview(g, w, h, env, plan) {
   const v = env.variant || PLAIN;
   const s = rackBlank();
-  s.beat = v.turn * 12;
   drawRack(g, w, h, env, plan, s, v);
 }
 
@@ -495,9 +496,8 @@ function rackPiece(env, plan) {
         return;
       }
       const on = !s.picked.includes(hit);
-      s.picks[hit] = { on, at: s.t, roll: s.rolls++ };
-      s.picked = on ? s.picked.concat([hit]).sort((a, b) => a - b) : s.picked.filter((i) => i !== hit);
-      c.set('which', s.picked.slice());
+      const next = on ? s.picked.concat([hit]).sort((a, b) => a - b) : s.picked.filter((i) => i !== hit);
+      c.set('which', next);
       c.status(name(hit) + (on ? ' picked' : ' let go') + ' for beat ' + plan.at + (s.picked.length ? ': ' + s.picked.map(name).join(', ') : ''));
       draw(c);
     },
@@ -735,7 +735,6 @@ function springBlank(plan) {
 function springPreview(g, w, h, env, plan) {
   const v = env.variant || PLAIN;
   const s = springBlank(plan);
-  s.replay = { k: plan.open, t: v.turn * plan.breath * 2 };
   drawSpring(g, w, h, env, plan, s, v);
 }
 
@@ -808,9 +807,11 @@ function springPiece(env, plan) {
             s.k = next;
             s.kAt = s.t;
             s.sets += 1;
+            s.replay = c.done ? { k: next, t: 0 } : null;
           }
         }
-        c.status('spring at ' + s.k + (s.k < 20 ? ', soft' : s.k > 75 ? ', stiff' : '') + '; let go to see the crossing');
+        c.status('spring at ' + s.k + (s.k < 20 ? ', soft' : s.k > 75 ? ', stiff' : '')
+          + (c.done ? '; the pair keeps trading the swing' : '; let go to see the crossing'));
       }
       if (id === 'then') c.status('a ' + plan.ask + ' spring, you say, crosses ' + (value === 'same' ? 'at the same time' : value));
       draw(c);
@@ -865,21 +866,23 @@ export default {
   // A card in motion: the same clocks the piece keeps, read off t through the escapement, so the
   // card ticks the way the piece will. At t = 0 it is the still picture paint left behind.
   animate(g, w, h, env, t) {
+    if (env.reduced) return false;
     const v = env.variant || PLAIN;
     const d = deal(env);
     if (d.spring) {
       const plan = d.plan;
       const s = springBlank(plan);
-      s.t = env.reduced ? 0 : t;
-      s.replay = { k: plan.open, t: env.reduced ? v.turn * plan.breath * 2 : (t * 0.6 + v.turn * plan.breath * 2) % ((plan.breaths + 1.5) * plan.breath) };
+      s.t = t;
+      if (t > 0) s.replay = { k: plan.open, t: (t * 0.6) % ((plan.breaths + 1.5) * plan.breath) };
       drawSpring(g, w, h, env, plan, s, v);
-      return;
+      return true;
     }
     const plan = d.plan;
     const s = rackBlank();
-    s.t = env.reduced ? 0 : t;
-    s.beat = env.reduced ? v.turn * 12 : (t * 1.5 + v.turn * 12) % 60;
+    s.t = t;
+    if (t > 0) s.beat = (t * 1.5) % 60;
     drawRack(g, w, h, env, plan, s, v);
+    return true;
   },
   spark(env) {
     const d = deal(env);

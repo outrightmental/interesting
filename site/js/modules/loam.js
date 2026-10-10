@@ -1,5 +1,5 @@
 /* Loam: a cutaway of soil with roots finding their way round the stones. As a card it is one of
-   the two puzzles below (paint, spark); as a piece it is that puzzle, and the card it was opened
+   the three puzzles below (paint, spark); as a piece it is that puzzle, and the card it was opened
    from says which. See js/feed.js for what a module is and js/stage.js for what a piece is.
 
    Three puzzles, read off a drawing or followed through the ground:
@@ -113,7 +113,9 @@ function develop(g, rite, x0, y0, bw, bh, k, inside, size) {
       const py = cy * cell;
       if (inside && !inside(px + cell / 2, py + cell / 2)) continue;
       if (k < 1 && !rite.matte(cx, cy, k)) continue;
-      g.fillRect(px, py, cell, cell);
+      const left = Math.max(px, x0);
+      const top = Math.max(py, y0);
+      g.fillRect(left, top, Math.min(px + cell, x0 + bw) - left, Math.min(py + cell, y0 + bh) - top);
     }
   }
 }
@@ -369,8 +371,13 @@ function drawCore(g, w, h, env, plan, s, variant) {
   if (roll(rite, 0xca, 0).flicker(came(s, s.captionAt, 0.8, reduced))) write(g, s.caption, w / 2, h * 0.955, small, env.alpha(c.muted, 0.9));
 }
 
-function corePreview(g, w, h, env, plan) {
-  drawCore(g, w, h, env, plan, coreBlank('how deep is the water? how many layers to the stones?'), env.variant);
+function corePreview(g, w, h, env, plan, t = 0) {
+  const s = coreBlank('how deep is the water? how many layers to the stones?');
+  s.ripple = t;
+  const v = env.variant || PLAIN;
+  // The first tooth must show even when the rolled ratchet begins with a hold.
+  const tooth = t > 0 ? 0.025 * (1 + riteOf(env).ratchet(0.5)) : 0;
+  drawCore(g, w, h, env, plan, s, { ...v, turn: v.turn + tooth });
 }
 
 function corePiece(env, plan) {
@@ -477,15 +484,10 @@ function shareOf(a, b, parts) {
 }
 
 function mixPlan(env) {
-  for (let attempt = 0; attempt < 80; attempt++) {
-    const a = env.int(2, 18) * 5;
-    const b = env.int(2, 18) * 5;
-    if (Math.abs(a - b) < 30) continue;
-    const parts = env.int(1, 9);
-    if (!Number.isInteger(shareOf(a, b, parts))) continue;
-    return { kind: 'mix', a, b, parts };
-  }
-  return { kind: 'mix', a: 20, b: 80, parts: 6 };
+  const a = env.int(1, 9) * 10;
+  const bags = Array.from({ length: 9 }, (_, i) => (i + 1) * 10)
+    .filter((share) => Math.abs(share - a) >= 30);
+  return { kind: 'mix', a, b: env.pick(bags), parts: env.int(1, 9) };
 }
 
 function carriedMix(env) {
@@ -530,8 +532,8 @@ function bag(g, env, x, y, r, share, name, tilt, density, size) {
 }
 
 function mixBlank(parts, caption) {
-  return { parts, partsPrev: null, partsAt: -1, sets: 0, blend: -1, drained: 0, lift: 0, ruled: [], ruledAt: [],
-    caption, captionAt: -1, t: 0, doneAt: -1 };
+  return { parts, partsPrev: null, partsAt: -1, sets: 0, blend: -1, blendPrev: -1, blendAt: -1,
+    blends: 0, drained: 0, lift: 0, ruled: [], ruledAt: [], caption, captionAt: -1, t: 0, doneAt: -1 };
 }
 
 // What a cup holds: null before a is set, else bag A for the first `parts` cups and bag B after.
@@ -601,21 +603,23 @@ function drawMix(g, w, h, env, plan, s, variant) {
       g.stroke();
     }
   }
-  // The bed, which wants its share and takes the blend at the finale: the blend develops over
-  // the bare bed through the matte, with a flicker, and the water drains through it in treads.
+  // The bed takes the solved blend, then any blend the visitor makes while continuing to play.
+  // Each new soil develops over the last through the matte; water drains through it in treads.
   const bx = w * 0.14;
   const by = h * 0.62;
   const bw = w * 0.72;
   const bh = h * 0.28;
   write(g, 'the bed wants ' + target + '% sand', w / 2, by - small * 1.1, size, c.accent2);
-  const bedRite = roll(rite, 0xbe, 0);
-  const bedP = s.blend >= 0 ? came(s, s.doneAt, 1.2, reduced) : 0;
+  const bedRite = roll(rite, 0xbe, s.blends);
+  const bedP = s.blend >= 0 ? came(s, s.blendAt >= 0 ? s.blendAt : s.doneAt, 1.2, reduced) : 0;
   const bedK = s.blend >= 0 ? bedRite.stair(bedP) * bedRite.flicker(bedP) : 0;
   if (bedK < 1) {
-    g.fillStyle = env.mix(c.bg, c.bg2, 0.6);
+    g.fillStyle = s.blendPrev >= 0 ? soilTone(env, s.blendPrev) : env.mix(c.bg, c.bg2, 0.6);
     g.fillRect(bx, by, bw, bh);
-    flecks(g, env, bx, by, bw, bh, Math.round(16 * v.density), 7, 0.12);
-    write(g, '?', w / 2, by + bh / 2, size * 2, env.alpha(c.muted, 0.5), 'center', '600');
+    if (s.blendPrev < 0) {
+      flecks(g, env, bx, by, bw, bh, Math.round(16 * v.density), 7, 0.12);
+      write(g, '?', w / 2, by + bh / 2, size * 2, env.alpha(c.muted, 0.5), 'center', '600');
+    }
   }
   if (bedK > 0) {
     g.fillStyle = soilTone(env, s.blend);
@@ -638,8 +642,7 @@ function drawMix(g, w, h, env, plan, s, variant) {
 }
 
 function mixPreview(g, w, h, env, plan) {
-  const v = env.variant || PLAIN;
-  drawMix(g, w, h, env, plan, mixBlank(Math.round(v.turn * 10), 'a sandier soil drains faster'), v);
+  drawMix(g, w, h, env, plan, mixBlank(null, 'a sandier soil drains faster'), env.variant);
 }
 
 function mixPiece(env, plan) {
@@ -704,6 +707,17 @@ function mixPiece(env, plan) {
           s.parts = next;
           s.partsAt = s.t;
           s.sets += 1;
+          if (c.done) {
+            s.blendPrev = s.blend;
+            s.blend = shareOf(plan.a, plan.b, next);
+            s.blendAt = s.t;
+            s.blends += 1;
+            s.drained = 0;
+            s.caption = s.blend + '% sand: ' + (s.blend === plan.a
+              ? 'the blend and bag A drain at the same rate'
+              : 'it drains ' + (s.blend > plan.a ? 'faster' : 'slower') + ' than bag A');
+            s.captionAt = s.t;
+          }
         }
         c.status(s.parts + ' of the ten from bag A, ' + (10 - s.parts) + ' from bag B');
       }
@@ -716,7 +730,7 @@ function mixPiece(env, plan) {
         if (s.doneAt < 0) s.doneAt = s.t;
         s.lift = Math.min(1, s.lift + dt * 0.5);
         // The water goes through in about four seconds at pure sand, slower the less sand there is.
-        s.drained = Math.min(1, s.drained + dt * (0.08 + target / 100 * 0.22) * (c.reduced ? 3 : 1));
+        s.drained = Math.min(1, s.drained + dt * (0.08 + s.blend / 100 * 0.22) * (c.reduced ? 3 : 1));
       }
       draw(c);
     },
@@ -960,9 +974,15 @@ function routePiece(env, plan) {
 
 /* ---- the module ----------------------------------------------------------------------------- */
 
+const dealt = new WeakMap();
 function deal(env) {
-  const roll = env.rnd();
-  return roll < 0.34 ? corePlan(env) : roll < 0.68 ? mixPlan(env) : routePlan(env);
+  let plan = dealt.get(env);
+  if (!plan) {
+    const roll = env.rnd();
+    plan = roll < 0.34 ? corePlan(env) : roll < 0.68 ? mixPlan(env) : routePlan(env);
+    dealt.set(env, plan);
+  }
+  return plan;
 }
 
 export default {
@@ -973,6 +993,12 @@ export default {
     if (plan.kind === 'core') corePreview(g, w, h, env, plan);
     else if (plan.kind === 'mix') mixPreview(g, w, h, env, plan);
     else routePreview(g, w, h, env, plan);
+  },
+  animate(g, w, h, env, t) {
+    const plan = deal(env);
+    if (plan.kind !== 'core' || env.reduced) return false;
+    corePreview(g, w, h, env, plan, Math.max(0, t));
+    return true;
   },
   spark(env) {
     const plan = deal(env);
