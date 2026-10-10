@@ -846,7 +846,7 @@ function waterPiece(env, plan) {
 /* ---- the oldest stem ----------------------------------------------------------------------- */
 
 function ages(plan) {
-  return plan.leaves.map((l, i) => l / plan.rates[i]);
+  return plan.leaves.map((l, i) => (l - (plan.born ? plan.born[i] : 0)) / plan.rates[i] + (plan.sleep ? plan.sleep[i] : 0));
 }
 
 function ageOrder(plan) {
@@ -858,7 +858,11 @@ function ageOk(p) {
   if (!p || p.kind !== 'age') return false;
   const list = (v, ok) => Array.isArray(v) && v.length === 4 && v.every(ok);
   if (!list(p.rates, (r) => Number.isInteger(r) && r >= 1 && r <= 4)) return false;
-  if (!list(p.leaves, (l, i) => Number.isInteger(l) && l >= 3 && l <= 24 && l % p.rates[i] === 0)) return false;
+  const history = p.born !== undefined || p.sleep !== undefined;
+  if (history && (!list(p.born, (b) => Number.isInteger(b) && b >= 1 && b <= 4)
+    || !list(p.sleep, (s) => Number.isInteger(s) && s >= 1 && s <= 6))) return false;
+  if (!list(p.leaves, (l, i) => Number.isInteger(l) && l >= 3 && l <= 24
+    && l > (history ? p.born[i] : 0) && (l - (history ? p.born[i] : 0)) % p.rates[i] === 0)) return false;
   const a = ages(p);
   if (new Set(a).size !== 4) return false;
   const order = ageOrder(p);
@@ -867,16 +871,29 @@ function ageOk(p) {
   return list(p.start, (v) => Number.isInteger(v) && v >= 0 && v < 4) && new Set(p.start).size === 4 && !p.start.every((v, i) => v === order[i]);
 }
 
+// The winter ledger separates growing time from age: seed leaves were there at sprouting,
+// and paused weeks added no leaves. Both histories travel with the card, not the current sky.
 function agePlan(env) {
+  const history = env.chance(0.55);
   for (let guard = 0; guard < 80; guard++) {
     const rates = [];
     const leaves = [];
+    const born = [];
+    const sleep = [];
     for (let i = 0; i < 4; i++) {
       const r = env.int(1, 4);
+      const b = history ? env.int(1, 4) : 0;
+      const growing = env.int(Math.max(1, Math.ceil((3 - b) / r)), Math.floor((24 - b) / r));
       rates.push(r);
-      leaves.push(r * env.int(Math.ceil(3 / r), Math.floor(24 / r)));
+      leaves.push(b + r * growing);
+      born.push(b);
+      sleep.push(history ? env.int(1, 6) : 0);
     }
     const plan = { kind: 'age', rates, leaves, start: [0, 1, 2, 3] };
+    if (history) {
+      plan.born = born;
+      plan.sleep = sleep;
+    }
     if (new Set(ages(plan)).size !== 4 || Math.max.apply(null, ages(plan)) < 4) continue;
     plan.start = startFor(env, ageOrder(plan));
     if (ageOk(plan)) return plan;
@@ -887,11 +904,12 @@ function agePlan(env) {
 function carriedAge(env) {
   const p = env.card && env.card.of;
   if (!ageOk(p)) return null;
-  return { kind: 'age', rates: p.rates.slice(), leaves: p.leaves.slice(), start: p.start.slice() };
+  return { kind: 'age', rates: p.rates.slice(), leaves: p.leaves.slice(), start: p.start.slice(),
+    ...(p.born ? { born: p.born.slice(), sleep: p.sleep.slice() } : {}) };
 }
 
-function ageTitle() {
-  return 'the oldest stem: four under glass';
+function ageTitle(plan) {
+  return plan && plan.born ? 'the winter ledger: four under glass' : 'the oldest stem: four under glass';
 }
 
 function ageGeometry(w, h) {
@@ -941,6 +959,10 @@ function drawAge(g, w, h, env, plan, s, variant, plates) {
     write(g, plan.leaves[i] + ' leaves', x, tip[1] - 11 * k, small, 'center', env.alpha(c.fg, 0.9));
     write(g, plan.rates[i] + (plan.rates[i] === 1 ? ' leaf a week' : ' leaves a week'), x, geo.soilY + h * 0.07, small, 'center', env.alpha(c.accent2, 0.95));
     if (mine.flicker(mp)) write(g, RANKS[rank], x, geo.soilY + h * 0.13, small, 'center', env.alpha(c.fg, 0.8));
+    if (plan.born) {
+      write(g, 'start: ' + plan.born[i] + ' leaves', x, geo.soilY + h * 0.2, small, 'center', c.fg);
+      write(g, 'pause: ' + plan.sleep[i] + ' weeks', x, geo.soilY + h * 0.27, small, 'center', c.fg);
+    }
   }
   // Each stem's letter, and the age a hint has given it, are set once every stem is drawn and
   // counted, so the canvas's font is set once for them and once for the counts rather than twice
@@ -990,14 +1012,18 @@ function agePiece(env, plan) {
     paced.stir(s.t + (c.reduced ? 0 : MOVE));
   }
   return {
-    title: ageTitle(),
-    brief: 'Four stems under glass. Each tag gives how many leaves that stem grows in a week, and its leaves are drawn and counted. A stem that grows three leaves a week and carries twelve has grown for four weeks. Set the order with the arrows, or tap a stem to move it up one place; a stem already first moves to the end.',
-    goal: 'Put the stems oldest to youngest, and say how many weeks the oldest has grown.',
+    title: ageTitle(plan),
+    brief: (plan.born
+      ? 'Work out the ages of four stems from their growth records. Each started with the leaves marked start, kept every leaf, and grew at its tagged rate except during the weeks marked pause. Subtract the starting leaves, divide by the growth rate, then add the paused weeks: a stem still ages while it rests. '
+      : 'Four stems under glass. Each tag gives how many leaves that stem grows in a week, and its leaves are drawn and counted. A stem that grows three leaves a week and carries twelve has grown for four weeks. ')
+      + 'Set the order with the arrows, or tap a stem to move it up one place; a stem already first moves to the end.',
+    goal: 'Put the stems oldest to youngest, and say how many weeks old the oldest is.',
     aspect: '16 / 10',
     checkLabel: 'check the bed',
     steps: [
-      { id: 'order', ask: 'the stems, oldest first', kind: 'order', items: LETTERS.map((l, i) => ({ label: 'stem ' + l + ': ' + plan.leaves[i] + ' leaves; ' + plan.rates[i] + ' per week', value: i })), value: plan.start.slice() },
-      { id: 'oldest', ask: 'how long the oldest has grown', kind: 'number', min: 1, max: 24, step: 1, value: 1, unit: 'weeks' },
+      { id: 'order', ask: 'the stems, oldest first', kind: 'order', items: LETTERS.map((l, i) => ({ label: 'stem ' + l + ': ' + plan.leaves[i] + ' leaves; ' + plan.rates[i] + ' per week'
+        + (plan.born ? '; started with ' + plan.born[i] + ' leaves; paused ' + plan.sleep[i] + ' weeks' : ''), value: i })), value: plan.start.slice() },
+      { id: 'oldest', ask: 'how old the oldest stem is', kind: 'number', min: 1, max: plan.born ? 30 : 24, step: 1, value: 1, unit: 'weeks' },
       { id: 'hint', ask: 'one stem\'s age', kind: 'press', count: 1, label: 'show me one', optional: true }
     ],
     solution: { order: order.slice(), oldest },
@@ -1007,7 +1033,7 @@ function agePiece(env, plan) {
       for (let i = 0; i < 4; i++) if (cur[i] === order[i]) right += 1;
       const weeks = Math.round(Number(c.value('oldest')));
       const ageRight = weeks === oldest;
-      if (right === 4 && ageRight) return { solved: true, say: 'the leaves read true, oldest to youngest: ' + named(order) + '; stem ' + LETTERS[order[0]] + ' has grown ' + oldest + ' weeks' };
+      if (right === 4 && ageRight) return { solved: true, say: 'the leaves read true, oldest to youngest: ' + named(order) + '; stem ' + LETTERS[order[0]] + ' is ' + oldest + ' weeks old' + (plan.born ? ', including its weeks at rest' : '') };
       const parts = [];
       parts.push(right === 4 ? 'the order is right' : right === 0 ? 'none of the stems is in the right place yet' : WORDS[right] + ' of four in the right place');
       if (!ageRight) parts.push(weeks < oldest ? 'the oldest is older than that' : 'the oldest is younger than that');
@@ -1022,7 +1048,7 @@ function agePiece(env, plan) {
         arrange(value.map(Number), c);
         c.status('oldest first: ' + named(s.order));
       }
-      if (id === 'oldest') c.status('you say the oldest has grown ' + Math.round(Number(value)) + ' weeks');
+      if (id === 'oldest') c.status('you say the oldest is ' + Math.round(Number(value)) + ' weeks old');
       if (id === 'hint') {
         const next = s.hinted.length < helps ? order.find((i) => !s.hinted.includes(i)) : undefined;
         if (next !== undefined) {
@@ -1030,7 +1056,10 @@ function agePiece(env, plan) {
           s.hintAt[next] = s.t;
           paced.stir(s.t + (c.reduced ? 0 : HINT));
           c.hint();
-          c.status('stem ' + LETTERS[next] + ' has grown ' + a[next] + (a[next] === 1 ? ' week' : ' weeks'));
+          c.status(plan.born
+            ? 'stem ' + LETTERS[next] + ': (' + plan.leaves[next] + ' - ' + plan.born[next] + ') / ' + plan.rates[next]
+              + ' = ' + (a[next] - plan.sleep[next]) + ' growing weeks; add ' + plan.sleep[next] + ' paused weeks to get ' + a[next] + ' weeks old'
+            : 'stem ' + LETTERS[next] + ': ' + plan.leaves[next] + ' leaves / ' + plan.rates[next] + ' per week = ' + a[next] + ' weeks old');
         } else if (s.hinted.length >= helps) {
           c.status('that is all the glass will show at this difficulty; the rest is in the stems');
         } else {
@@ -1122,9 +1151,11 @@ export default {
     }
     const plan = d.plan;
     return {
-      title: ageTitle(),
-      mono: LETTERS.map((l, i) => l + ': ' + plan.leaves[i] + ' leaves, ' + plan.rates[i] + ' a week').join('\n'),
-      text: 'A reading of the leaves: four stems, four rates of growth. Which came up first, and how many weeks ago?',
+      title: ageTitle(plan),
+      mono: LETTERS.map((l, i) => l + ': ' + plan.leaves[i] + ' leaves, ' + plan.rates[i] + ' a week'
+        + (plan.born ? '; start ' + plan.born[i] + ', pause ' + plan.sleep[i] + ' weeks' : '')).join('\n'),
+      text: plan.born ? 'The smallest stem may have waited longest. Starting leaves and weeks at rest are written on the tags: recover the ages and find which came up first.'
+        : 'A reading of the leaves: four stems, four rates of growth. Which came up first, and how many weeks ago?',
       aspect: '16 / 10',
       paint: (g, w, h, cardEnv) => agePreview(g, w, h, cardEnv, plan),
       of: plan

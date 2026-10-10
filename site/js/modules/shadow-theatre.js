@@ -68,17 +68,20 @@ const CUTOUTS = [
 // Each cutout's outline in words, in the order of CUTOUTS: what the brief says of every shadow on
 // the screen, so the match can be made from the words as well as from the picture.
 const OUTLINES = [
-  'two teeth on a long stem',
+  'two teeth on the right of a long stem',
   'a wide skirt with a small clapper underneath',
   'a beak to the right and a tail to the left',
   'a peaked roof with a right-hand chimney',
   'two ears and a raised tail on the right',
   'a left handle and a right spout',
-  'one sail above a hull',
+  'one sail to the right of a mast above a hull',
   'two tiers of branches above a trunk',
   'five pointed tips',
   'a crescent'
 ];
+
+// A turned-over cast uses only outlines whose left and right can be distinguished.
+const ASYMMETRIC = [0, 2, 3, 4, 5, 6];
 
 // What can move in the lamp puzzle, and what the shadow does when it does.
 const MOVES = [
@@ -768,7 +771,8 @@ function lampPiece(env, p) {
 
 function matchPlan(env) {
   const count = env.chance(0.5) ? 6 : 4;
-  const items = some(env, CUTOUTS.map((cut, i) => i), count);
+  const turned = env.chance(0.5);
+  const items = some(env, turned ? ASYMMETRIC : CUTOUTS.map((cut, i) => i), count);
   const shadows = shuffled(env, items.map((cut, i) => i)).map((cut) => ({
     cut,
     f: env.pick([15, 20, 25]),
@@ -778,7 +782,9 @@ function matchPlan(env) {
   let start = shuffled(env, order);
   for (let guard = 0; guard < 10 && start.every((v, i) => v === order[i]); guard++) start = shuffled(env, order);
   if (start.every((v, i) => v === order[i])) start = order.slice().reverse();
-  return { kind: 'match', items, shadows, start };
+  const plan = { kind: 'match', items, shadows, start };
+  if (turned) plan.flips = some(env, order.map((cut, i) => i), env.int(1, count - 1)).sort((a, b) => a - b);
+  return plan;
 }
 
 function carriedMatch(env) {
@@ -795,11 +801,21 @@ function carriedMatch(env) {
   const order = shadows.map((sh) => sh.cut);
   if (!Array.isArray(p.start) || p.start.length !== count || !p.start.every((v) => Number.isInteger(v) && v >= 0 && v < count) || new Set(p.start).size !== count) return null;
   if (p.start.every((v, i) => v === order[i])) return null;
-  return { kind: 'match', items: p.items.slice(), shadows, start: p.start.slice() };
+  if (p.flips !== undefined && (!Array.isArray(p.flips) || !p.flips.length || p.flips.length >= count
+    || new Set(p.flips).size !== p.flips.length
+    || !p.flips.every((n) => Number.isInteger(n) && n >= 0 && n < count && ASYMMETRIC.includes(p.items[shadows[n].cut])))) return null;
+  return { kind: 'match', items: p.items.slice(), shadows, start: p.start.slice(),
+    ...(p.flips ? { flips: p.flips.slice() } : {}) };
 }
 
 function matchTitle(p) {
-  return 'match the shadows: ' + p.items.map((i) => CUTOUTS[i].name).join(', ');
+  return (p.flips ? 'the turned cast: ' : 'match the shadows: ') + p.items.map((i) => CUTOUTS[i].name).join(', ');
+}
+
+function shadowOutline(p, n) {
+  const outline = OUTLINES[p.items[p.shadows[n].cut]];
+  return p.flips && p.flips.includes(n)
+    ? outline.replace(/\b(left|right)\b/g, (side) => side === 'left' ? 'right' : 'left') : outline;
 }
 
 // The bench's state as a scene opens: the visitor's matching (none on a card), nothing hinted,
@@ -812,6 +828,7 @@ function matchState(order) {
   const each = (v) => new Array(order ? order.length : 6).fill(v);
   return {
     order: order ? order.slice() : null, from: order ? order.slice() : null, movedAt: each(-1),
+    reversed: [],
     moves: each(0), hinted: [], hintAt: each(-1), inspected: null, leaving: [], inspectAt: -1, inspects: 0,
     reveal: false, revealAt: -1, lit: 1, t: 0, drawn: null, drawnAt: -1
   };
@@ -896,7 +913,8 @@ function bench(g, w, h, c, p, s, variant) {
     const k = sh.k / 100;
     const base = Math.min(slot * 0.22, rowH * 0.2) * Math.min(1, v.scale);
     // A point's x is pushed sideways by how high it stands.
-    const map = (q) => ({ x: q[0] * f * base + (0.5 - q[1]) * k * f * base, y: -(0.5 - q[1]) * f * base });
+    const facing = p.flips && p.flips.includes(n) ? -1 : 1;
+    const map = (q) => ({ x: facing * q[0] * f * base + (0.5 - q[1]) * k * f * base, y: -(0.5 - q[1]) * f * base });
     const pts = CUTOUTS[p.items[sh.cut]].points.map(map);
     const minX = Math.min(...pts.map((q) => q.x));
     const maxX = Math.max(...pts.map((q) => q.x));
@@ -911,7 +929,7 @@ function bench(g, w, h, c, p, s, variant) {
     g.fillStyle = c.alpha(col.bg, 0.9);
     g.fill();
     text(g, String(n + 1), (column + 0.5) * slot, rowY + fs * 1.1, fs * 1.1, col.bg, 'center', 700);
-    text(g, 'x ' + (f % 1 ? f.toFixed(1) : f), (column + 0.5) * slot, rowY + rowH - fs * 2.1, fs * 0.9, col.bg, 'center', 600);
+    text(g, 'x ' + (f % 1 ? f.toFixed(1) : f) + (s.reversed.includes(n) ? '; reversed?' : ''), (column + 0.5) * slot, rowY + rowH - fs * 2.1, fs * 0.9, col.bg, 'center', 600);
     // The shadow being inspected: a thin frame round it, inside its slot, cut in behind the
     // piece's edge on the roll of this inspection through one clip (the frame's outline less its
     // inside), and resting in two shades. The frames handed over before it (handOver, above) are
@@ -990,20 +1008,28 @@ function matchPiece(env, p) {
   }
   return {
     title: matchTitle(p),
-    brief: 'Match each numbered shadow to a cutout on the bench. Each is enlarged by the factor underneath and leaned sideways, but keeps its outline. Read each row left to right, then down. Shadow outlines: ' + p.shadows.map((sh, i) => (i + 1) + ': ' + OUTLINES[p.items[sh.cut]]).join('; ') + '.',
-    goal: 'Match shadows 1 to ' + count + ' to their cutouts, using each cutout once.',
+    brief: 'Match each numbered shadow to a cutout on the bench. Each is enlarged by the factor underneath and leaned sideways. '
+      + (p.flips ? 'Exactly ' + p.flips.length + ' cutouts were also turned over: their shadows reverse left and right. Compare teeth, tails, handles and other side features with the fronts on the bench. Mark those shadows as reversed. ' : 'Each keeps its outline. ')
+      + 'Read each row left to right, then down. Shadow outlines: ' + p.shadows.map((sh, i) => (i + 1) + ': ' + shadowOutline(p, i)).join('; ') + '.',
+    goal: 'Match shadows 1 to ' + count + ' to their cutouts, using each cutout once' + (p.flips ? ', and mark the ' + p.flips.length + ' reversed shadows.' : '.'),
     aspect: count === 6 ? '4 / 5' : '4 / 3',
     checkLabel: 'check the screen',
     steps: [
       { id: 'order', ask: 'the cutouts, in the order of the shadows they made', kind: 'order', items: p.items.map((cut, at) => ({ label: 'the ' + CUTOUTS[cut].name, value: at })), value: p.start.slice() },
-      { id: 'hint', ask: 'one shadow named', kind: 'press', count: 1, label: 'name one', optional: true }
+      ...(p.flips ? [{ id: 'reversed', ask: 'mark the ' + p.flips.length + ' shadows whose cutouts were turned over', kind: 'pick', count: p.flips.length, items: p.shadows.map((sh, n) => ({ label: 'shadow ' + (n + 1), value: n })) }] : []),
+      { id: 'hint', ask: 'one shadow explained', kind: 'press', count: 1, label: 'explain one', optional: true }
     ],
-    solution: { order: solution },
+    solution: { order: solution, ...(p.flips ? { reversed: p.flips.slice() } : {}) },
     check(c) {
       const n = matched();
+      const turned = p.flips ? s.reversed.filter((i) => p.flips.includes(i)).length : 0;
+      const extra = s.reversed.length - turned;
+      const solved = n === count && (!p.flips || (turned === p.flips.length && extra === 0));
+      const matching = n === 0 ? 'no shadow has its cutout yet' : WORDS[n] + ' of ' + WORDS[count] + ' shadows ' + (n === 1 ? 'has' : 'have') + ' the right cutout';
       return {
-        solved: n === count,
-        say: n === count ? 'every shadow has its cutout' : (n === 0 ? 'no shadow has its cutout yet' : WORDS[n] + ' of ' + WORDS[count] + ' shadows ' + (n === 1 ? 'has' : 'have') + ' the right cutout')
+        solved,
+        say: solved ? 'every shadow has its cutout' + (p.flips ? ', and every turned-over cutout is accounted for' : '')
+          : matching + (p.flips ? '; ' + turned + ' of ' + p.flips.length + ' reversed shadows marked, ' + extra + ' marks on unreversed shadows' : '')
       };
     },
     start(c) {
@@ -1023,18 +1049,24 @@ function matchPiece(env, p) {
         s.order = order;
         c.status('shadows 1 to ' + count + ': ' + s.order.map((i) => names[i]).join(', '));
       }
+      if (id === 'reversed' && p.flips && Array.isArray(value)) {
+        s.reversed = [...new Set(value.map(Number).filter((n) => Number.isInteger(n) && n >= 0 && n < count))];
+        c.status(s.reversed.length ? 'marked as reversed: ' + s.reversed.map((n) => 'shadow ' + (n + 1)).join(', ') : 'no shadows marked as reversed');
+      }
       if (id === 'hint') {
         const next = s.hinted.length < helps
-          ? solution.map((cut, i) => i).find((n) => !s.hinted.includes(n) && s.order[n] !== solution[n]) : undefined;
+          ? solution.map((cut, i) => i).find((n) => !s.hinted.includes(n) && (s.order[n] !== solution[n]
+            || (p.flips && s.reversed.includes(n) !== p.flips.includes(n)))) : undefined;
         if (next !== undefined) {
           s.hinted.push(next);
           s.hintAt[next] = s.t;
           c.hint();
-          c.status('shadow ' + (next + 1) + ' was cast by the ' + names[solution[next]]);
+          c.status('shadow ' + (next + 1) + ' was cast by the ' + names[solution[next]]
+            + (p.flips ? (p.flips.includes(next) ? ', turned over: ' : ', not turned over: ') + shadowOutline(p, next) : ''));
         } else if (s.hinted.length >= helps) {
-          c.status('that is all the theatre will name at this difficulty; the rest is yours');
+          c.status('that is all the theatre will explain at this difficulty; compare the outlines with your choices');
         } else {
-          c.status('every shadow you have matched wrongly has been named; the rest is yours');
+          c.status('every mismatch has been explained; compare the hints with your choices');
         }
       }
       draw(c);
@@ -1059,7 +1091,7 @@ function matchPiece(env, p) {
         s.inspects += 1;
       }
       const sh = p.shadows[n];
-      c.status('shadow ' + (n + 1) + ': ' + OUTLINES[p.items[sh.cut]] + '; enlarged ' + (sh.f / 10) + ' times and leaning ' + (sh.k < 0 ? 'left' : 'right'));
+      c.status('shadow ' + (n + 1) + ': ' + shadowOutline(p, n) + '; enlarged ' + (sh.f / 10) + ' times and leaning ' + (sh.k < 0 ? 'left' : 'right'));
       draw(c);
     },
     frame(t, dt, c) {
@@ -1069,7 +1101,8 @@ function matchPiece(env, p) {
     end(c) {
       s.reveal = true;
       s.revealAt = s.t;
-      c.status('shadows 1 to ' + count + ': ' + solution.map((i) => names[i]).join(', ') + '. the lamp stays lit');
+      c.status('shadows 1 to ' + count + ': ' + solution.map((i) => names[i]).join(', ')
+        + (p.flips ? '; reversed shadows: ' + p.flips.map((n) => n + 1).join(', ') : '') + '. the lamp stays lit');
       draw(c);
     }
   };
@@ -1138,7 +1171,9 @@ export default {
     }
     return {
       title: matchTitle(p),
-      text: p.items.length + ' cutouts, ' + p.items.length + ' shadows, each grown and leaned by the lamp. Match their outlines rather than their sizes' + (p.items.length === 6 ? '; this cast fills two rows.' : '.'),
+      text: p.items.length + ' cutouts, ' + p.items.length + ' shadows, each grown and leaned by the lamp. '
+        + (p.flips ? p.flips.length + ' cutouts were turned over. Match the cast and find the reversed shadows.' : 'Match their outlines rather than their sizes.')
+        + (p.items.length === 6 ? ' This cast fills two rows.' : ''),
       aspect: p.items.length === 6 ? '4 / 5' : '4 / 3',
       paint: (g, w, h, cardEnv) => matchPreview(g, w, h, cardEnv, p),
       of: p

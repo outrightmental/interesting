@@ -25,7 +25,7 @@
     { "file": "star-lantern.html", "name": "the lantern ritual", "orientation": "wants a rite", "mood": "ceremonial", "aspect": "3 / 4",
       "what": "Light the rite: order lanterns from clues, predict a drift, recover missing winds, or follow mirrored lanterns to their first crossing." },
     { "file": "wish-terrarium.html", "name": "the terrarium", "orientation": "minding something", "mood": "tending", "aspect": "4 / 5",
-      "what": "Tend what is under glass: decide which plants get water from their tags and readings, or order the stems by age." },
+      "what": "Tend what is under glass: decide which plants get water, or recover stem ages from their growth tags; some began with leaves and spent weeks at rest." },
     { "file": "constellation-weather.html", "name": "the weather lab", "orientation": "weather coming", "mood": "tempestuous", "aspect": "16 / 10",
       "what": "Read the weather maps: try an arrival hour and watch your forecast move, or trace the wind from high pressure to low." },
     { "file": "orbital-weaver.html", "name": "the orbital weaver", "orientation": "after symmetry", "mood": "geometric", "aspect": "1 / 1",
@@ -45,7 +45,7 @@
     { "file": "apocrypha-desk.html", "name": "the apocrypha desk", "orientation": "magpie", "mood": "curious", "aspect": "4 / 5",
       "what": "File impossible specimens by their clues — some cabinets stand five drawers tall — spot the one that breaks the drawer's rule, or find the forged catalogue number." },
     { "file": "shadow-theatre.html", "name": "the shadow theatre", "orientation": "magpie", "mood": "curious", "aspect": "4 / 3",
-      "what": "Work out where the lamp stands from a shadow's size, or match four or six enlarged, leaning shadows to their paper cutouts." },
+      "what": "Find the lamp from a shadow's size, or match four or six enlarged, leaning shadows to their cutouts; some casts also hide turned-over cutouts." },
     { "file": "sky-archive.html", "name": "the archive oracle", "orientation": "asking elsewhere", "mood": "divinatory", "aspect": "1 / 1",
       "what": "Ask the archive: try turns of a letter wheel until its stars read a word, find two true omens, or trace a star's route and add its light." }
   ],
