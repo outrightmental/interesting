@@ -80,12 +80,13 @@
            always the name of the world it opens, so the chip stays legible at a glance. It wears
            that world's own palette (data-mood, written by js/site.js), as the reading's option
            wears the palette of the world it opens onto, so each door shows its colours before it
-           is opened and a door dealt afresh is a different colour each time. #}
+           is opened; the shared world list supplies a short puzzle preview, and successive
+           openings on this page offer different doors. #}
         <li class='sparknav-option' id='sparknav-ajar' hidden>
           <span class='sparknav-ray' aria-hidden='true'></span>
           <a class='sparknav-node' id='sparknav-ajar-go' href='{{ siteRoot }}index.html'>
             <svg class='icon' viewBox='0 0 24 24' aria-hidden='true' focusable='false'><path d='{{ icons.door }}'/></svg>
-            <span class='sparknav-words'><span class='sparknav-label' id='sparknav-ajar-label'>a door ajar</span><span class='sparknav-gloss'>left ajar; another each time</span></span>
+            <span class='sparknav-words'><span class='sparknav-label' id='sparknav-ajar-label'>a door ajar</span><span class='sparknav-gloss' id='sparknav-ajar-gloss'></span></span>
           </a>
         </li>
       </ul>

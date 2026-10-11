@@ -1463,12 +1463,11 @@
     return worldList;
   }
 
-  /* The door left ajar: one world, drawn by chance for each opening of the constellation -- never
-     the page the visitor is on, and never the world their reading already offers, so it is always
-     a way out nobody chose. The chip wears the world's own name (a link's label is the name of
-     the page it opens; the gloss says it was left ajar), and the draw is made afresh on every
-     press of the logo, which is the one small reason to open the menu one more time. */
+  /* The door left ajar: a world other than this page or the reading's, with a short clue from
+     the shared list. Don't draw the last door again while this page is open: another press on the
+     logo should offer another place to explore, not the same invitation. */
   var ajarDoor = null;
+  var lastAjarDoor = null;
   function dealDoor() {
     ajarDoor = null;
     var doors = allWorlds();
@@ -1482,7 +1481,14 @@
       if (read && read.world === door.file) continue;
       pool.push(door);
     }
-    if (pool.length) ajarDoor = pool[Math.floor(Math.random() * pool.length)];
+    if (pool.length > 1 && lastAjarDoor) {
+      var otherDoors = pool.filter(function (door) { return door.file !== lastAjarDoor; });
+      if (otherDoors.length) pool = otherDoors;
+    }
+    if (pool.length) {
+      ajarDoor = pool[Math.floor(Math.random() * pool.length)];
+      lastAjarDoor = ajarDoor.file;
+    }
   }
 
   /* One of them, put away where its own file pinned it. The hidden attribute says what is meant,
@@ -1530,21 +1536,22 @@
 
   function shape() {
     if (!nav) return;
-    // The stage's page name follows the address, including a piece waiting for a sky.
-    var heading = document.getElementById('stage-world');
+    // A piece from the feed can play on this page without changing its address.
     var page = html.getAttribute('data-page');
     var world = readingWorld();
     if (world && world.world && nav.readingGo) {
-      var here = heading ? heading.textContent === world.worldName : page === world.world;
+      var here = page === world.world;
+      var doors = allWorlds();
+      var worldEntry = doors && doors.find(function (entry) { return entry.file === world.world; });
       nav.readingGo.href = root + world.world;
       wear(nav.reading, world.id);
       // On the world itself the option says where the visitor is, rather than offering them a
       // trip to where they already are.
       relabel(nav.readingLabel, here ? world.worldName : 'go to ' + world.worldName);
-      // The whispered line under the suggestion: the reading it follows from, in the reading's
-      // own words, so the option says why it is offered before it is pressed.
+      // Say why this world is offered and what visitors can try there.
       if (nav.readingGloss) {
-        relabel(nav.readingGloss, here ? 'where your reading led' : 'read as ' + world.name);
+        var preview = worldEntry && (worldEntry.gloss || worldEntry.what);
+        relabel(nav.readingGloss, 'from your reading' + (preview ? ' · ' + preview : ''));
         nav.readingGloss.hidden = false;
       }
       if (here) nav.readingGo.setAttribute('aria-current', 'page');
@@ -1563,6 +1570,10 @@
         nav.ajarGo.href = root + ajarDoor.file;
         wear(nav.ajar, ajarDoor.mood);
         relabel(nav.ajarLabel, ajarDoor.name);
+        if (nav.ajarGloss) {
+          var doorPreview = ajarDoor.gloss || ajarDoor.what;
+          relabel(nav.ajarGloss, 'another door' + (doorPreview ? ' · ' + doorPreview : ''));
+        }
         nav.ajar.hidden = false;
       } else {
         nav.ajar.hidden = true;
@@ -1573,9 +1584,7 @@
     for (var i = 0; i < destinations.length; i++) {
       var destination = destinations[i];
       if (destination === nav.readingGo || destination === nav.ajarGo) continue;
-      var label = destination.querySelector('.sparknav-label');
-      var current = heading && label ? label.textContent === heading.textContent
-        : destination.getAttribute('href') === root + page;
+      var current = destination.getAttribute('href') === root + page;
       if (current) destination.setAttribute('aria-current', 'page');
       else destination.removeAttribute('aria-current');
     }
@@ -1604,11 +1613,12 @@
      document: with nothing read after it, that happens once, in the next frame, and never inside
      the press. Closing, `leave` is how long the constellation's leaving lasts (rollLeaving), for
      the veil to go with it, in the treads the sky goes back in (leavingTreads). */
-  // A chip's words, revealed when they change while the constellation is on screen; written
-  // plainly while it is away, where nobody is watching.
+  // Words changed in a cast constellation are revealed. Before the first cast, write them
+  // plainly: the chip's arrival is their one edge.
   function relabel(node, text) {
     if (!node || node.textContent === text) return;
-    say(node, text, !nav.host.open);
+    say(node, text, !nav.host.open || !nav.sky.classList.contains('is-branching')
+      || nav.sky.classList.contains('is-unmaking') || nav.sky.hidden);
   }
 
   function gcd(a, b) {
@@ -2162,6 +2172,7 @@
       ajar: document.getElementById('sparknav-ajar'),
       ajarGo: document.getElementById('sparknav-ajar-go'),
       ajarLabel: document.getElementById('sparknav-ajar-label'),
+      ajarGloss: document.getElementById('sparknav-ajar-gloss'),
       participate: document.getElementById('sparknav-participate'),
       participateOpen: document.getElementById('sparknav-participate-open'),
       cookies: document.getElementById('sparknav-cookies'),
