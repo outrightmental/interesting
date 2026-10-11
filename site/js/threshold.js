@@ -364,6 +364,25 @@
       left: { brooding: 1, divinatory: 1 },
       right: { analytic: 1, tending: 1 },
       rested: { tender: 3, brooding: 2, cosmic: 1 }
+    },
+    {
+      probe: 'thread-board', name: 'the thread board', kind: 'thread',
+      ask: 'Seven pins and a spool of thread. Press two pins to join them; repeat that pair to remove its thread. Threads meet at pins, not where they cross. Open a puzzle whenever you like, even with no thread.',
+      pins: [
+        { label: 'pin 1, upper left', x: 25, y: 22, weights: { cosmic: 3, brooding: 1 } },
+        { label: 'pin 2, upper right', x: 75, y: 22, weights: { analytic: 3, geometric: 2 } },
+        { label: 'pin 3, right', x: 86, y: 50, weights: { restless: 3, tempestuous: 2 } },
+        { label: 'pin 4, lower right', x: 75, y: 78, weights: { tending: 3, rooted: 2 } },
+        { label: 'pin 5, lower left', x: 25, y: 78, weights: { tender: 3, rooted: 2 } },
+        { label: 'pin 6, left', x: 14, y: 50, weights: { verbal: 3, curious: 2, attentive: 1 } },
+        { label: 'pin 7, centre', x: 50, y: 50, weights: { ceremonial: 2, divinatory: 2, metrical: 1 } }
+      ],
+      bare: { tender: 3, divinatory: 2, cosmic: 1 },
+      loop: { geometric: 3, ceremonial: 2, metrical: 2 },
+      crossed: { curious: 3, tempestuous: 2, restless: 1 },
+      gathered: { tending: 3, analytic: 2, rooted: 1 },
+      separate: { verbal: 3, brooding: 2, divinatory: 1 },
+      open: { attentive: 3, tender: 1, cosmic: 1 }
     }
   ];
 
@@ -1242,7 +1261,7 @@
       place: placeProbe, draw: drawProbe, windows: windowsProbe, balance: balanceProbe,
       slider: sliderProbe, sky: skyProbe, keys: keysProbe, knock: knockProbe,
       rubbing: rubbingProbe, cairn: cairnProbe, compass: compassProbe, dye: dyeProbe,
-      censer: censerProbe
+      censer: censerProbe, thread: threadProbe
     };
     (kinds[probe.kind] || choiceProbe)(probe, body, trace, answer, finish);
     return probe;
@@ -3851,6 +3870,150 @@
     note(trace, 'swinging');
     paint();
     begin();
+  }
+  // Only the final network contributes to the reading, never the order of joins or removals.
+  // A thread pays out from its lower-numbered pin and reels back there; nothing runs at rest.
+  function threadProbe(probe, body, trace, answer, finish) {
+    var held = -1;
+    var threads = [];
+    var board = el('div', 'probe-thread-board');
+    board.setAttribute('role', 'group');
+    board.setAttribute('aria-label', 'Seven numbered pins. Select two to join them; select the same pair to remove its thread.');
+    for (var i = 0; i < probe.pins.length; i++) {
+      for (var j = i + 1; j < probe.pins.length; j++) {
+        var a = probe.pins[i];
+        var b = probe.pins[j];
+        var line = el('span', 'probe-thread-line');
+        line.setAttribute('aria-hidden', 'true');
+        line.style.left = a.x + '%';
+        line.style.top = a.y + '%';
+        line.style.width = Math.hypot(b.x - a.x, b.y - a.y).toFixed(3) + '%';
+        line.style.setProperty('--thread-angle', (Math.atan2(b.y - a.y, b.x - a.x) * 180 / Math.PI).toFixed(3) + 'deg');
+        board.appendChild(line);
+        threads.push({ a: i, b: j, on: false, node: line });
+      }
+    }
+    var buttons = probe.pins.map(function (pin, index) {
+      var button = el('button', 'probe-thread-pin', String(index + 1));
+      button.type = 'button';
+      button.style.left = pin.x + '%';
+      button.style.top = pin.y + '%';
+      button.addEventListener('click', function () {
+        if (held === index) {
+          held = -1;
+          refresh('Pin ' + (index + 1) + ' released.');
+        } else if (held < 0) {
+          held = index;
+          refresh('Pin ' + (index + 1) + ' selected. Choose another pin, or press this pin again to release it.');
+        } else {
+          var first = held;
+          var low = Math.min(first, index);
+          var high = Math.max(first, index);
+          var thread = threads.find(function (entry) { return entry.a === low && entry.b === high; });
+          thread.on = !thread.on;
+          cutFor(thread.node, 'thread-link', { family: 'stair', duration: 'medium' });
+          thread.node.style.setProperty('--thread-reach', thread.on ? '1' : '0');
+          held = -1;
+          refresh('Pins ' + (first + 1) + ' and ' + (index + 1) + (thread.on ? ' joined.' : ': thread removed.'));
+        }
+      });
+      board.appendChild(button);
+      return button;
+    });
+    body.appendChild(board);
+    board.addEventListener('click', function (ev) {
+      if (ev.target !== board) return;
+      refresh(held < 0 ? 'Choose a numbered pin to begin a thread.'
+        : 'Pin ' + (held + 1) + ' is selected. Choose another pin to join it.');
+    });
+    var controls = el('div', 'controls');
+    var done = el('button', 'btn-filled', 'open a puzzle');
+    done.type = 'button';
+    controls.appendChild(done);
+    body.appendChild(controls);
+
+    function shape() {
+      var links = threads.filter(function (thread) { return thread.on; });
+      var degrees = probe.pins.map(function () { return 0; });
+      var roots = probe.pins.map(function (pin, index) { return index; });
+      var loops = 0;
+      var crossings = 0;
+      function root(index) {
+        while (roots[index] !== index) index = roots[index];
+        return index;
+      }
+      links.forEach(function (thread) {
+        degrees[thread.a] += 1;
+        degrees[thread.b] += 1;
+        var a = root(thread.a);
+        var b = root(thread.b);
+        if (a === b) loops += 1;
+        else roots[b] = a;
+      });
+      var groups = [];
+      degrees.forEach(function (degree, index) {
+        if (!degree) return;
+        var group = root(index);
+        if (groups.indexOf(group) === -1) groups.push(group);
+      });
+      function side(a, b, c) {
+        return (b.x - a.x) * (c.y - a.y) - (b.y - a.y) * (c.x - a.x);
+      }
+      for (var i = 0; i < links.length; i++) {
+        for (var j = i + 1; j < links.length; j++) {
+          var first = links[i];
+          var second = links[j];
+          if (first.a === second.a || first.a === second.b || first.b === second.a || first.b === second.b) continue;
+          var a = probe.pins[first.a];
+          var b = probe.pins[first.b];
+          var c = probe.pins[second.a];
+          var d = probe.pins[second.b];
+          if (side(a, b, c) * side(a, b, d) < 0 && side(c, d, a) * side(c, d, b) < 0) crossings += 1;
+        }
+      }
+      return { links: links, degrees: degrees, loops: loops, crossings: crossings, groups: groups.length };
+    }
+    function refresh(detail) {
+      var stats = shape();
+      buttons.forEach(function (button, index) {
+        var neighbours = [];
+        stats.links.forEach(function (thread) {
+          if (thread.a === index) neighbours.push(thread.b + 1);
+          else if (thread.b === index) neighbours.push(thread.a + 1);
+        });
+        button.setAttribute('aria-pressed', held === index ? 'true' : 'false');
+        button.setAttribute('data-linked', neighbours.length ? 'true' : 'false');
+        button.setAttribute('aria-label', probe.pins[index].label
+          + (neighbours.length ? '; joined to pins ' + neighbours.join(', ') : '; no threads')
+          + (held === index ? '; selected, press again to release' : '; press to select'));
+      });
+      var line = stats.links.length ? plural(stats.links.length, 'thread')
+        + (stats.loops ? '; a loop is closed' : '')
+        + (stats.crossings ? '; threads cross between pins' : '')
+        + (stats.groups > 1 ? '; separate shapes' : '') + '.' : 'No threads on the board.';
+      note(trace, (detail ? detail + ' ' : '') + line);
+    }
+    done.addEventListener('click', function () {
+      var stats = shape();
+      Object.keys(answer).forEach(function (id) { delete answer[id]; });
+      if (!stats.links.length) add(answer, probe.bare, 1);
+      else {
+        probe.pins.forEach(function (pin, index) {
+          add(answer, pin.weights, stats.degrees[index] / (2 * stats.links.length));
+        });
+        var gathered = Math.max.apply(null, stats.degrees) >= 3;
+        if (stats.loops) add(answer, probe.loop, 1);
+        if (stats.crossings) add(answer, probe.crossed, 1);
+        if (gathered) add(answer, probe.gathered, 1);
+        if (stats.groups > 1) add(answer, probe.separate, 1);
+        if (!stats.loops && !stats.crossings && !gathered && stats.groups === 1) add(answer, probe.open, 1);
+      }
+      held = -1;
+      refresh('This is the pattern you chose.');
+      // The board is already the answer: no extra seal or locked pins while the stage takes it up.
+      finish(0);
+    });
+    refresh();
   }
   function describe(reading) {
     var o = reading && reading.orientation;
