@@ -12,13 +12,13 @@
                         spacing follows from the ruler. The wavelength, distance and spacing are
                         chosen so the fringe spacing is a whole number of millimetres. Say the
                         spacing, and what one named change would do to the fringes.
-     the filter order   Three polarising filters at stated angles. The first passes half the
-                        lamp's light whatever its angle; each one after passes cos squared of the
-                        angle between it and the one before. Put them in the order that passes the
-                        most light, and say what fraction gets through, to the nearest five per
-                        cent. The angles are chosen so one middle filter beats the other two and
-                        the rounding is never in doubt; the two orders with that filter in the
-                        middle pass the same light, and the check accepts either.
+     the filter order   Three to five polarising filters at stated angles. The first passes half
+                        the lamp's light whatever its angle; each one after passes cos squared of
+                        the angle between it and the one before. Find the brightest chain and its
+                        percentage, rounded to five per cent. Each set has one brightest chain,
+                        apart from reversing it, with no uncertain rounding. Help names a useful
+                        neighbour, measures a trial, or compares its turns. Once solved, the beam
+                        follows the visitor's order rather than keeping the answer's brightness.
      the spectrum key Six lamps each show their red, green and blue strengths and their power.
                         Choose two whose light adds to the three bars of a target, then add
                         their power readings. Selecting lamps lights a comparison on the table.
@@ -639,54 +639,77 @@ function cos2(degrees) {
   return Math.cos((degrees * Math.PI) / 180) ** 2;
 }
 
-// What passes three filters in the given order: half at the first, cos squared of each turn after.
+// Half at the first filter, then one transmission factor for every neighbouring pair.
 function passes(order) {
-  return 50 * cos2(order[0] - order[1]) * cos2(order[1] - order[2]);
+  let light = 50;
+  for (let i = 1; i < order.length; i++) light *= cos2(order[i - 1] - order[i]);
+  return light;
 }
 
-// The filter that belongs in the middle, the order that puts it there, and the percentage to the
-// nearest five -- or null when two middles tie, or the true value sits within one of a rounding
-// boundary.
+function ordersOf(items) {
+  if (items.length === 0) return [[]];
+  return items.flatMap((item, i) => ordersOf(items.filter((_, j) => j !== i))
+    .map((tail) => [item, ...tail]));
+}
+
+// Reversal is the same optical chain. Reject any other competing maximum, and readings too
+// close to a rounding boundary for the table's two-decimal factors to settle them reliably.
 function bestOf(angles) {
-  const trials = angles.map((middle) => {
-    const ends = angles.filter((a) => a !== middle);
-    return { middle, order: [ends[0], middle, ends[1]], exact: passes([ends[0], middle, ends[1]]) };
-  }).sort((p, q) => q.exact - p.exact);
-  if (trials[0].exact - trials[1].exact < 0.5) return null;
+  const trials = ordersOf(angles).map((order) => ({ order, exact: passes(order) }))
+    .sort((p, q) => q.exact - p.exact);
   const best = trials[0];
+  const reverse = best.order.slice().reverse();
+  const other = trials.find((trial) =>
+    !trial.order.every((a, i) => a === best.order[i]) &&
+    !trial.order.every((a, i) => a === reverse[i]));
+  if (!other || best.exact - other.exact < 0.5) return null;
   const rounded = Math.round(best.exact / 5) * 5;
   if (Math.abs((best.exact % 5) - 2.5) < 1 || rounded < 5) return null;
-  return { middle: best.middle, order: best.order, exact: best.exact, percent: rounded };
+  return { middle: best.order[1], order: best.order, exact: best.exact, percent: rounded };
 }
 
 function isOrder(list, angles) {
-  return Array.isArray(list) && list.length === 3 && angles.every((a) => list.includes(a)) && new Set(list).size === 3;
+  return Array.isArray(list) && list.length === angles.length &&
+    angles.every((a) => list.includes(a)) && new Set(list).size === angles.length;
+}
+
+const FILTER_SETS = new Map();
+function filterSets(count) {
+  if (FILTER_SETS.has(count)) return FILTER_SETS.get(count);
+  const sets = [];
+  function choose(angles, from) {
+    if (angles.length === count) {
+      if (bestOf(angles)) sets.push(angles);
+      return;
+    }
+    for (let i = from; i <= ANGLES.length - (count - angles.length); i++) {
+      choose([...angles, ANGLES[i]], i + 1);
+    }
+  }
+  choose([], 0);
+  if (!sets.length) throw new Error('No unambiguous polarising filter sets for ' + count + ' plates');
+  FILTER_SETS.set(count, sets);
+  return sets;
 }
 
 function filterPlan(env) {
-  for (let attempt = 0; attempt < 200; attempt++) {
-    const pool = ANGLES.slice();
-    const angles = [];
-    while (angles.length < 3) angles.push(pool.splice(env.int(0, pool.length - 1), 1)[0]);
-    angles.sort((p, q) => p - q);
-    const best = bestOf(angles);
-    if (!best) continue;
-    // An opening order that is not an answer, so the table asks something.
-    const starts = [];
-    for (const a of angles) for (const b of angles) for (const c of angles) if (a !== b && b !== c && a !== c && b !== best.middle) starts.push([a, b, c]);
-    return { kind: 'filters', number: env.int(100, 999), angles, start: starts[env.int(0, starts.length - 1)] };
-  }
-  return { kind: 'filters', number: env.int(100, 999), angles: [0, 30, 45], start: [30, 0, 45] };
+  const sets = filterSets(env.int(3, 5));
+  const angles = sets[env.int(0, sets.length - 1)].slice();
+  const best = bestOf(angles);
+  const starts = ordersOf(angles).filter((order) => passes(order) < best.exact - 0.5);
+  return { kind: 'filters', number: env.int(100, 999), angles,
+    start: starts[env.int(0, starts.length - 1)] };
 }
 
 function carriedFilters(env) {
   const p = env.card && env.card.of;
   if (!p || p.kind !== 'filters') return null;
   if (!Number.isInteger(p.number) || p.number < 100 || p.number > 999) return null;
-  if (!Array.isArray(p.angles) || p.angles.length !== 3 || !p.angles.every((a) => ANGLES.includes(a)) || new Set(p.angles).size !== 3) return null;
+  if (!Array.isArray(p.angles) || p.angles.length < 3 || p.angles.length > 5 ||
+    !p.angles.every((a) => ANGLES.includes(a)) || new Set(p.angles).size !== p.angles.length) return null;
   const angles = p.angles.slice().sort((a, b) => a - b);
   const best = bestOf(angles);
-  if (!best || !isOrder(p.start, angles) || p.start[1] === best.middle) return null;
+  if (!best || !isOrder(p.start, angles) || passes(p.start) >= best.exact - 0.5) return null;
   return { kind: 'filters', number: p.number, angles, start: p.start.slice() };
 }
 
@@ -734,7 +757,7 @@ function filterPlate(g, env, x, y, radius, angle, v, ring) {
 function filterState(order) {
   return {
     order: order.slice(), from: order.slice(), orderAt: -1, orders: 0,
-    named: null, namedSlot: -1, namedAt: -1, namings: 0, chipsGone: [],
+    named: null, namedSlot: -1, namedAt: -1, namings: 0, chipsGone: [], looks: 0,
     open: false, openAt: -1, guess: null, guessFrom: 0, guessAt: -1, guesses: 0, barAt: -1,
     t: 0, drawn: null, drawnAt: -1
   };
@@ -753,7 +776,7 @@ function turnBetween(from, to) {
   return ((((to - from) % 180) + 270) % 180) - 90;
 }
 
-// `s`: the order on the table, the middle a hint has named, the light once the answer is in, the
+// `s`: the order on the table, a filter a hint has named, the live light once solved, the
 // visitor's guess at it, and the clock.
 function drawFilters(g, w, h, env, plan, s, variant) {
   const v = variant || PLAIN;
@@ -762,11 +785,14 @@ function drawFilters(g, w, h, env, plan, s, variant) {
   const reduced = !!env.reduced;
   const size = Math.max(9, Math.min(15, Math.round(Math.min(w, h) * 0.036)));
   const y = h * 0.36;
-  const radius = Math.min(w * 0.07, h * 0.12) * v.scale;
-  const best = bestOf(plan.angles);
-  const light = s.open && best ? best.exact / 100 : null;
+  const count = plan.angles.length;
+  const positions = plan.angles.map((_, i) => w * (0.3 + i * 0.4 / (count - 1)));
+  const radius = Math.min(Math.min(w * 0.07, h * 0.12) * v.scale, w * 0.18 / (count - 1));
   const openP = s.open ? came(s, s.openAt, 1.8, reduced) : 0;
   const orderP = came(s, s.orderAt, 1.3, reduced);
+  const shownAngles = s.order.map((to, i) => s.from[i] + turnBetween(s.from[i], to) *
+    roll(rite, 0xf11 + i, s.orders).stair(orderP));
+  const light = s.open ? passes(shownAngles) / 100 : null;
   const namedP = s.named !== null ? came(s, s.namedAt, 1.1, reduced) : 0;
   background(g, w, h, env);
   dust(g, w, h, env, v);
@@ -775,19 +801,21 @@ function drawFilters(g, w, h, env, plan, s, variant) {
   // stretch is cut in to its own strength behind the piece's edge, on a roll of its own, and
   // rests at that strength, because how bright it is is how much light the filters pass.
   const band = h * 0.07;
-  const stops = [w * 0.07, w * 0.3, w * 0.5, w * 0.7, w * 0.9];
-  for (let i = 0; i < 4; i++) {
+  const stops = [w * 0.07, ...positions, w * 0.9];
+  let strength = 1;
+  for (let i = 0; i < stops.length - 1; i++) {
+    if (i === 1) strength = 0.5;
+    else if (i > 1) strength *= cos2(shownAngles[i - 2] - shownAngles[i - 1]);
     g.fillStyle = env.alpha(c.accent2, 0.08);
     g.fillRect(stops[i], y - band / 2, stops[i + 1] - stops[i], band);
     if (light === null) continue;
-    const strength = i === 0 ? 1 : i === 1 ? 0.5 : i === 2 ? 0.5 * cos2(s.order[0] - s.order[1]) : light;
     const own = roll(rite, 0xb3a + i, 0);
     own.paint(g, stops[i], y - band / 2, stops[i + 1] - stops[i], band, own.stair(openP), env.alpha(c.accent2, 0.04 + strength * 0.3));
   }
   lamp(g, env, w * 0.07, y, Math.min(w, h) * 0.1 * v.scale);
   const chipTone = env.alpha(c.accent2, 0.13);
-  for (let i = 0; i < 3; i++) {
-    const x = w * (0.3 + i * 0.2);
+  for (let i = 0; i < count; i++) {
+    const x = positions[i];
     // A filter put in a new place turns to its angle in the stair's even treads after a hold, on a
     // roll of its own for this move, and the angle written under it is cut over to the new one at
     // its moment. The chip behind a named filter is cut in behind the piece's edge where the
@@ -795,7 +823,7 @@ function drawFilters(g, w, h, env, plan, s, variant) {
     // chip is cut away from the old one behind an edge of its own as it is cut in at the new. The
     // plate's ring and angle are lit while any of a chip is behind them.
     const plate = roll(rite, 0xf11 + i, s.orders);
-    const angle = s.from[i] + turnBetween(s.from[i], s.order[i]) * plate.stair(orderP);
+    const angle = shownAngles[i];
     const written = plate.flicker(orderP) ? s.order[i] : s.from[i];
     const box = chipBox(x, y, radius, size);
     const own = roll(rite, 0xc4e + i, s.namings);
@@ -815,7 +843,9 @@ function drawFilters(g, w, h, env, plan, s, variant) {
       g.fillStyle = chipTone;
       cover(g, own, box[0], box[1], box[2], box[3], chip);
     }
-    label(g, env, Math.round(written) + '°', x, y + radius + size * 1.1, size, 'center', lit ? c.accent2 : c.fg);
+    const angleText = Math.round(written) + '°';
+    const angleSize = fitted(g, size, angleText, w * 0.34 / (count - 1));
+    label(g, env, angleText, x, y + radius + size * 1.1, angleSize, 'center', lit ? c.accent2 : c.fg);
   }
   // The screen: unread until the order is found; then the light is cut onto it behind the
   // piece's edge, and it rests at the shade of the light that reaches it.
@@ -876,7 +906,7 @@ function drawFilters(g, w, h, env, plan, s, variant) {
     label(g, env, pair[0] + '°', x, rowY + tiny * 3.3, tiny, 'center', c.accent2);
     label(g, env, pair[1], x, rowY + tiny * 4.6, tiny, 'center', c.fg);
   });
-  label(g, env, 'past 90°, read 180° less the turn: 120° as 60°, 135° as 45°, 150° as 30°', w * 0.5, rowY + tiny * 6.4, tiny, 'center', env.alpha(c.muted, 0.9));
+  label(g, env, 'Use the smaller turn: 150° apart reads as 30°.', w * 0.5, rowY + tiny * 6.4, tiny, 'center', env.alpha(c.muted, 0.9));
   // The screen lit: the light comes over the table behind the piece's edge.
   if (s.open) daybreak(g, rite, env, w, h, openP);
 }
@@ -919,37 +949,38 @@ function filterPiece(env, plan) {
   };
   return {
     title: filterTitle(plan),
-    brief: 'Three polarising filters, at ' + plan.angles.join(', ') + ' degrees, stand in a line between the lamp and the screen. The first one the light meets passes half of it whatever its angle; each one after passes cos² of the angle between it and the one before, and the table under the lamp has the values.',
+    brief: 'Order ' + plan.angles.length + ' polarising filters at ' + plan.angles.join(', ') + ' degrees. The first passes 50% of the lamp light; multiply by one table value for every neighbouring pair. For turns of 0, 15, 30, 45, 60, 75 and 90 degrees, the values are 1, 0.93, 0.75, 0.50, 0.25, 0.07 and 0 respectively. For a turn over 90 degrees, subtract it from 180. Round only the final percentage. Tap a plate to read its neighbours; after solving, reorder the lit chain to compare its light.',
     goal: 'Put the filters in the order that passes the most light, and say how much gets through.',
     aspect: '4 / 3',
     checkLabel: 'check the table',
     steps: [
       { id: 'order', ask: 'the filters, lamp side first', kind: 'order', items: plan.angles.map((a) => ({ label: 'the ' + a + '° filter', value: a })), value: plan.start.slice() },
       { id: 'passes', ask: 'how much of the lamp\'s light gets through, to the nearest five per cent', kind: 'number', min: 0, max: 100, step: 5, unit: '%' },
-      // One thing to say, so a fierce difficulty does not offer to say it.
-      helps > 1 ? { id: 'hint', ask: 'which filter goes in the middle', kind: 'press', count: 1, label: 'name the middle one', optional: true } : null
+      { id: 'hint', ask: 'a closer look at the filter chain', kind: 'press', count: helps,
+        label: 'look again', optional: true }
     ].filter(Boolean),
-    solution: { order: best.order.slice(), passes: best.percent },
+    solution: { order: best.order.slice(), passes: { value: best.percent, near: margin * 5 } },
     check(c) {
       const order = c.value('order');
-      const orderRight = isOrder(order, plan.angles) && order[1] === best.middle;
+      const orderRight = isOrder(order, plan.angles) && Math.abs(passes(order) - best.exact) < 0.001;
       // A reading to the nearest five per cent: the difficulty says how many of those steps out
       // it may be.
       const passRight = Math.abs(Number(c.value('passes')) - best.percent) <= margin * 5;
-      if (orderRight && passRight) return { solved: true, say: 'the screen lights: with the ' + best.middle + '° filter in the middle, ' + Math.round(best.exact * 10) / 10 + '% of the light reaches the screen' };
+      if (orderRight && passRight) return { solved: true, say: 'the brightest chain is lit: ' + Math.round(best.exact * 10) / 10 + '% of the lamp light reaches the screen. Keep rearranging it to compare other orders.' };
       const stood = isOrder(order, plan.angles) && !orderRight ? Math.round(passes(order)) : null;
       const standing = stood === null ? '' : '; as they stand, the filters pass about ' + stood + '%';
       if (!orderRight && !passRight) return { solved: false, say: 'the screen stays dark: the order and the percentage are both off' + standing };
       return { solved: false, say: orderRight ? 'the order is right; the percentage is off' : 'the percentage is right; the order is off' + standing };
     },
     start(c) {
-      c.status('the screen stays unread until the order is found');
+      c.status('read the smaller turn between each pair of neighbours, then multiply their table values');
       draw(c);
     },
     apply(id, value, c) {
       if (id === 'order' && isOrder(value, plan.angles)) {
         if (value.some((a, i) => a !== s.order[i])) reorder(value, c);
-        c.status('lamp, then ' + s.order.join('°, ') + '°, then the screen');
+        c.status('lamp, then ' + s.order.join('°, ') + '°, then the screen' +
+          (s.open ? ': ' + Math.round(passes(s.order) * 10) / 10 + '% gets through' : ''));
       }
       if (id === 'passes') {
         const n = Math.round(Number(value));
@@ -968,15 +999,25 @@ function filterPiece(env, plan) {
         }
       }
       if (id === 'hint') {
-        if (s.named === null) {
-          s.named = best.middle;
-          s.namedSlot = s.order.indexOf(best.middle);
-          s.namedAt = s.t;
-          s.namings += 1;
+        if (s.looks >= helps) c.status('no looks left at this difficulty; the angle table is still yours to compare');
+        else {
+          const turns = (order) => order.slice(1).map((angle, i) => Math.abs(turnBetween(order[i], angle)));
+          const hints = [
+            'One brightest chain puts the ' + best.order[0] + '° and ' + best.order[1] + '° filters beside each other. The other neighbours still matter.',
+            'Your current chain passes ' + Math.round(passes(s.order) * 10) / 10 + '%. Reversing the whole chain passes the same amount.',
+            'Your current smaller turns are ' + turns(s.order).join(', ') + ' degrees. Compare the product of all their table values, not just the smallest turn.',
+            'A brightest chain can begin with ' + best.order[0] + '°, followed by ' + best.order[1] + '°. It can also run the whole way in reverse.',
+            'A brightest chain uses these smaller turns: ' + turns(best.order).join(', ') + ' degrees. Multiply their table values, starting at 50%.'
+          ];
+          if (s.looks === 0) {
+            s.named = best.order[1];
+            s.namedSlot = s.order.indexOf(s.named);
+            s.namedAt = s.t;
+            s.namings += 1;
+          }
           c.hint();
-          c.status('the ' + best.middle + '° filter goes in the middle');
-        } else {
-          c.status('the middle one is named; the ends can go either way round');
+          c.status(hints[s.looks]);
+          s.looks += 1;
         }
       }
       draw(c);
@@ -985,11 +1026,26 @@ function filterPiece(env, plan) {
       s.t += Math.max(0, dt);
       return step(s, c, Math.max(s.openAt, s.orderAt, s.namedAt, s.guessAt), draw);
     },
+    tap(x, y, c) {
+      const slot = clamp(Math.round((x / c.w - 0.3) / 0.4 * (s.order.length - 1)), 0, s.order.length - 1);
+      const angle = s.order[slot];
+      const neighbours = [];
+      if (slot > 0) neighbours.push(s.order[slot - 1]);
+      if (slot < s.order.length - 1) neighbours.push(s.order[slot + 1]);
+      const readings = neighbours.map((other) => {
+        const turn = Math.abs(turnBetween(angle, other));
+        return other + '°: a ' + turn + '° turn, table value ' + cos2(turn).toFixed(2);
+      });
+      c.status('The ' + angle + '° filter' + (slot === 0 ? ' meets the lamp first and passes half its light' : '') +
+        '. Neighbours: ' + readings.join('; ') + '.' +
+        (s.open ? ' The full chain passes ' + Math.round(passes(s.order) * 10) / 10 + '%.' : ''));
+    },
     end(c) {
       s.open = true;
       s.openAt = s.t;
-      if (best.order.some((a, i) => a !== s.order[i])) reorder(best.order, c);
-      c.status('half, times ' + cos2(best.order[0] - best.order[1]).toFixed(2) + ', times ' + cos2(best.order[1] - best.order[2]).toFixed(2) + ': ' + Math.round(best.exact * 10) / 10 + '% reaches the screen');
+      const factors = s.order.slice(1).map((angle, i) => cos2(s.order[i] - angle).toFixed(2));
+      c.status('50% x ' + factors.join(' x ') + ' = ' + Math.round(passes(s.order) * 10) / 10 +
+        '%. The lamp stays lit: reorder the filters to compare another chain.');
       draw(c);
     }
   };
@@ -1266,7 +1322,7 @@ export default {
     if (plan.kind === 'filters') {
       return {
         title: filterTitle(plan),
-        text: 'Three polarising filters, one lamp, one screen. Find the order that passes the most light, and how much that is.',
+        text: plan.angles.length + ' polarising filters, one lamp, one screen. Find the brightest chain; once it lights, rearrange it to see where the light goes.',
         mono: plan.angles.map((a) => a + '°').join(' / '),
         aspect: '4 / 3',
         paint: (ctx, cw, ch, cardEnv) => filterPreview(ctx, cw, ch, cardEnv, plan),
