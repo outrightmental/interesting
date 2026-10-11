@@ -1,5 +1,5 @@
 /* The apocrypha desk: a catalogue of objects that were never real, dealt one at a time. As a card
-   it is a cabinet of four drawers with a card of clues beside it, a drawer of six specimens with a
+   it is a cabinet of four or five drawers with a card of clues beside it, a drawer of six specimens with a
    rule pinned to it, or a fan of five catalogue cards with the rule on a slip under them (paint,
    spark); as a piece it is one of the three puzzles below, and the card it was opened from says
    which. Nothing here is a real object, a real collection or a real claim about the world. See
@@ -10,8 +10,8 @@
      the drawer       Four specimens go into four drawers, top to bottom -- or five into five, on
                       the seeds that deal the tall cabinet -- and a card of clues says
                       how: above, right below, not at the top, two drawers between. The clues are
-                      drawn from the true order and pruned until exactly one order fits them (all
-                      twenty-four orders are tried). A wrong check says how many stand in the
+                      drawn from the true order and pruned until exactly one order fits them (every
+                      order of the four or five is tried). A wrong check says how many stand in the
                       right drawer and no more; a hint, at a price, shows one specimen its drawer.
      the odd one out  Six specimens, each with a body, some legs and a marking, and one rule pinned
                       to the drawer that five of them keep. Find the one that breaks it and say
@@ -29,7 +29,6 @@
 
 const PLAIN = { density: 1, scale: 1, turn: 0 };
 const WORDS = ['no', 'one', 'two', 'three', 'four', 'five', 'six', 'seven'];
-const DRAWERS = ['top', 'second', 'third', 'bottom'];
 // The drawers' words for a cabinet `n` drawers tall: top and bottom hold whatever the height.
 function drawerWord(n, k) {
   return k === 0 ? 'top' : k === n - 1 ? 'bottom' : ['second', 'third', 'fourth'][k - 1];
@@ -46,13 +45,14 @@ const LETTERS = 'ABCDEFGHJKLMNPQRSTVWXYZ';
 
 /* How hard the visitor asked for their puzzles. The persona keeps one difficulty for the whole
    site (js/persona.js) and js/stage.js hands it to a piece on env.difficulty, 1 (gentle) to 5
-   (fierce); a card's env carries none, so the middle of the dial stands in. A level buys `helps`
-   -- how many things a piece will show when it is asked -- and `margin`, how far out a measured
-   answer may be and still count. Read inside piece() only: the subject is the seed's. */
+   (fierce); a card's env carries none, so the middle of the dial stands in. A level buys `helps`,
+   how many things a piece will show when it is asked. Every answer here is an order, a pick or a
+   digit the scene decides, so there is no margin to give: the desk moves on the help alone. Read
+   inside piece() only: the subject is the seed's. */
 function asked(env) {
   const said = env && env.difficulty ? Number(env.difficulty.level) : NaN;
   const level = Number.isFinite(said) ? Math.max(1, Math.min(5, Math.round(said))) : 3;
-  return { level, helps: 6 - level, margin: Math.max(0, 3 - level) };
+  return { level, helps: 6 - level };
 }
 
 /* ---- the rite: how this module moves ------------------------------------------------------- */
@@ -80,7 +80,7 @@ function asked(env) {
                        old stands until the new one's moment, never nothing in between.
 
    A desk at rest does not move and is not drawn again. Every change is read against the piece's
-   own clock, s.t, which frame() advances: a change made at `since` has come came() of its way,
+   own clock, s.t, which frame() advances: a change made at `since` is came() of its way there,
    which is 1 at once for a visitor who asked for less motion and for whatever stood there from
    the start (since < 0), so less motion shows every end state. frame() draws only while something
    is on its way, or when the canvas has been sized again, and answers whether anything still is:
@@ -230,8 +230,12 @@ function shuffled(env, list) {
 
 // What the desk looks like for one piece: the tilt everything on it lies at. Cosmetic, and rolled
 // from the seed rather than carried on the card.
+// Rolled once per env and kept, so a card drawn again lies as it lay.
+const looks = new WeakMap();
 function scenery(env) {
-  return { tilt: (env.rnd() - 0.5) * 0.08 };
+  let look = looks.get(env);
+  if (!look) looks.set(env, (look = { tilt: (env.rnd() - 0.5) * 0.08 }));
+  return look;
 }
 
 // The desk: one plain surface, nothing scattered on it, so what lies on it is the picture.
@@ -556,7 +560,7 @@ function drawCabinet(g, w, h, env, plan, s, look, variant) {
   const reduced = !!env.reduced;
   const got = (since, span) => came(s.t, since, span, reduced);
   deskTop(g, w, h, env);
-  // The cabinet: four drawer fronts, top to bottom.
+  // The cabinet: a drawer front for each specimen, top to bottom.
   g.fillStyle = env.mix(k.bg, k.bg2, 0.8);
   g.fillRect(geo.x - geo.cw * 0.04, geo.y - geo.slot * 0.12, geo.cw * 1.08, geo.ch + geo.slot * 0.24);
   const size = Math.max(9, Math.min(16, geo.slot * 0.26));
@@ -577,12 +581,12 @@ function drawCabinet(g, w, h, env, plan, s, look, variant) {
   // A hinted specimen's drawer is a set surface: the mark's colour is cut across the drawer front
   // behind the piece's edge and rests there in two shades, and the dashed frame and its label are
   // cut on over it at their moment.
-  for (let n = 0; n < s.hinted.length; n++) {
-    const item = s.hinted[n];
+  for (let j = 0; j < s.hinted.length; j++) {
+    const item = s.hinted[j];
     const slot = plan.order.indexOf(item);
     const y = geo.y + slot * geo.slot;
     const own = roll(rite, 0x4a + item);
-    const hp = got(s.hintAt[n], SPAN);
+    const hp = got(s.hintAt[j], SPAN);
     cover(g, env, own, geo.x, y + geo.slot * 0.04, geo.cw, geo.slot * 0.92, own.stair(hp), k.accent2, 0.22);
     if (own.flicker(hp)) {
       g.strokeStyle = env.alpha(k.accent2, 0.95);
@@ -720,19 +724,19 @@ function drawerPiece(env, plan) {
         c.status('top to bottom: ' + s.order.map((i) => names[i]).join(', '));
       }
       if (id === 'hint') {
-        const next = s.hinted.length < helps
-          ? plan.order.find((item) => !s.hinted.includes(item) && s.order.indexOf(item) !== plan.order.indexOf(item))
-          : undefined;
-        if (next !== undefined) {
+        // What is left to show is asked before the allowance, so the line never blames the
+        // difficulty for a hint there was nothing left to give.
+        const next = plan.order.find((item) => !s.hinted.includes(item) && s.order.indexOf(item) !== plan.order.indexOf(item));
+        if (next === undefined) {
+          c.status('every specimen out of place has been shown its drawer; the rest is yours');
+        } else if (s.hinted.length >= helps) {
+          c.status('that is all the cabinet will show at this difficulty; the rest is yours');
+        } else {
           s.hinted.push(next);
           s.hintAt.push(s.t);
           busy(s, c, SPAN);
           c.hint();
           c.status('the ' + names[next] + ' belongs in the ' + drawerWord(total, plan.order.indexOf(next)) + ' drawer');
-        } else if (s.hinted.length >= helps) {
-          c.status('that is all the cabinet will show at this difficulty; the rest is yours');
-        } else {
-          c.status('every specimen out of place has been shown its drawer; the rest is yours');
         }
       }
       draw(c);
@@ -1073,6 +1077,7 @@ function oddPiece(env, plan) {
           busy(s, c, SPAN);
         }
         if (s.pick >= 0) c.status('specimen ' + (s.pick + 1) + ': ' + describe(plan.specs[s.pick]));
+        else c.status('pick one specimen');
       }
       if (id === 'choice') {
         const f = FEATURES.find((o) => o.value === value);
@@ -1087,17 +1092,17 @@ function oddPiece(env, plan) {
         }
       }
       if (id === 'hint') {
-        const next = s.vouched.length < helps ? keepers.find((i) => !s.vouched.includes(i)) : undefined;
-        if (next !== undefined) {
+        const next = keepers.find((i) => !s.vouched.includes(i));
+        if (next === undefined) {
+          c.status('every specimen but one has been vouched for; the one left is the one that breaks it');
+        } else if (s.vouched.length >= helps) {
+          c.status('that is all the drawer will vouch for at this difficulty; read the rest against the rule');
+        } else {
           s.vouched.push(next);
           s.vouchAt.push(s.t);
           busy(s, c, SPAN);
           c.hint();
           c.status('specimen ' + (next + 1) + ' keeps the rule: ' + describe(plan.specs[next]));
-        } else if (s.vouched.length >= helps) {
-          c.status('that is all the drawer will vouch for at this difficulty; read the rest against the rule');
-        } else {
-          c.status('every specimen but one has been vouched for; the one left is the one that breaks it');
         }
       }
       draw(c);
@@ -1319,6 +1324,7 @@ function forgedPiece(env, plan) {
           if (s.digit !== null) say(c);
         }
         if (s.pick >= 0) c.status('card ' + (s.pick + 1) + ', APC-' + plan.numbers[s.pick] + ', you say');
+        else c.status('pick one card');
       }
       if (id === 'digit') {
         const digit = Number(value);
@@ -1329,17 +1335,17 @@ function forgedPiece(env, plan) {
         c.status('it should end in ' + Number(value) + ', you say');
       }
       if (id === 'hint') {
-        const next = s.vouched.length < helps ? trueCards.find((i) => !s.vouched.includes(i)) : undefined;
-        if (next !== undefined) {
+        const next = trueCards.find((i) => !s.vouched.includes(i));
+        if (next === undefined) {
+          c.status('every true card has been vouched for; the one left is the forgery');
+        } else if (s.vouched.length >= helps) {
+          c.status('that is all the desk will vouch for at this difficulty; add up the rest yourself');
+        } else {
           s.vouched.push(next);
           s.vouchAt.push(s.t);
           busy(s, c, SPAN);
           c.hint();
           c.status('APC-' + plan.numbers[next] + ' keeps the rule: ' + plan.numbers[next].slice(0, 3).split('').join(' + ') + ' ends in ' + plan.numbers[next][3]);
-        } else if (s.vouched.length >= helps) {
-          c.status('that is all the desk will vouch for at this difficulty; add up the rest yourself');
-        } else {
-          c.status('every true card has been vouched for; the one left is the forgery');
         }
       }
       draw(c);
@@ -1364,23 +1370,40 @@ function forgedPiece(env, plan) {
 
 // Which of the three the seed deals: the drawer, the odd one out, or the forged number.
 function deal(env) {
-  const roll = env.rnd();
-  return roll < 0.4 ? 'drawer' : roll < 0.75 ? 'odd' : 'forged';
+  const r = env.rnd();
+  return r < 0.4 ? 'drawer' : r < 0.75 ? 'odd' : 'forged';
 }
+
+// The plan an env deals, dealt once and kept with it: paint, spark and piece all ask here, so a
+// card drawn again is never dealt a different puzzle.
+const dealt = new WeakMap();
+function planOf(env) {
+  let plan = dealt.get(env);
+  if (!plan) {
+    const kind = deal(env);
+    plan = kind === 'drawer' ? drawerPlan(env) : kind === 'odd' ? oddPlan(env) : forgedPlan(env);
+    dealt.set(env, plan);
+  }
+  return plan;
+}
+
+const PREVIEWS = { drawer: drawerPreview, odd: oddPreview, forged: forgedPreview };
+const PIECES = { drawer: drawerPiece, odd: oddPiece, forged: forgedPiece };
 
 export default {
   id: 'apocrypha-desk',
   needsSky: false,
   paint(g, w, h, env) {
-    const kind = deal(env);
-    if (kind === 'drawer') drawerPreview(g, w, h, env, drawerPlan(env));
-    else if (kind === 'odd') oddPreview(g, w, h, env, oddPlan(env));
-    else forgedPreview(g, w, h, env, forgedPlan(env));
+    const plan = planOf(env);
+    PREVIEWS[plan.kind](g, w, h, env, plan);
+  },
+  // A card of the desk holds still: nothing on it moves until its piece is opened.
+  animate() {
+    return false;
   },
   spark(env) {
-    const kind = deal(env);
-    if (kind === 'forged') {
-      const plan = forgedPlan(env);
+    const plan = planOf(env);
+    if (plan.kind === 'forged') {
       return {
         overline: 'APC-' + plan.numbers[0] + ' and four more',
         title: forgedTitle(plan),
@@ -1390,8 +1413,7 @@ export default {
         of: plan
       };
     }
-    if (kind === 'drawer') {
-      const plan = drawerPlan(env);
+    if (plan.kind === 'drawer') {
       const names = plan.items.map((i) => SPECIMENS[i].name);
       return {
         overline: plan.number,
@@ -1404,7 +1426,6 @@ export default {
         of: plan
       };
     }
-    const plan = oddPlan(env);
     return {
       overline: plan.number,
       title: oddTitle(plan),
@@ -1415,15 +1436,8 @@ export default {
     };
   },
   piece(env) {
-    const drawer = carriedDrawer(env);
-    if (drawer) return drawerPiece(env, drawer);
-    const odd = carriedOdd(env);
-    if (odd) return oddPiece(env, odd);
-    const forged = carriedForged(env);
-    if (forged) return forgedPiece(env, forged);
-    const kind = deal(env);
-    if (kind === 'drawer') return drawerPiece(env, drawerPlan(env));
-    if (kind === 'odd') return oddPiece(env, oddPlan(env));
-    return forgedPiece(env, forgedPlan(env));
+    // The card's own puzzle when it carries one whole; the seed's otherwise.
+    const plan = carriedDrawer(env) || carriedOdd(env) || carriedForged(env) || planOf(env);
+    return PIECES[plan.kind](env, plan);
   }
 };
