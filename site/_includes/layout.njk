@@ -77,7 +77,10 @@
         </li>
         {# The door left ajar: one world, dealt afresh by js/site.js each time the constellation
            opens -- a way out nobody chose. Hidden until the script deals it, and its label is
-           always the name of the world it opens, so the chip stays legible at a glance. #}
+           always the name of the world it opens, so the chip stays legible at a glance. It wears
+           that world's own palette (data-mood, written by js/site.js), as the reading's option
+           wears the palette of the world it opens onto, so each door shows its colours before it
+           is opened and a door dealt afresh is a different colour each time. #}
         <li class='sparknav-option' id='sparknav-ajar' hidden>
           <span class='sparknav-ray' aria-hidden='true'></span>
           <a class='sparknav-node' id='sparknav-ajar-go' href='{{ siteRoot }}index.html'>

@@ -1517,6 +1517,17 @@
     nav.participate.hidden = !nav.steerCorner;
   }
 
+  // An option that opens onto a world wears that world's palette (data-mood, which _sass/_mood.scss
+  // paints every host of a mood by, as it paints the feed's cards): the chip, its icon and the ray
+  // that reaches it take the colours the visitor would find there, so the reading and the door say
+  // where they lead before they are pressed -- and a door dealt afresh on every press is a different
+  // colour each time, which is one more small reason to open the mark once more.
+  function wear(option, mood) {
+    if (!option || typeof option.setAttribute !== 'function') return;
+    if (mood) option.setAttribute('data-mood', String(mood));
+    else if (typeof option.removeAttribute === 'function') option.removeAttribute('data-mood');
+  }
+
   function shape() {
     if (!nav) return;
     // The stage's page name follows the address, including a piece waiting for a sky.
@@ -1526,6 +1537,7 @@
     if (world && world.world && nav.readingGo) {
       var here = heading ? heading.textContent === world.worldName : page === world.world;
       nav.readingGo.href = root + world.world;
+      wear(nav.reading, world.id);
       // On the world itself the option says where the visitor is, rather than offering them a
       // trip to where they already are.
       relabel(nav.readingLabel, here ? world.worldName : 'go to ' + world.worldName);
@@ -1540,6 +1552,7 @@
       nav.reading.hidden = false;
     } else if (nav.reading) {
       nav.reading.hidden = true;
+      wear(nav.reading, null);
     }
     // The door left ajar shows the draw dealDoor() made for this opening; drawn here only when
     // the one it holds has gone stale (the visitor is on it, or the reading now offers it), so
@@ -1548,6 +1561,7 @@
       if (!ajarDoor || ajarDoor.file === page || (world && world.world === ajarDoor.file)) dealDoor();
       if (ajarDoor) {
         nav.ajarGo.href = root + ajarDoor.file;
+        wear(nav.ajar, ajarDoor.mood);
         relabel(nav.ajarLabel, ajarDoor.name);
         nav.ajar.hidden = false;
       } else {
@@ -2092,6 +2106,28 @@
     return reachable;
   }
 
+  // The arrow keys walk the stars in their order -- down or right to the next, up or left to the
+  // one before, round the ends -- and Home and End go to the first and the last, so a keyboard
+  // travels the constellation as the eye does rather than one Tab at a time. Only while the
+  // constellation is the thing the lightbox holds: the state interface keeps its own keys, its
+  // text box included.
+  function stepFocus(event) {
+    if (stateHosted) return;
+    var key = event.key;
+    var forward = key === 'ArrowDown' || key === 'ArrowRight';
+    var back = key === 'ArrowUp' || key === 'ArrowLeft';
+    var home = key === 'Home';
+    var end = key === 'End';
+    if (!forward && !back && !home && !end) return;
+    var stars = navFocusable();
+    if (!stars.length) return;
+    var at = stars.indexOf(document.activeElement);
+    var to = home ? 0 : end ? stars.length - 1
+      : at === -1 ? 0 : (at + (forward ? 1 : stars.length - 1)) % stars.length;
+    if (typeof event.preventDefault === 'function') event.preventDefault();
+    stars[to].focus();
+  }
+
   function keepFocusInside(event) {
     if (event.key !== 'Tab') return;
     var stars = navFocusable();
@@ -2270,6 +2306,7 @@
         close(true);
         return;
       }
+      stepFocus(event);
       keepFocusInside(event);
     });
     document.addEventListener('focusin', restoreNavFocus);
