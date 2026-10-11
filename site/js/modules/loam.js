@@ -393,7 +393,7 @@ function layerTone(env, k) {
 // readings and the bracket (marks(), recount()); and `wave`, how far round its turn a card's water
 // line has gone (animate), 0 in the piece, whose water line is still.
 function coreBlank(caption) {
-  return { root: null, caption, t: 0, doneAt: -1, wave: 0, reads: marks(0x2a, 0.8),
+  return { root: null, caption, t: 0, doneAt: -1, wave: 0, ticks: [], reads: marks(0x2a, 0.8),
     bar: { base: 0x2b, span: 0.8, n: 0, runs: [], said: 0 } };
 }
 
@@ -439,6 +439,24 @@ function drawCore(g, w, h, env, plan, s, variant) {
     write(g, stones ? 'stones' : KINDS[plan.kinds[i]], geo.left - size * 0.6, y + lh / 2, small, stones ? c.accent2 : env.alpha(c.fg, 0.85), 'right');
     write(g, t + ' cm', geo.right + size * 0.6, y + lh / 2, small, env.alpha(c.fg, 0.95), 'left');
     y += lh;
+  });
+  // The boundaries measured for the visitor (the hint): each depth is cut on at one moment of its
+  // own roll and stays, a warm hairline on the boundary and its depth written over it.
+  (s.ticks || []).forEach((tk, j) => {
+    if (!roll(rite, 0x2c, j).flicker(came(s, tk.at, 0.7, reduced))) return;
+    const ty = geo.top + tk.depth * geo.scale;
+    g.strokeStyle = env.alpha(c.accent2, 0.85);
+    g.lineWidth = 1.5;
+    g.beginPath();
+    g.moveTo(geo.left + colW * 0.4, ty);
+    g.lineTo(geo.right, ty);
+    g.stroke();
+    const label = tk.depth + ' cm down';
+    font(g, small, '600');
+    const tw = (g.measureText(label) || {}).width || small * 4.5;
+    g.fillStyle = env.alpha(c.bg, 0.75);
+    g.fillRect(geo.right - tw - size * 0.6, ty - small * 1.35, tw + size * 0.4, small * 1.2);
+    write(g, label, geo.right - size * 0.4, ty - small * 0.75, small, c.accent2, 'right', '600');
   });
   // The visitor's readings, sealed on the drawing: a mark where they say the water stands, coming
   // behind the piece's edge on the roll of that reading while the one said before goes back behind
@@ -546,20 +564,29 @@ function corePiece(env, plan) {
   // The water table is read off a drawn scale, so it is a measured answer: the difficulty says
   // how many centimetres out a reading may be. The layer count is a count, so it is exact.
   const margin = asked(env).margin;
+  const helps = asked(env).helps;
   const n = plan.layers.length;
+  // The boundaries the hint will measure, top first: every one but the water's, which is the answer.
+  const bounds = [];
+  let run = 0;
+  for (let i = 0; i < n - 1; i++) {
+    run += plan.layers[i];
+    if (i + 1 !== plan.water) bounds.push({ i: i + 1, depth: run });
+  }
   const total = totalOf(plan);
   const depth = waterDepth(plan);
   const s = coreBlank('drawn to scale; the thicknesses are written');
   const draw = (c) => drawn(s, c, () => drawCore(c.g, c.w, c.h, c, plan, s, env.variant));
   return {
     title: coreTitle(plan),
-    brief: 'A reading of the ground. A core from the bed, drawn to scale: ' + WORDS[n] + ' layers, each with its thickness in centimetres written beside it. One layer is a band of stones. The wavy line is where the water stands. The band is a layer of its own and is not one a root passes through.',
+    brief: 'A reading of the ground. A core from the bed, drawn to scale: ' + WORDS[n] + ' layers, each with its thickness in centimetres written beside it. One layer is a band of stones. The wavy line is where the water stands. The band is a layer of its own and is not one a root passes through. Ask, and the depth of one boundary is measured for you, never the water\u2019s.',
     goal: 'Read how deep the water table stands and how many layers a root passes through before it meets the stones.',
     aspect: '4 / 5',
     checkLabel: 'read the core',
     steps: [
       { id: 'water', ask: 'the water table, below the surface', kind: 'number', min: 0, max: total, step: 1, unit: 'cm' },
-      { id: 'layers', ask: 'layers a root passes through before the stones', kind: 'number', min: 0, max: n, step: 1, unit: 'layers' }
+      { id: 'layers', ask: 'layers a root passes through before the stones', kind: 'number', min: 0, max: n, step: 1, unit: 'layers' },
+      { id: 'hint', ask: 'one boundary measured', kind: 'press', count: 1, label: 'measure a boundary', optional: true }
     ],
     solution: { water: depth, layers: plan.band },
     check(c) {
@@ -581,6 +608,18 @@ function corePiece(env, plan) {
       draw(c);
     },
     apply(id, value, c) {
+      if (id === 'hint') {
+        const next = s.ticks.length < helps ? bounds[s.ticks.length] : undefined;
+        if (next) {
+          s.ticks.push({ depth: next.depth, at: s.t });
+          c.hint();
+          c.status('the foot of layer ' + next.i + ' lies ' + next.depth + ' cm below the surface');
+        } else if (s.ticks.length >= helps) {
+          c.status('that is all the measuring this difficulty allows; add the thicknesses yourself');
+        } else {
+          c.status('every other boundary is measured; add the layers above the water yourself');
+        }
+      }
       if (id === 'water') {
         const read = Math.round(Number(value));
         // The mark is sealed where the reading now stands, and the one before is taken back from
