@@ -1,5 +1,6 @@
 /* The mood flow asks a sideways question before suggesting a world. The threshold hosts the question in its stage, the persona's ask leads there from every other page, and the mood atlas shows where each reading leads. Readings live in the shared state document.
-   Each host owns one live question: replacing it invalidates delayed handoffs and releases any borrowed focusability. */
+   Each host owns one live question: replacing it invalidates delayed handoffs and releases any borrowed focusability.
+   Each answer is scaled before it is read, so a long question does not outweigh a short one. Earlier answers fade from the time they were given; the clock and place tilt close readings. */
 (function () {
   'use strict';
 
@@ -7,8 +8,9 @@
   var READING = 'threshold';
   var RECENT = 6;
   var HALF_LIFE_H = 30;
-  var ANSWER_PULL = 3;
+  var ANSWER_PULL = 5;
   var SIGNAL_PULL = 1;
+  var MEMORY_PULL = 0.6;
   var ARRIVAL_GAP_MS = 30 * 60 * 1000;
 
   var ORIENTATIONS = [
@@ -960,12 +962,14 @@
   }
 
   function load() {
-    var blank = { visits: 0, last: null, drift: {}, recent: [], orientation: null };
+    var blank = { visits: 0, last: null, answeredAt: null, drift: {}, recent: [], orientation: null };
     var parsed = store.get(READING, blank);
     if (!parsed || typeof parsed !== 'object') return blank;
     return {
       visits: typeof parsed.visits === 'number' ? parsed.visits : 0,
       last: typeof parsed.last === 'number' ? parsed.last : null,
+      answeredAt: Number.isFinite(parsed.answeredAt) ? parsed.answeredAt
+        : ORIENTATION_BY_ID[parsed.orientation] && Number.isFinite(parsed.last) ? parsed.last : null,
       drift: parsed.drift && typeof parsed.drift === 'object' ? parsed.drift : {},
       recent: Array.isArray(parsed.recent) ? parsed.recent.slice(-RECENT) : [],
       orientation: ORIENTATION_BY_ID[parsed.orientation] ? parsed.orientation : null
@@ -977,13 +981,14 @@
   // The one writer: everything the threshold keeps goes through here, so the shape of the
   // reading's record is written once.
   function persist() {
-    save({ visits: state.visits, last: state.last, drift: state.drift,
-      recent: state.recent, orientation: state.orientation });
+    save({ visits: state.visits, last: state.last, answeredAt: state.answeredAt,
+      drift: state.drift, recent: state.recent, orientation: state.orientation });
   }
   var sinceLast = state.last ? Math.max(0, Date.now() - state.last) : null;
   function memoryPull() {
-    if (sinceLast === null) return 0;
-    return Math.pow(0.5, (sinceLast / 3600000) / HALF_LIFE_H);
+    if (state.answeredAt === null) return 0;
+    var elapsed = Math.max(0, Date.now() - state.answeredAt);
+    return Math.pow(0.5, (elapsed / 3600000) / HALF_LIFE_H);
   }
   function plural(n, word) { return n + ' ' + word + (n === 1 ? '' : 's'); }
   function sinceText() {
@@ -1036,10 +1041,25 @@
   }
   function add(into, weights, factor) {
     for (var id in weights) {
-      if (!Object.prototype.hasOwnProperty.call(weights, id) || !ORIENTATION_BY_ID[id]) continue;
+      if (!Object.prototype.hasOwnProperty.call(weights, id)
+        || !Object.prototype.hasOwnProperty.call(ORIENTATION_BY_ID, id)) continue;
       into[id] = (into[id] || 0) + weights[id] * factor;
     }
     return into;
+  }
+  function normalized(weights) {
+    var out = {};
+    var highest = 0;
+    for (var id in weights) {
+      if (!Object.prototype.hasOwnProperty.call(weights, id)
+        || !Object.prototype.hasOwnProperty.call(ORIENTATION_BY_ID, id)) continue;
+      var value = Number(weights[id]);
+      if (!isFinite(value) || value <= 0) continue;
+      out[id] = value;
+      highest = Math.max(highest, value);
+    }
+    if (highest) for (var key in out) out[key] /= highest;
+    return out;
   }
   function signalWeights(s) {
     var out = {};
@@ -1057,9 +1077,9 @@
   function readingFor(answer) {
     var s = signals();
     var scores = {};
-    add(scores, signalWeights(s), SIGNAL_PULL);
-    add(scores, state.drift, memoryPull());
-    if (answer) add(scores, answer, ANSWER_PULL);
+    add(scores, normalized(signalWeights(s)), SIGNAL_PULL);
+    add(scores, normalized(state.drift), MEMORY_PULL * memoryPull());
+    if (answer) add(scores, normalized(answer), ANSWER_PULL);
     var order = ranked(scores);
     return {
       orientation: order[0] ? ORIENTATION_BY_ID[order[0].id] : null,
@@ -1081,11 +1101,13 @@
   function record(answer) {
     var reading = readingFor(answer);
     var drift = {};
-    add(drift, state.drift, memoryPull());
-    if (answer) add(drift, answer, 1);
-    state.drift = drift;
+    add(drift, normalized(state.drift), memoryPull() * 0.4);
+    if (answer) add(drift, normalized(answer), 1);
+    state.drift = normalized(drift);
     state.orientation = reading.orientation ? reading.orientation.id : null;
     state.last = Date.now();
+    state.answeredAt = state.last;
+    sinceLast = 0;
     persist();
     lastAnswered = reading.orientation ? reading : null;
     transmogrify(reading.orientation);
@@ -4192,7 +4214,7 @@
     ask: function () { if (window.interestingPersona) window.interestingPersona.ask(); },
     reducedMotion: reducedMotion,
     forget: function () {
-      state = { visits: 1, last: null, drift: {}, recent: [], orientation: null };
+      state = { visits: 1, last: null, answeredAt: null, drift: {}, recent: [], orientation: null };
       lastAnswered = null;
       sinceLast = null;
       store.remove(READING);
