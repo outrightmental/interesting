@@ -5,8 +5,9 @@
 
    Two puzzles, both deduction:
 
-     who gets water   Five or six plants in a row, each tagged with one rule -- soil below 3, lamp
-                      off, not twice running, if the left one is, vent open and soil below 4 --
+     who gets water   Five or six plants in a row -- a crowded bed of seven on some seeds -- each
+                      tagged with one rule -- soil below 3, lamp off, not twice running, if the
+                      left one is, vent open and soil below 4, lamp off and not twice --
                       and the glass shows the readings every rule is judged by: a soil meter under
                       each plant, the lamp, the vent, and a drop beside any plant watered last
                       time. Mark the plants that get water. A wrong check says how many of the
@@ -34,9 +35,10 @@ const RULES = {
   lamp: { tag: 'lamp off', rule: 'water it only while the lamp is off' },
   twice: { tag: 'not twice running', rule: 'never water it two visits running, so not if it was watered last time' },
   left: { tag: 'if the left one is', rule: 'water it if the plant to its left is watered' },
-  vent: { tag: 'vent open, soil below 4', rule: 'water it if the vent is open and its soil reads below 4' }
+  vent: { tag: 'vent open, soil below 4', rule: 'water it if the vent is open and its soil reads below 4' },
+  both: { tag: 'lamp off, not twice', rule: 'water it only while the lamp is off and only if it was not watered last time' }
 };
-const RULE_IDS = ['soil', 'lamp', 'twice', 'left', 'vent'];
+const RULE_IDS = ['soil', 'lamp', 'twice', 'left', 'vent', 'both'];
 
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 const capital = (text) => text[0].toUpperCase() + text.slice(1);
@@ -551,6 +553,7 @@ function watered(plan) {
     else if (r === 'twice') yes = !plan.last[i];
     else if (r === 'left') yes = i > 0 && out[i - 1];
     else if (r === 'vent') yes = !!plan.vent && plan.soil[i] < 4;
+    else if (r === 'both') yes = !plan.lamp && !plan.last[i];
     out.push(yes);
   }
   return out;
@@ -558,7 +561,7 @@ function watered(plan) {
 
 function waterOk(p) {
   const n = Number(p && p.n);
-  if (n !== 5 && n !== 6) return false;
+  if (n !== 5 && n !== 6 && n !== 7) return false;
   const list = (v, ok) => Array.isArray(v) && v.length === n && v.every(ok);
   if (!list(p.rules, (r, i) => RULE_IDS.includes(r) && !(i === 0 && r === 'left'))) return false;
   if (!list(p.soil, (v) => Number.isInteger(v) && v >= 1 && v <= 5)) return false;
@@ -569,7 +572,8 @@ function waterOk(p) {
 }
 
 function waterPlan(env) {
-  const n = env.chance(0.5) ? 6 : 5;
+  // About one seed in five deals the crowded bed: seven plants under one lamp.
+  const n = env.chance(0.2) ? 7 : env.chance(0.5) ? 6 : 5;
   for (let guard = 0; guard < 80; guard++) {
     const rules = [];
     const soil = [];
@@ -592,6 +596,7 @@ function carriedWater(env) {
 }
 
 function waterTitle(plan) {
+  if (plan.n === 7) return 'the crowded bed: seven under glass';
   return 'who gets water: ' + WORDS[plan.n] + ' plants';
 }
 
@@ -1143,7 +1148,9 @@ export default {
       return {
         title: waterTitle(plan),
         mono: 'lamp ' + (plan.lamp ? 'on' : 'off') + ' / vent ' + (plan.vent ? 'open' : 'shut') + '\nsoil ' + plan.soil.join(' ') + '\ntags: ' + plan.rules.map((r) => RULES[r].tag).join('; '),
-        text: 'A midnight round under glass. Every plant wears one rule; the readings say which of them drink. Mark them.',
+        text: plan.n === 7
+          ? 'The crowded bed: seven tenants under one lamp, and every rule leans on its neighbour. Mark the ones that drink.'
+          : 'A midnight round under glass. Every plant wears one rule; the readings say which of them drink. Mark them.',
         aspect: '16 / 10',
         paint: (g, w, h, cardEnv) => waterPreview(g, w, h, cardEnv, plan),
         of: plan
