@@ -12,7 +12,8 @@
   'page': 'M14 2H6c-1.1 0-1.99.9-1.99 2L4 20c0 1.1.89 2 1.99 2H18c1.1 0 2-.9 2-2V8l-6-6zm2 16H8v-2h8v2zm0-4H8v-2h8v2zm-3-5V3.5L18.5 9H13z',
   'tune': 'M3 17v2h6v-2H3zM3 5v2h10V5H3zm10 16v-2h8v-2h-8v-2h-2v6h2zM7 9v2H3v2h4v2h2V9H7zm14 4v-2H11v2h10zm-6-4h2V7h4V5h-4V3h-2v6z',
   'swap': 'M16 17.01V10h-2v7.01h-3L15 21l4-3.99h-3zM9 3L5 6.99h3V14h2V6.99h3L9 3z',
-  'edit': 'M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04c.39-.39.39-1.02 0-1.41l-2.34-2.34a.9959.9959 0 00-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z'
+  'edit': 'M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04c.39-.39.39-1.02 0-1.41l-2.34-2.34a.9959.9959 0 00-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z',
+  'door': 'M5 21V3h14v18h-2V5H7v16H5zm8-11h2v4h-2z'
 } %}
 <!DOCTYPE html>
 <html lang='en' data-page='{{ here }}'{% if thisWorld %} data-world='{{ thisWorld.mood }}'{% endif %}{% if siteRoot %} data-root='{{ siteRoot }}'{% endif %}>
@@ -70,6 +71,16 @@
           <a class='sparknav-node' id='sparknav-reading-go' href='{{ siteRoot }}moods.html'>
             <svg class='icon' viewBox='0 0 24 24' aria-hidden='true' focusable='false'><path d='{{ icons.star }}'/></svg>
             <span class='sparknav-words'><span class='sparknav-label' id='sparknav-reading-label'>the mood atlas</span><span class='sparknav-gloss' id='sparknav-reading-gloss' hidden></span></span>
+          </a>
+        </li>
+        {# The door left ajar: one world, dealt afresh by js/site.js each time the constellation
+           opens -- a way out nobody chose. Hidden until the script deals it, and its label is
+           always the name of the world it opens, so the chip stays legible at a glance. #}
+        <li class='sparknav-option' id='sparknav-ajar' hidden>
+          <span class='sparknav-ray' aria-hidden='true'></span>
+          <a class='sparknav-node' id='sparknav-ajar-go' href='{{ siteRoot }}index.html'>
+            <svg class='icon' viewBox='0 0 24 24' aria-hidden='true' focusable='false'><path d='{{ icons.door }}'/></svg>
+            <span class='sparknav-words'><span class='sparknav-label' id='sparknav-ajar-label'>a door ajar</span><span class='sparknav-gloss'>left ajar; another each time</span></span>
           </a>
         </li>
       </ul>

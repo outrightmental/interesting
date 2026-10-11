@@ -1446,6 +1446,45 @@
     return read.orientation;
   }
 
+  /* The one flat list of the site's worlds, read off the page once: the same JSON the layout
+     writes for every template (#site-worlds). Null where a page carries none, and everything
+     that reads it treats null as "no door". */
+  var worldList = null;
+  function allWorlds() {
+    if (worldList) return worldList;
+    var data = typeof document.getElementById === 'function' ? document.getElementById('site-worlds') : null;
+    if (!data || !data.textContent) return null;
+    try {
+      var parsed = JSON.parse(data.textContent);
+      if (Array.isArray(parsed) && parsed.length) worldList = parsed;
+    } catch (e) {
+      worldList = null;
+    }
+    return worldList;
+  }
+
+  /* The door left ajar: one world, drawn by chance for each opening of the constellation -- never
+     the page the visitor is on, and never the world their reading already offers, so it is always
+     a way out nobody chose. The chip wears the world's own name (a link's label is the name of
+     the page it opens; the gloss says it was left ajar), and the draw is made afresh on every
+     press of the logo, which is the one small reason to open the menu one more time. */
+  var ajarDoor = null;
+  function dealDoor() {
+    ajarDoor = null;
+    var doors = allWorlds();
+    if (!doors) return;
+    var page = html.getAttribute('data-page');
+    var read = readingWorld();
+    var pool = [];
+    for (var i = 0; i < doors.length; i++) {
+      var door = doors[i];
+      if (!door || !door.file || !door.name || door.file === page) continue;
+      if (read && read.world === door.file) continue;
+      pool.push(door);
+    }
+    if (pool.length) ajarDoor = pool[Math.floor(Math.random() * pool.length)];
+  }
+
   /* One of them, put away where its own file pinned it. The hidden attribute says what is meant,
      and the one inline declaration beside it is what makes it true: each of these files injects
      the styles for its own control, and a `display` of its own in an author stylesheet outranks
@@ -1502,11 +1541,24 @@
     } else if (nav.reading) {
       nav.reading.hidden = true;
     }
+    // The door left ajar shows the draw dealDoor() made for this opening; drawn here only when
+    // the one it holds has gone stale (the visitor is on it, or the reading now offers it), so
+    // the label never changes under a constellation that is already up.
+    if (nav.ajar && nav.ajarGo && nav.ajarLabel) {
+      if (!ajarDoor || ajarDoor.file === page || (world && world.world === ajarDoor.file)) dealDoor();
+      if (ajarDoor) {
+        nav.ajarGo.href = root + ajarDoor.file;
+        relabel(nav.ajarLabel, ajarDoor.name);
+        nav.ajar.hidden = false;
+      } else {
+        nav.ajar.hidden = true;
+      }
+    }
     adopt();
     var destinations = nav.sky.querySelectorAll('a[href]');
     for (var i = 0; i < destinations.length; i++) {
       var destination = destinations[i];
-      if (destination === nav.readingGo) continue;
+      if (destination === nav.readingGo || destination === nav.ajarGo) continue;
       var label = destination.querySelector('.sparknav-label');
       var current = heading && label ? label.textContent === heading.textContent
         : destination.getAttribute('href') === root + page;
@@ -1795,6 +1847,7 @@
     nav.logo.setAttribute('aria-expanded', on ? 'true' : 'false');
     if (on) {
       endUnmake(); // pressed again before the last close had finished: cast afresh
+      dealDoor(); // the ajar door is drawn afresh for every opening
       shape();
       deal();
       cast();
@@ -2070,6 +2123,9 @@
       readingGo: document.getElementById('sparknav-reading-go'),
       readingLabel: document.getElementById('sparknav-reading-label'),
       readingGloss: document.getElementById('sparknav-reading-gloss'),
+      ajar: document.getElementById('sparknav-ajar'),
+      ajarGo: document.getElementById('sparknav-ajar-go'),
+      ajarLabel: document.getElementById('sparknav-ajar-label'),
       participate: document.getElementById('sparknav-participate'),
       participateOpen: document.getElementById('sparknav-participate-open'),
       cookies: document.getElementById('sparknav-cookies'),
