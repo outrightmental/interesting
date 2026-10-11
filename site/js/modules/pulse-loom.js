@@ -1,9 +1,10 @@
-/* The pulse loom: two beats that cross, and a wheel that only seems to turn back. As a card it is
-   one of the two puzzles below, drawn small (paint, spark); as a piece it is that puzzle, and the
+/* The pulse loom: two beats that cross, a wheel that only seems to turn back, and a thread with
+   one knot dropped. As a card it is one of the three puzzles below, drawn small (paint, spark);
+   as a piece it is that puzzle, and the
    card it was opened from says which. See js/feed.js for what a module is and js/stage.js for
    what a piece is.
 
-   Two puzzles, both deduction, both solvable from what is drawn and nothing heard:
+   Three puzzles, all deduction, all solvable from what is drawn and nothing heard:
 
      crossings       Two drums round one loop of L beats. The outer drum plays a bar of a beats over
                      and over, the inner a bar of b beats, started a few beats late; each bar strikes
@@ -16,9 +17,16 @@
                      which way the pictures seem to turn and after how many pictures a tooth looks
                      back where it began. The check runs the pictures; a wrong one says which answer
                      is off and no more.
+     the dropped stitch
+                     One thread round a loop of L beats, a knot tied on beat 1 and another every a
+                     beats after it, all the way round -- except one, where the weaver's hand
+                     slipped. Name the bare beat and count the knots that still hold. A wrong check
+                     says which of the two is off and no more; a hint, at a price, narrows the
+                     stretch of the loop the gap lies in, one halving per press.
 
    A card and the feature it opens as are one puzzle: the spark puts the whole plan on its spec as
-   `of` -- the drums, their bars and the shift, or the teeth and the pictures -- and piece(env)
+   `of` -- the drums, their bars and the shift, the teeth and the pictures, or the loop, its knot
+   spacing and its bare beat -- and piece(env)
    opens on that rather than rolling another. */
 
 const TAU = Math.PI * 2;
@@ -476,6 +484,225 @@ function crossPiece(env, plan) {
   };
 }
 
+/* ---- the dropped stitch ---------------------------------------------------------------------- */
+
+// Knot spacings the ring can still be read at; the loop is their round, 18 to 36 beats.
+const STITCH_AS = [2, 3, 4];
+
+function stitchPlan(env) {
+  const a = env.pick(STITCH_AS);
+  const knots = env.int(Math.max(6, Math.ceil(18 / a)), Math.floor(36 / a));
+  return { kind: 'stitch', a, L: a * knots, drop: env.int(1, knots - 1) };
+}
+
+function carriedStitch(env) {
+  const p = env.card && env.card.of;
+  if (!p || p.kind !== 'stitch') return null;
+  const a = Number(p.a);
+  const L = Number(p.L);
+  const drop = Number(p.drop);
+  if (!STITCH_AS.includes(a)) return null;
+  if (!Number.isInteger(L) || L % a !== 0 || L < a * 6 || L > 36) return null;
+  if (!Number.isInteger(drop) || drop < 1 || drop >= L / a) return null;
+  return { kind: 'stitch', a, L, drop };
+}
+
+function stitchTitle(plan) {
+  return 'the dropped stitch: every ' + plan.a + ' beats round ' + plan.L;
+}
+
+// The scene: the loop as one ring of beats, a knot tied on beat 1 and on every beat the weaver's
+// bar names after it -- except the dropped one, whose beat stands bare among its ticks. The bar is
+// written in the middle, so the law of the loop is on the scene and the gap is deduction, not
+// memory. The search arc a hint narrows to, the mend and the solved band each come in by the
+// piece's own edge up a stair of their own (see the rite above), and a card of it is a still
+// picture like the loom's others.
+function drawStitch(g, w, h, c, plan, s, variant) {
+  const v = variant || PLAIN;
+  const col = c.colors;
+  const rite = riteOf(c);
+  const r = Math.min(w, h) * 0.37 * Math.min(1.12, Math.max(0.86, v.scale));
+  const cx = w / 2;
+  const cy = h / 2;
+  const L = plan.L;
+  const bare = plan.drop * plan.a;
+  const size = Math.max(9, Math.min(16, Math.round(r * 0.1)));
+  const small = Math.max(8, Math.round(size * 0.85));
+  ground(g, w, h, c);
+  lint(g, w, h, c, v);
+  // The solved round: a band about the ring, cut in by the piece's edge up a stair, resting in
+  // two shades split by that edge.
+  if (s.solvedAt != null) {
+    const band = own(rite, 0x7d);
+    const k = band.stair(came(s, s.solvedAt, REVEAL, c.reduced));
+    if (k > 0) {
+      const r0 = r * 0.86;
+      const r1 = r * 1.1;
+      g.save();
+      g.beginPath();
+      g.arc(cx, cy, r1, 0, TAU);
+      g.moveTo(cx + r0, cy);
+      g.arc(cx, cy, r0, 0, TAU, true);
+      g.clip();
+      g.fillStyle = c.alpha(col.accent2, 0.1);
+      cover(g, band, cx - r1, cy - r1, r1 * 2, r1 * 2, k);
+      g.restore();
+    }
+  }
+  // The search arc: the stretch of the loop a hint has narrowed the gap to, drawn round up a
+  // stair rolled afresh at each narrowing.
+  if (s.arcAt != null) {
+    const seek = own(rite, 0x600 + s.shown);
+    const k = seek.stair(came(s, s.arcAt, SPAN, c.reduced));
+    if (k > 0) {
+      const a0 = beatAngle(s.low, L);
+      const span = Math.max(s.high - s.low, 0.6) / L * TAU;
+      g.strokeStyle = c.alpha(col.accent2, 0.6);
+      g.lineWidth = Math.max(2, r * 0.028);
+      g.beginPath();
+      g.arc(cx, cy, r * 1.09, a0, a0 + span * k);
+      g.stroke();
+    }
+  }
+  // The loop and its beats.
+  g.strokeStyle = c.alpha(col.muted, 0.5);
+  g.lineWidth = Math.max(1, r * 0.006);
+  g.beginPath();
+  g.arc(cx, cy, r, 0, TAU);
+  g.stroke();
+  const every = L >= 24 ? 6 : 4;
+  for (let i = 0; i < L; i++) {
+    const a = beatAngle(i, L);
+    const cos = Math.cos(a);
+    const sin = Math.sin(a);
+    g.strokeStyle = c.alpha(col.muted, 0.22 + 0.12 * v.density);
+    g.lineWidth = 1;
+    g.beginPath();
+    g.moveTo(cx + cos * r * 0.93, cy + sin * r * 0.93);
+    g.lineTo(cx + cos * r * 1.03, cy + sin * r * 1.03);
+    g.stroke();
+    const knotted = i % plan.a === 0 && i !== bare;
+    g.fillStyle = knotted ? col.accent : c.alpha(col.muted, 0.5);
+    g.beginPath();
+    g.arc(cx + cos * r, cy + sin * r, Math.max(1.5, r * (knotted ? 0.034 : 0.012)), 0, TAU);
+    g.fill();
+    if (i === 0 || (i + 1) % every === 0) {
+      text(g, c, String(i + 1), cx + cos * r * 1.18, cy + sin * r * 1.18, small, c.alpha(col.fg, 0.85));
+    }
+  }
+  // The mend: once the loop reads true, the missing knot is tied -- a halo cut in by the piece's
+  // edge up a stair, and the knot grown inside it.
+  if (s.mendAt != null) {
+    const mend = own(rite, 0x100 + bare);
+    const k = mend.stair(came(s, s.mendAt, SPAN, c.reduced));
+    if (k > 0) {
+      const a = beatAngle(bare, L);
+      const at = { x: cx + Math.cos(a) * r, y: cy + Math.sin(a) * r };
+      const halo = Math.max(4, r * 0.08);
+      g.save();
+      g.beginPath();
+      g.arc(at.x, at.y, halo, 0, TAU);
+      g.clip();
+      g.fillStyle = c.alpha(col.accent2, 0.26);
+      cover(g, mend, at.x - halo, at.y - halo, halo * 2, halo * 2, k);
+      g.restore();
+      g.fillStyle = col.accent2;
+      g.beginPath();
+      g.arc(at.x, at.y, Math.max(2, r * 0.034) * k, 0, TAU);
+      g.fill();
+    }
+  }
+  // The weaver's bar, written in the middle: the knot and the rests it keeps.
+  text(g, c, 'a knot every ' + plan.a + ' beats, from beat 1', cx, cy - size * 1.6, small, c.alpha(col.fg, 0.8));
+  const cell = Math.min(size * 1.3, r * 0.9 / plan.a);
+  const x0 = cx - cell * plan.a / 2;
+  for (let b = 0; b < plan.a; b++) {
+    const on = b === 0;
+    g.fillStyle = on ? col.accent : c.alpha(col.muted, 0.5);
+    g.beginPath();
+    g.arc(x0 + (b + 0.5) * cell, cy, Math.max(1.5, cell * (on ? 0.32 : 0.15)), 0, TAU);
+    g.fill();
+  }
+  text(g, c, 'loop of ' + L, cx, cy + size * 1.6, small, c.alpha(col.fg, 0.75));
+}
+
+// The scene's state before anyone has touched it: no narrowing yet, nothing mended, no clock (a
+// card is drawn once and stands).
+function stitchBlank(plan) {
+  return { low: 0, high: plan.L - 1, shown: 0, arcAt: null, mendAt: null, solvedAt: null, t: 0, until: null, drawn: null, drawnAt: -Infinity };
+}
+
+function stitchPreview(g, w, h, env, plan) {
+  drawStitch(g, w, h, env, plan, stitchBlank(plan), env.variant);
+}
+
+function stitchPiece(env, plan) {
+  const helps = asked(env).helps;
+  const knots = plan.L / plan.a;
+  const bare = plan.drop * plan.a;
+  const s = stitchBlank(plan);
+  const draw = (c) => drawn(s, c, () => drawStitch(c.g, c.w, c.h, c, plan, s, env.variant));
+  return {
+    title: stitchTitle(plan),
+    brief: 'Strung on the loom: one thread round a loop of ' + plan.L + ' beats, beat 1 at the top. The weaver ties a knot on beat 1 and another every ' + plan.a
+      + ' beats after it, all the way round -- but one stitch was dropped, and the beat it belongs on stands bare among its neighbours.',
+    goal: 'Name the beat the dropped knot belongs on, and count the knots that still hold the loop.',
+    aspect: '1 / 1',
+    checkLabel: 'mend the loop',
+    steps: [
+      { id: 'gone', ask: 'the beat the dropped knot belongs on', kind: 'number', min: 1, max: plan.L, step: 1, unit: 'beat' },
+      { id: 'knots', ask: 'how many knots still hold the loop', kind: 'number', min: 0, max: plan.L, step: 1, unit: 'knots' },
+      { id: 'hint', ask: 'the stretch of the loop the gap lies in', kind: 'press', count: 1, label: 'close in', optional: true }
+    ],
+    solution: { gone: bare + 1, knots: knots - 1 },
+    check(c) {
+      const goneRight = Number(c.value('gone')) === bare + 1;
+      const countRight = Number(c.value('knots')) === knots - 1;
+      if (goneRight && countRight) return { solved: true, say: 'the loom reads true: the gap sat on beat ' + (bare + 1) + ', and ' + (knots - 1) + ' knots held' };
+      return {
+        solved: false,
+        say: !goneRight && !countRight ? 'the beat and the count are both off' : (!goneRight ? 'the count holds; the gap is not on that beat' : 'the beat is right; the count is off')
+      };
+    },
+    start(c) {
+      c.status('a knot every ' + plan.a + ' beats round ' + plan.L + ', and one of them gone');
+      draw(c);
+    },
+    apply(id, value, c) {
+      if (id === 'gone') c.status('the gap on beat ' + Math.round(Number(value)) + ', you say');
+      if (id === 'knots') c.status(Math.round(Number(value)) + ' knots holding, you say');
+      if (id === 'hint') {
+        if (s.shown >= helps) {
+          c.status('that is all the loom will show at this difficulty; read the beats');
+        } else if (s.high - s.low + 1 <= plan.a) {
+          c.status('the arc is as narrow as the loom can draw it: the gap is inside it');
+        } else {
+          const mid = Math.floor((s.low + s.high) / 2);
+          if (bare <= mid) s.high = mid;
+          else s.low = mid + 1;
+          s.shown += 1;
+          s.arcAt = s.t;
+          c.hint();
+          c.status('the gap lies between beats ' + (s.low + 1) + ' and ' + (s.high + 1));
+        }
+      }
+      draw(c);
+    },
+    frame(t, dt, c) {
+      s.t += Math.max(0, dt);
+      if (settled(s, c)) return false;
+      draw(c);
+      return !settled(s, c);
+    },
+    end(c) {
+      s.solvedAt = s.t;
+      s.mendAt = s.t;
+      c.status('the stitch tied again: beat ' + (bare + 1) + ' holds');
+      draw(c);
+    }
+  };
+}
+
 /* ---- the wagon wheel ----------------------------------------------------------------------- */
 
 function wheelPlan(env) {
@@ -848,19 +1075,35 @@ function wheelPiece(env, plan) {
 
 /* ---- the module ----------------------------------------------------------------------------- */
 
-function dealsWheel(env) {
-  return env.chance(0.45);
+// Which of the three puzzles a fresh env is dealt: rolled once, from the one seeded stream.
+function dealShape(env) {
+  const roll = env.rnd();
+  return roll < 0.38 ? 'wheel' : roll < 0.72 ? 'cross' : 'stitch';
 }
 
 export default {
   id: 'pulse-loom',
   needsSky: false,
   paint(g, w, h, env) {
-    if (dealsWheel(env)) wheelPreview(g, w, h, env, wheelPlan(env));
+    const shape = dealShape(env);
+    if (shape === 'wheel') wheelPreview(g, w, h, env, wheelPlan(env));
+    else if (shape === 'stitch') stitchPreview(g, w, h, env, stitchPlan(env));
     else crossPreview(g, w, h, env, crossPlan(env));
   },
   spark(env) {
-    if (dealsWheel(env)) {
+    const shape = dealShape(env);
+    if (shape === 'stitch') {
+      const plan = stitchPlan(env);
+      return {
+        title: stitchTitle(plan),
+        text: 'A loop knotted in strict time, and one beat left bare. Name the silent beat, and count what still holds.',
+        mono: 'knot   every ' + plan.a + ' beats from beat 1\nloop   ' + plan.L + ' beats\ngone   one knot, somewhere',
+        aspect: '1 / 1',
+        paint: (g, w, h, cardEnv) => stitchPreview(g, w, h, cardEnv, plan),
+        of: plan
+      };
+    }
+    if (shape === 'wheel') {
       const plan = wheelPlan(env);
       return {
         title: wheelTitle(plan),
@@ -886,6 +1129,11 @@ export default {
     if (turning) return wheelPiece(env, turning);
     const crossing = carriedCross(env);
     if (crossing) return crossPiece(env, crossing);
-    return dealsWheel(env) ? wheelPiece(env, wheelPlan(env)) : crossPiece(env, crossPlan(env));
+    const mending = carriedStitch(env);
+    if (mending) return stitchPiece(env, mending);
+    const shape = dealShape(env);
+    if (shape === 'wheel') return wheelPiece(env, wheelPlan(env));
+    if (shape === 'stitch') return stitchPiece(env, stitchPlan(env));
+    return crossPiece(env, crossPlan(env));
   }
 };
