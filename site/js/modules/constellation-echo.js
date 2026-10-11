@@ -687,10 +687,14 @@ function echoPiece(env, plan) {
     solution: { order: order.slice() },
     check(c) {
       const right = rightPlaces();
+      // Neighbours in your order whose echoes really do come back in that turn: measured, never the answer.
+      let pairs = 0;
+      for (let i = 0; i + 1 < n; i++) if (order.indexOf(s.order[i]) < order.indexOf(s.order[i + 1])) pairs += 1;
       return {
         solved: right === n,
         say: right === n ? 'every echo comes back in the order you set'
           : (right === 0 ? 'none of them answers in the right place yet' : WORDS[right] + ' of ' + WORDS[n] + ' answering in the right place')
+            + '; ' + WORDS[pairs] + ' of ' + WORDS[n - 1] + ' neighbouring pairs come back in the right turn'
       };
     },
     start(c) {

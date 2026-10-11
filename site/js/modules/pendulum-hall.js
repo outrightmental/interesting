@@ -609,7 +609,11 @@ function rackPiece(env, plan) {
         s.to = -1;
         s.beat = beat;
         c.set('meet', beat);
-        c.status('beat ' + beat + ' shown and set; arrows show which moving bobs head right');
+        // Once the vigil is kept, the ruler answers plainly: any beat tapped names who comes through.
+        const crossing = throughAt(plan.periods, beat, starts);
+        c.status(c.done
+          ? 'beat ' + beat + ': ' + (crossing.length ? crossing.map(name).join(' and ') + (crossing.length === 1 ? ' comes' : ' come') + ' through heading right' + (crossing.length === n ? ', all together' : '') : 'none comes through heading right')
+          : 'beat ' + beat + ' shown and set; arrows show which moving bobs head right');
         draw(c);
         return;
       }

@@ -702,10 +702,13 @@ function drawerPiece(env, plan) {
     solution: { order: plan.order.slice() },
     check(c) {
       const n = right();
+      // How many of the card's lines the cabinet keeps as it stands: measured, and never the answer.
+      const held = plan.clues.filter((clue) => holds(clue, s.order)).length;
+      const lines = WORDS[held] + ' of ' + WORDS[plan.clues.length] + ' card lines ' + (held === 1 ? 'holds' : 'hold') + ' as the cabinet stands';
       return {
         solved: n === total,
         say: n === total ? 'every specimen is in the drawer the card allows'
-          : (n === 0 ? 'none of the ' + WORDS[total] + ' is filed in the right drawer yet' : WORDS[n] + ' of ' + WORDS[total] + ' filed in the right drawer')
+          : (n === 0 ? 'none of the ' + WORDS[total] + ' is filed in the right drawer yet' : WORDS[n] + ' of ' + WORDS[total] + ' filed in the right drawer') + '; ' + lines
       };
     },
     start(c) {
