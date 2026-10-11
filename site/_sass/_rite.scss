@@ -212,5 +212,6 @@ html[data-nav='live'] .sparknav[open]::after {
 @media (prefers-reduced-motion: reduce) {
   .is-revealing {
     mask: none;
+    animation: none;
   }
 }

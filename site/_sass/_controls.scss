@@ -5,7 +5,7 @@
 // gives most actions. A link that acts like a button (a.action) is an outlined button. The variants
 // are classes a page or the shell may add:
 //
-//   .btn-filled    the one action on a page that matters most (the unlock button, "set up persona")
+//   .btn-filled    the one action on a page that matters most (the check under a piece, the unlock button)
 //   .btn-outlined  what a.action is
 //   .btn-text      the quietest: "close", "ask another way", a card's "another"
 //   .warning       the one warm variant, in M3's error family: a control that throws a visitor's
@@ -296,7 +296,7 @@ button:disabled::before {
   display: none;
 }
 
-// A labelled slider: "time drift", "wind", "bloom". The M3 slider: a 16px track with the active
+// A labelled slider: a range knob beside a piece, the persona's difficulty. The M3 slider: a 16px track with the active
 // part in the primary colour, and a 4px handle with a gap either side of it. The fill follows
 // --range-pct, which js/site.js keeps equal to the slider's value.
 .row {
@@ -457,7 +457,8 @@ select.is-waxing {
   }
 }
 
-// A text field, outlined (the word kiln's). The label sits above it in the page's own markup.
+// A text field, outlined: a word answer beside a piece, or a star's words in the persona sheet.
+// Its label sits above it.
 // Its border thickens and its field fills in treads as it is reached, never in a glide.
 input[type='text'],
 input[type='search'],
