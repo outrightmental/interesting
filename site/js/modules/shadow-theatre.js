@@ -106,7 +106,7 @@ const CHANGES = [
 function asked(env) {
   const said = env && env.difficulty ? Number(env.difficulty.level) : NaN;
   const level = Number.isFinite(said) ? Math.max(1, Math.min(5, Math.round(said))) : 3;
-  return { level, helps: 6 - level, margin: Math.max(0, 3 - level) };
+  return { helps: 6 - level, margin: Math.max(0, 3 - level) };
 }
 
 /* ---- the rite: how this module moves ------------------------------------------------------- */
@@ -396,26 +396,21 @@ function polygon(g, points, map) {
   g.closePath();
 }
 
-function measure(g, str, size) {
-  g.font = '500 ' + Math.max(9, Math.round(size)) + 'px system-ui, sans-serif';
-  return g.measureText(str).width;
-}
-
 /* ---- the lamp: a distance from similar triangles -------------------------------------------- */
 
-function lampPlan(env) {
-  const options = [];
-  for (let d = 2; d <= 9; d++) {
-    for (let h = 2; h <= 6; h++) {
-      for (let a = 2; a <= 12; a++) {
-        if ((h * a) % d) continue;
-        const H = h + (h * a) / d;
-        if (H > 24 || H < h + 2) continue;
-        options.push({ d, h, a });
-      }
+const LAMP_SIZES = [];
+for (let d = 2; d <= 9; d++) {
+  for (let h = 2; h <= 6; h++) {
+    for (let a = 2; a <= 12; a++) {
+      if ((h * a) % d) continue;
+      const H = h + (h * a) / d;
+      if (H > 24 || H < h + 2) continue;
+      LAMP_SIZES.push({ d, h, a });
     }
   }
-  const o = options[env.int(0, options.length - 1)];
+}
+function lampPlan(env) {
+  const o = LAMP_SIZES[env.int(0, LAMP_SIZES.length - 1)];
   return { kind: 'lamp', h: o.h, a: o.a, d: o.d, move: env.int(0, MOVES.length - 1), cut: env.int(0, CUTOUTS.length - 1) };
 }
 
@@ -428,7 +423,8 @@ function carriedLamp(env) {
   if (!p || p.kind !== 'lamp') return null;
   const whole = (v, lo, hi) => Number.isInteger(v) && v >= lo && v <= hi;
   if (!whole(p.h, 2, 6) || !whole(p.a, 2, 12) || !whole(p.d, 2, 9)) return null;
-  if ((p.h * p.a) % p.d !== 0 || shadowHeight(p, p.d) > 24) return null;
+  const height = shadowHeight(p, p.d);
+  if ((p.h * p.a) % p.d !== 0 || height > 24 || height < p.h + 2) return null;
   if (!whole(p.move, 0, MOVES.length - 1) || !whole(p.cut, 0, CUTOUTS.length - 1)) return null;
   return { kind: 'lamp', h: p.h, a: p.a, d: p.d, move: p.move, cut: p.cut };
 }
@@ -447,9 +443,11 @@ function spans(n) {
 // shown until the new one is cut on in its place, and the counts roll each move afresh.
 function lampState() {
   return {
-    tried: null, triedFrom: null, triedAt: -1, tries: 0, reveal: false, revealAt: -1,
-    guess: null, guessWas: null, guessAt: -1, guesses: 0,
-    change: null, changeWas: null, changeAt: -1, changes: 0, lit: 1, t: 0, drawn: null, drawnAt: -1
+    tried: null, triedFrom: null, triedAt: -1, tries: 0, triedAfterSolve: false,
+    reveal: false, revealAt: -1,
+    guess: null, guessWas: null, guessAt: -1, guesses: 0, guessAfterSolve: false,
+    change: null, changeWas: null, changeAt: -1, changes: 0, changeAfterSolve: false,
+    lit: 1, t: 0, drawn: null, drawnAt: -1
   };
 }
 
@@ -517,7 +515,7 @@ function sideView(g, w, h, c, p, s, variant) {
     const standing = () => wipe(g, roll(rite, 0x6b2, s.changes), wallX, top - half, w - wallX, half * 2, k,
       s.changeWas === null ? null : band(s.changeWas), band(s.change));
     const away = roll(rite, 0x6b3, 0);
-    const gone = s.reveal ? away.stair(revealP) : 0;
+    const gone = s.reveal && !s.changeAfterSolve ? away.stair(revealP) : 0;
     if (gone > 0) wipe(g, away, wallX, top - half, w - wallX, half * 2, gone, standing, null);
     else standing();
   }
@@ -597,7 +595,7 @@ function sideView(g, w, h, c, p, s, variant) {
   // What the drawing says of d: the answer is cut on at its moment once it is read, over a line
   // of the lamp's light cut in under it; before that, the visitor's guess as a question of its
   // own, each new guess cut over the last at its moment, and a question mark until there is one.
-  const answered = s.reveal && rite.flicker(revealP);
+  const answered = s.reveal && !s.guessAfterSolve && rite.flicker(revealP);
   const guessed = answered ? null : saidGuess(s, rite, reduced);
   if (s.reveal) surface(g, roll(rite, 0x2f8, 0), lampX, floor + h * 0.06 - 2, cutX - lampX, 4, revealP, c.alpha(col.accent2, 0.55));
   const said = answered ? spans(p.d) : guessed !== null ? spans(Math.max(1, Math.round(guessed))) + '?' : '?';
@@ -643,7 +641,7 @@ function sideView(g, w, h, c, p, s, variant) {
     const bh = Math.max(onWall(from), onWall(would), real) + 3 - by;
     const standing = first ? () => wipe(g, own, wallX, by, w - wallX, bh, own.stair(pt), null, marks) : marks;
     const away = roll(rite, 0x7d4, 0);
-    const gone = s.reveal ? away.stair(revealP) : 0;
+    const gone = s.reveal && !s.triedAfterSolve ? away.stair(revealP) : 0;
     if (gone > 0) wipe(g, away, wallX, by, w - wallX, bh, gone, standing, null);
     else standing();
   }
@@ -696,19 +694,22 @@ function lampPiece(env, p) {
       const d = Number(c.value('distance'));
       const distanceRight = Math.abs(d - p.d) <= margin;
       const changeRight = c.value('change') === move.answer;
-      if (distanceRight && changeRight) return { solved: true, say: 'the lamp is ' + spans(p.d) + ' behind the cutout, and the shadow ' + move.answer };
+      if (distanceRight && changeRight) return { solved: true, say: (d === p.d
+        ? 'the lamp is ' + spans(p.d) + ' behind the cutout'
+        : 'your distance is within ' + spans(margin) + ' of the measured distance')
+        + ', and the shadow ' + move.answer };
       const parts = [];
       if (!distanceRight) {
         const tried = Number.isFinite(d) && d >= 1 ? d : null;
-        if (tried !== s.tried) {
-          // The line the wall would show moves on from where it stands now.
+        if (tried !== s.tried || (s.reveal && !s.triedAfterSolve)) {
           const pt = came(s, s.triedAt, 1.1, !!c.reduced);
           const stood = s.tried == null ? null : shadowHeight(p, s.tried);
           const from = s.triedFrom == null || stood == null ? stood : s.triedFrom + (stood - s.triedFrom) * roll(riteOf(c), 0x7d3, s.tries).ease(pt);
-          s.triedFrom = from;
+          s.triedFrom = s.reveal && !s.triedAfterSolve ? null : from;
           s.tried = tried;
           s.triedAt = s.t;
           s.tries += 1;
+          s.triedAfterSolve = s.reveal || s.triedAfterSolve;
         }
         parts.push(s.tried ? 'from there the shadow would stand ' + tenth(shadowHeight(p, d)) + ' spans tall, not ' + H : 'the distance is off');
       }
@@ -724,24 +725,25 @@ function lampPiece(env, p) {
         const d = Number(value);
         c.status(Number.isFinite(d) && d >= 1 ? 'the lamp ' + spans(Math.round(d)) + ' behind the cutout; light it to see' : 'the lamp has to stand somewhere');
         const guess = Number.isFinite(d) && d >= 1 ? d : null;
-        if (guess !== s.guess) {
-          // The new guess is cut over whatever the drawing says now.
-          s.guessWas = saidGuess(s, riteOf(c), !!c.reduced);
+        if (guess !== s.guess || (s.reveal && !s.guessAfterSolve)) {
+          s.guessWas = s.reveal && !s.guessAfterSolve ? null : saidGuess(s, riteOf(c), !!c.reduced);
           s.guess = guess;
           s.guessAt = s.t;
           s.guesses += 1;
+          s.guessAfterSolve = s.reveal || s.guessAfterSolve;
         }
       }
       if (id === 'change') {
         const o = CHANGES.find((x) => x.value === value);
         if (o) {
           c.status('when ' + move.text + ', ' + o.label + ', you say');
-          if (s.change !== o.value) {
-            // The new prediction is cut in in place of whichever the wall shows now.
-            s.changeWas = changeCut(s, riteOf(c), !!c.reduced) > 0 ? s.change : s.changeWas;
+          if (s.change !== o.value || (s.reveal && !s.changeAfterSolve)) {
+            s.changeWas = s.reveal && !s.changeAfterSolve ? null
+              : changeCut(s, riteOf(c), !!c.reduced) > 0 ? s.change : s.changeWas;
             s.change = o.value;
             s.changeAt = s.t;
             s.changes += 1;
+            s.changeAfterSolve = s.reveal || s.changeAfterSolve;
           }
         }
       }
@@ -1001,11 +1003,6 @@ function matchPiece(env, p) {
     s.drawn = sizeOf(c);
     s.drawnAt = s.t;
   };
-  function matched() {
-    let n = 0;
-    for (let i = 0; i < count; i++) if (s.order[i] === solution[i]) n += 1;
-    return n;
-  }
   return {
     title: matchTitle(p),
     brief: 'Match each numbered shadow to a cutout on the bench. Each is enlarged by the factor underneath and leaned sideways. '
@@ -1021,9 +1018,13 @@ function matchPiece(env, p) {
     ],
     solution: { order: solution, ...(p.flips ? { reversed: p.flips.slice() } : {}) },
     check(c) {
-      const n = matched();
-      const turned = p.flips ? s.reversed.filter((i) => p.flips.includes(i)).length : 0;
-      const extra = s.reversed.length - turned;
+      const order = c.value('order');
+      const n = Array.isArray(order) && order.length === count
+        ? order.reduce((right, cut, i) => right + (Number(cut) === solution[i] ? 1 : 0), 0) : 0;
+      const reversed = p.flips ? c.value('reversed') : [];
+      const marked = Array.isArray(reversed) ? [...new Set(reversed.map(Number))] : [];
+      const turned = p.flips ? marked.filter((i) => p.flips.includes(i)).length : 0;
+      const extra = marked.length - turned;
       const solved = n === count && (!p.flips || (turned === p.flips.length && extra === 0));
       const matching = n === 0 ? 'no shadow has its cutout yet' : WORDS[n] + ' of ' + WORDS[count] + ' shadows ' + (n === 1 ? 'has' : 'have') + ' the right cutout';
       return {
@@ -1117,18 +1118,16 @@ const shown = new WeakMap();
 function deal(env) {
   let plan = plans.get(env);
   if (!plan) {
-    plan = env.chance(0.5) ? lampPlan(env) : matchPlan(env);
+    plan = carriedLamp(env) || carriedMatch(env)
+      || (env.chance(0.5) ? lampPlan(env) : matchPlan(env));
     plans.set(env, plan);
   }
   return plan;
 }
 
-function dealsLamp(env) {
-  return deal(env).kind === 'lamp';
-}
-
 // A card's picture, its flame `lit` of the way caught, noted as what its canvas now holds.
-function preview(g, w, h, env, lit) {
+function preview(g, w, h, env, lit, cardPlan) {
+  if (cardPlan) plans.set(env, cardPlan);
   const p = deal(env);
   if (p.kind === 'lamp') lampPreview(g, w, h, env, p, lit);
   else matchPreview(g, w, h, env, p, lit);
@@ -1159,13 +1158,13 @@ export default {
   },
   spark(env) {
     const p = deal(env);
-    if (dealsLamp(env)) {
+    if (p.kind === 'lamp') {
       return {
         title: lampTitle(p),
         mono: 'h = ' + p.h + ' / a = ' + p.a + ' / H = ' + shadowHeight(p, p.d) + ' / d = ?',
         text: 'A cutout ' + spans(p.h) + ' tall, ' + spans(p.a) + ' from the wall, and a lamp on the floor somewhere behind it. The shadow is ' + spans(shadowHeight(p, p.d)) + ' tall. How far back is the lamp?',
         aspect: '16 / 10',
-        paint: (g, w, h, cardEnv) => lampPreview(g, w, h, cardEnv, p),
+        paint: (g, w, h, cardEnv) => preview(g, w, h, cardEnv, cardEnv.reduced ? 1 : 0, p),
         of: p
       };
     }
@@ -1175,7 +1174,7 @@ export default {
         + (p.flips ? p.flips.length + ' cutouts were turned over. Match the cast and find the reversed shadows.' : 'Match their outlines rather than their sizes.')
         + (p.items.length === 6 ? ' This cast fills two rows.' : ''),
       aspect: p.items.length === 6 ? '4 / 5' : '4 / 3',
-      paint: (g, w, h, cardEnv) => matchPreview(g, w, h, cardEnv, p),
+      paint: (g, w, h, cardEnv) => preview(g, w, h, cardEnv, cardEnv.reduced ? 1 : 0, p),
       of: p
     };
   },
@@ -1185,6 +1184,6 @@ export default {
     const match = carriedMatch(env);
     if (match) return matchPiece(env, match);
     const p = deal(env);
-    return dealsLamp(env) ? lampPiece(env, p) : matchPiece(env, p);
+    return p.kind === 'lamp' ? lampPiece(env, p) : matchPiece(env, p);
   }
 };
