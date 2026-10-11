@@ -19,7 +19,7 @@
                        nine letters at a time; at any other, they read nothing. Find the notch
                        and the turn, and read the note's first word. The hints, at a price, are
                        the notch and then the turn.
-     the rod           A note written down a rod of three to seven flat faces and unwound into
+     the rod           A note written down a rod of three to eight flat faces and unwound into
                        one strip. Wound back on the right number of faces it reads the note down
                        its columns. The faces divide the strip evenly, padded with X, so the
                        length narrows the search. A wrong check says how many letters of the
@@ -49,8 +49,42 @@ const NOTES = [
   'THE GARDEN IS BEHIND THE MIRROR',
   'THE CABINET HOLDS A SMALLER HOUSE',
   'THREE DOORS OPEN ONTO ONE ROOM',
-  'THE EXIT IS WHERE YOU STARTED'
+  'THE EXIT IS WHERE YOU STARTED',
+  'THE ATTIC REMEMBERS THE FLOOD',
+  'EVERY MIRROR FACES THE WRONG WAY',
+  'THE KETTLE SINGS IN ANOTHER ROOM',
+  'THE CELLAR DOOR IS A WINDOW NOW',
+  'A SECOND MOON HANGS IN THE HALL',
+  'THE PIANO HAS ONE MORE KEY',
+  'COUNT THE STEPS GOING DOWN TWICE',
+  'THE INK IS STILL WET UPSTAIRS',
+  'THE WELL ANSWERS BEFORE MIDNIGHT',
+  'SOMEBODY MOVED THE NORTH WALL',
+  'THE LIBRARY SHELVES ITSELF AT DUSK',
+  'A LETTER CAME FROM THE NEXT ROOM'
 ];
+
+// What the house says back when a note is opened: one line of dressing, written under the note
+// on the scene and on the status line. It carries nothing the puzzle needs; it is the reason to
+// open the next one.
+const REPLIES = [
+  'the house has heard you, and moved a chair',
+  'somewhere a door that was shut is not',
+  'the ink dries; the next note is already written',
+  'a lamp comes on in a room you have not found',
+  'the cabinet files this under rooms that moved',
+  'the stairs have taken the long way round',
+  'the mirror writes it back the right way',
+  'the clock in the wall strikes once',
+  'the key word is kept; the house keeps the rest',
+  'one more drawer than there was before',
+  'the loam under the floor shifts a little',
+  'the lantern below lifts its wick'
+];
+
+function replyOf(p) {
+  return REPLIES[(p.note * 7 + p.case.charCodeAt(6)) % REPLIES.length];
+}
 
 const ALPHABET = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
 const PLAIN = { density: 1, scale: 1, turn: 0 };
@@ -524,7 +558,16 @@ function wheelScene(g, w, h, c, p, look, variant) {
     g.clip();
     face(g, '600 ' + size + 'px ui-monospace, monospace');
     g.fillStyle = colors.accent2;
-    writeRows(g, note, w / 2, h * 0.88, w * 0.88, size);
+    const bandLines = rows(note, Math.max(8, Math.floor((w * 0.88) / (size * 0.68)))).length;
+    const noteTop = h * 0.76 + size * 0.9;
+    writeRows(g, note, w / 2, noteTop, w * 0.88, size);
+    // The house's reply, under the note, in the smaller hand.
+    const replyY = noteTop + bandLines * size * 1.16 + small * 0.3;
+    if (replyY + small < h) {
+      face(g, '500 ' + small + 'px ui-monospace, monospace');
+      g.fillStyle = c.alpha(colors.accent2, 0.85);
+      writeRows(g, replyOf(p), w / 2, replyY, w * 0.88, small);
+    }
     g.restore();
     return;
   }
@@ -686,7 +729,7 @@ function wheelPiece(env) {
     end(c) {
       state.reveal = true;
       state.solvedAt = state.time;
-      c.status('the note reads: ' + note);
+      c.status('the note reads: ' + note + '. ' + replyOf(p));
       draw(c, true);
     }
   };
@@ -1001,9 +1044,16 @@ function grilleScene(g, w, h, c, p, board, look, variant) {
     g.textAlign = 'center';
     g.fillStyle = col.fg;
     const limit = Math.max(8, Math.floor((w * 0.84) / (small * 0.68)));
-    rows(NOTES[p.note], limit).forEach((line, index) => {
+    const noteLines = rows(NOTES[p.note], limit);
+    noteLines.forEach((line, index) => {
       g.fillText(line, w / 2, h * 0.82 + index * small * 1.16);
     });
+    // The house's reply, under the note.
+    const replyY = h * 0.82 + noteLines.length * small * 1.16 + small * 0.3;
+    if (replyY + small < h * 0.98) {
+      g.fillStyle = c.alpha(col.accent2, 0.85);
+      writeRows(g, replyOf(p), w / 2, replyY, w * 0.84, small);
+    }
     g.restore();
   }
   g.restore();
@@ -1122,7 +1172,7 @@ function grillePiece(env, carriedPlan) {
     end(c) {
       s.reveal = true;
       s.solvedAt = s.t;
-      c.status('the note reads: ' + note + '. One key exposes every square exactly once across four views.');
+      c.status('the note reads: ' + note + '. ' + replyOf(p) + '; one key exposes every square once across four views');
       draw(c, true);
     }
   };
@@ -1153,7 +1203,7 @@ function rodPlan(env) {
     family: 'rod',
     case: seed.toString(36).toUpperCase().padStart(7, '0'),
     note: (mix >>> 3) % NOTES.length,
-    faces: 3 + (mix % 5)
+    faces: 3 + (mix % 6)
   };
 }
 
@@ -1161,7 +1211,7 @@ function carriedRod(env) {
   const p = env.card && env.card.of;
   if (!p || p.family !== 'rod' || typeof p.case !== 'string' || !/^[0-9A-Z]{7}$/.test(p.case)
       || !Number.isInteger(p.note) || p.note < 0 || p.note >= NOTES.length
-      || !Number.isInteger(p.faces) || p.faces < 3 || p.faces > 7) return null;
+      || !Number.isInteger(p.faces) || p.faces < 3 || p.faces > 8) return null;
   return { family: 'rod', case: p.case, note: p.note, faces: p.faces };
 }
 
@@ -1279,7 +1329,14 @@ function rodScene(g, w, h, c, p, look, variant) {
     rite.region(g, 0, h * 0.76, w, h * 0.24, look.revealK);
     g.clip();
     g.fillStyle = col.accent2;
+    const noteLines = rows(NOTES[p.note], per).length;
     writeRows(g, NOTES[p.note], w / 2, h * 0.84, w * 0.88, small);
+    // The house's reply, under the note.
+    const replyY = h * 0.84 + noteLines * small * 1.16 + small * 0.3;
+    if (replyY + small < h) {
+      g.fillStyle = c.alpha(col.accent2, 0.85);
+      writeRows(g, replyOf(p), w / 2, replyY, w * 0.88, small);
+    }
     g.restore();
     return;
   }
@@ -1394,7 +1451,7 @@ function rodPiece(env, carriedPlan) {
     end(c) {
       s.reveal = true;
       s.solvedAt = s.t;
-      c.status('the note reads: ' + note);
+      c.status('the note reads: ' + note + '. ' + replyOf(p));
       draw(c, true);
     }
   };
