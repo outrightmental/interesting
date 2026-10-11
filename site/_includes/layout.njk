@@ -1,7 +1,9 @@
-{# Front matter: title names the page; description describes it, or defaults to the world's description in _data/worlds.json. error.html uses inlineStyles and siteRoot because it can be served at an arbitrary missing path. A page supplies its main; the layout supplies navigation, persona and feed. siteRoot renders empty on every page that does not set it, so one block below serves both cases. #}
+{# Front matter: title names the page and description describes it; each defaults to the page's own entry in _data/worlds.json (wayIn, worlds, finePrint or edges), so a page listed there needs neither. error.html uses inlineStyles and siteRoot because it can be served at an arbitrary missing path. A page supplies its main; the layout supplies navigation, persona and feed. siteRoot renders empty on every page that does not set it, so one block below serves both cases. #}
 {%- set here = (page.filePathStem | replace('/', '')) + '.html' if page else '' %}
-{%- set thisWorld = null %}
-{%- for world in worlds.worlds %}{% if world.file == here %}{% set thisWorld = world %}{% endif %}{% endfor %}
+{%- set thisPage = null %}
+{%- for list in [worlds.wayIn, worlds.worlds, worlds.finePrint, worlds.edges] %}{% for entry in list %}{% if entry.file == here %}{% set thisPage = entry %}{% endif %}{% endfor %}{% endfor %}
+{%- set thisWorld = thisPage if thisPage and thisPage.mood else null %}
+{%- set pageTitle = title if title else (thisPage.name if thisPage else '') %}
 {%- set icons = {
   'home': 'M10 20v-6h4v6h5v-8h3L12 3 2 12h3v8z',
   'explore': 'M12 10.9c-.61 0-1.1.49-1.1 1.1s.49 1.1 1.1 1.1c.61 0 1.1-.49 1.1-1.1s-.49-1.1-1.1-1.1zM12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm2.19 12.19L6 18l3.81-8.19L18 6l-3.81 8.19z',
@@ -21,11 +23,11 @@
   <meta charset='utf-8'>
   <meta name='viewport' content='width=device-width, initial-scale=1'>
   <meta name='color-scheme' content='dark'>
-  <title>{% if title %}{{ title }} · {% endif %}interesting</title>
+  <title>{% if pageTitle %}{{ pageTitle }} · {% endif %}interesting</title>
   <link rel='icon' href='{{ siteRoot }}favicon.svg' type='image/svg+xml'>
   <script type='application/json' id='site-worlds'>{{ worlds.worlds | dump | safe }}</script>
-{%- if description or thisWorld %}
-  <meta name='description' content='{{ description if description else thisWorld.what }}'>
+{%- if description or thisPage %}
+  <meta name='description' content='{{ description if description else thisPage.what }}'>
 {%- endif %}
   <link rel='stylesheet' href='{{ siteRoot }}css/fonts.css'>
 {%- if inlineStyles %}

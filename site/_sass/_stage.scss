@@ -34,10 +34,9 @@
 // that lands on nothing is the one thing the picture may not do.
 //
 // Nothing of the ceremony is laid over the scene, and nothing of it closes the piece down: Done is
-// not the End (issue #86). The done mark used to be a 64px disc and a pill pinned in the scene's
-// lower-right corner, over the piece's own finale, and the knobs went inert under it. A finished
-// piece is still a toy, so the picture stays whole and every control stays live; what the ceremony
-// changes is the report beside the dots and the one mark in the corner of the screen.
+// not the End (issue #86). A finished piece is still a toy, so the picture stays whole and every
+// control stays live; what the ceremony changes is the report beside the dots and the one mark in
+// the corner of the screen.
 //
 // How the stage moves (README: "Motion axiom", the cut). Nothing here fades, glides or is a
 // pattern: every change is ONE clean edge, chosen for a reason, stepping across in a few treads
@@ -1038,7 +1037,7 @@
 // filled and then this (issue #86). It is laid out with the rail rather than positioned over
 // anything, so there is no corner of the picture it can take and nothing of the piece's finale it
 // can stand on -- and the piece under it is still live, which is the whole point of moving it here.
-// The scene it used to cover is the content; a mark that reports on content does not sit on it.
+// The scene is the content; a mark that reports on content does not sit on it.
 // It is the seal of the ceremony: it lands as a curve growing out of its right-hand end, where the
 // row of seals it finishes stands, in the arrival's treads (is-landing, written by js/stage.js and
 // taken off when this cut has ended), and rests in two shades of its container split by that same
