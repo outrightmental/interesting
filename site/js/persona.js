@@ -91,6 +91,10 @@
     var m = window.interestingMotion;
     return m && typeof m.ms === 'function' ? m : null;
   }
+  function reportFailure(error) {
+    if (typeof window.reportError === 'function') window.reportError(error);
+    else window.setTimeout(function () { throw error; }, 0);
+  }
   function calm() {
     var m = engine();
     return m ? !!m.reduced : stillness();
@@ -136,8 +140,7 @@
   function cutOn(el, name, options) {
     var m = engine();
     if (!el || !el.style || !m || calm() || typeof m.cut !== 'function') return 0;
-    try { return m.cut(el, name, options || {}) || 0; }
-    catch (e) { console.error('The movement could not be rolled', e); return 0; }
+    return m.cut(el, name, options || {}) || 0;
   }
   // An arrival whose direction the engine rolls (m.arrive): where it comes from, the slice it comes
   // in behind and its treads, written on the element (and the treads again under `spell`, the name
@@ -145,8 +148,7 @@
   function arriveOn(el, spell) {
     var m = engine();
     if (!el || !el.style || !m || calm() || typeof m.arrive !== 'function') return;
-    try { m.arrive(el, { spell: spell, className: false }); }
-    catch (e) { console.error('The arrival could not be rolled', e); }
+    m.arrive(el, { spell: spell, className: false });
   }
   // How far a box steps as it arrives or leaves, in CSS pixels: the engine's own reach.
   var REACH = 18;
@@ -219,8 +221,7 @@
   function treadsOn(el, name, family) {
     var m = engine();
     if (!el || !el.style || !m || calm() || typeof m.curve !== 'function') return;
-    try { el.style.setProperty(name, m.curve(family).css); }
-    catch (e) { console.error('The treads could not be rolled', e); }
+    el.style.setProperty(name, m.curve(family).css);
   }
   // A passing rite given longer than it was first given (a part held back while what it pushes
   // steps aside, makeRoom), without being started again: its clock alone is set afresh, and the
@@ -690,10 +691,12 @@
   function onSky(fn) {
     if (typeof fn !== 'function') return function () {};
     listeners.push(fn);
+    var subscribed = true;
     return function () {
-      for (var i = listeners.length - 1; i >= 0; i--) {
-        if (listeners[i] === fn) listeners.splice(i, 1);
-      }
+      if (!subscribed) return;
+      subscribed = false;
+      var at = listeners.indexOf(fn);
+      if (at !== -1) listeners.splice(at, 1);
     };
   }
   function sameStars(a, b) {
@@ -703,13 +706,18 @@
   }
   function announce(list, how, kept) {
     refresh();
-    // Readers receive independent snapshots; changing one must not change the saved sky.
-    listeners.slice().forEach(function (fn) { fn(list.map(cleanStar), how, kept); });
+    var failures = [];
+    // Readers receive independent snapshots; one faulty reader must not silence the others.
+    listeners.slice().forEach(function (fn) {
+      try { fn(list.map(cleanStar), how, kept); }
+      catch (error) { failures.push(error); }
+    });
     if (typeof window.CustomEvent === 'function' && typeof window.dispatchEvent === 'function') {
       window.dispatchEvent(new window.CustomEvent('persona:sky', {
         detail: { stars: list.map(cleanStar), how: how, kept: kept }
       }));
     }
+    if (failures.length) throw failures[0];
   }
   function setStars(next, how) {
     if (!Array.isArray(next) || !next.every(validStar)) {
@@ -744,8 +752,8 @@
 
   // A stored level, cleaned: an integer stop on the dial, or 0 for anything else.
   function levelOf(value) {
-    var n = Math.round(Number(value));
-    return isFinite(n) && n >= 1 && n <= LEVELS.length ? n : 0;
+    var n = Number(value);
+    return Number.isInteger(n) && n >= 1 && n <= LEVELS.length ? n : 0;
   }
   // The level the document holds, and whether the visitor has chosen it. Anything the dial cannot
   // be set to reads as unchosen rather than as broken -- unlike the sky, there is always a
@@ -767,14 +775,17 @@
   function onDifficulty(fn) {
     if (typeof fn !== 'function') return function () {};
     tuned.push(fn);
+    var subscribed = true;
     return function () {
-      for (var i = tuned.length - 1; i >= 0; i--) {
-        if (tuned[i] === fn) tuned.splice(i, 1);
-      }
+      if (!subscribed) return;
+      subscribed = false;
+      var at = tuned.indexOf(fn);
+      if (at !== -1) tuned.splice(at, 1);
     };
   }
   function setDifficulty(level) {
-    var want = levelOf(level) || DEFAULT_LEVEL;
+    var want = levelOf(level);
+    if (!want) throw new RangeError('Difficulty must be a whole level from 1 to ' + LEVELS.length + '.');
     var before = readDifficulty();
     if (before.set && before.level === want) {
       return !!(store && store.persistent !== false);
@@ -787,15 +798,17 @@
     refresh();
     if (before.level === now.level) return kept;
     var subscribers = tuned.slice();
+    var failures = [];
     for (var i = 0; i < subscribers.length; i++) {
       try { subscribers[i](Object.assign({}, now), kept); }
-      catch (e) { console.error('A difficulty listener failed', e); }
+      catch (error) { failures.push(error); }
     }
     if (typeof window.CustomEvent === 'function' && typeof window.dispatchEvent === 'function') {
       window.dispatchEvent(new window.CustomEvent('persona:difficulty', {
         detail: { difficulty: now, kept: kept }
       }));
     }
+    if (failures.length) throw failures[0];
     return kept;
   }
   function describeDifficulty() {
@@ -879,10 +892,11 @@
     });
     function keep() {
       var at = levelOf(input.value) || DEFAULT_LEVEL;
-      if (at === difficulty().level) { tell(at, store && store.persistent ? undefined : false); return; }
+      var before = difficulty();
+      if (at === before.level && before.set) { tell(at, store && store.persistent ? undefined : false); return; }
       var kept = setDifficulty(at);
       tell(at, kept);
-      if (typeof opts.onChange === 'function') opts.onChange(difficulty(), kept);
+      if (at !== before.level && typeof opts.onChange === 'function') opts.onChange(difficulty(), kept);
     }
     input.addEventListener('change', keep);
     var release = onDifficulty(function (now, kept) {
@@ -900,12 +914,11 @@
      star has in the deal (a star at -1 is already in the sky), `pass.count` how many are being
      dealt and `pass.stars` the fraction of the deal so far, so a star and the lines to it are
      drawn only once its place has come up. Each tread draws more of the sky than the last and
-     never less. The lines take the canvas's
-     own CSS colour, read once a draw: Chromium resolves a context's 'currentColor' from the
-     element's inline style alone and paints black for one set by a stylesheet, as these are. */
+     never less. The lines and stars share one pale ink, without a style read on every move. */
+  var STAR_INK = 'rgba(236, 244, 255, 0.96)';
   function drawSky(ctx, list, w, h, pad, dotRadius, lineWidth, route, pass, guide) {
     var path = route || threadOf(list);
-    var ink = skyInk(ctx);
+    var ink = STAR_INK;
     if (guide) drawFigureGuide(ctx, guide, w, h, pad, ink);
     var points = list.map(function (s) {
       return { x: pad + s.x / 100 * (w - pad * 2), y: pad + s.y / 100 * (h - pad * 2) };
@@ -964,16 +977,11 @@
     for (var p = 0; p < points.length; p++) {
       if (!shown(p)) continue;
       ctx.beginPath();
-      ctx.fillStyle = 'rgba(236, 244, 255, 0.96)';
+      ctx.fillStyle = STAR_INK;
       ctx.arc(points[p].x, points[p].y, dotRadius * starGleam(list[p].text)
         * (path.indexOf(p) === -1 ? 1 : 1.7), 0, Math.PI * 2);
       ctx.fill();
     }
-  }
-  function skyInk(ctx) {
-    var canvas = ctx.canvas;
-    if (!canvas || typeof window.getComputedStyle !== 'function') return 'currentColor';
-    return window.getComputedStyle(canvas).color || 'currentColor';
   }
   function sizeCanvas(canvas, w, h) {
     var dpr = window.devicePixelRatio || 1;
@@ -1044,7 +1052,7 @@
     // A reading first read while a visitor watches seals a ring onto the portrait (is-read); one
     // carried in from an earlier page is simply worn. Put on in the same frame data-asking goes
     // false below: the stylesheet's reading-seal is a name of its own, so the curve is cut afresh.
-    if (isRead && card.everDrawn && !card.readDrawn) {
+    if (!behind && isRead && card.everDrawn && !card.readDrawn) {
       rite(card.host, 'read', (cutOn(card.host, 'reading-seal', { family: 'arrive' }) || riteMs('medium', 320)) + 200);
     }
     // A sky that makes a named shape (figureOf) wears a solid ring inside the portrait, so the
@@ -1058,7 +1066,7 @@
       card.host.setAttribute('data-figure', figure ? 'true' : 'false');
       renderFigures(figure); // the sheet's marks, shut away with it, follow the saved sky
     }
-    card.readDrawn = isRead;
+    if (!behind) card.readDrawn = isRead;
     card.everDrawn = true;
     card.host.setAttribute('data-state', askingInCard ? 'asking' : (!list.length && !isRead ? 'empty' : 'ready'));
     card.host.setAttribute('data-reading', !isRead ? 'none' : (r.source === 'answer' ? 'answered' : 'carried'));
@@ -1923,9 +1931,8 @@
         change();
       }, { items: items, dealt: false }) || [];
     } catch (e) {
-      console.error('The sheet could not step aside', e);
       if (!changed) change();
-      return;
+      throw e;
     }
     var wait = 0;
     for (var s = 0; s < stepping.length; s++) {
@@ -2032,7 +2039,7 @@
       if (selected !== index) select(index);
       if (el.setPointerCapture) {
         try { el.setPointerCapture(ev.pointerId); }
-        catch (e) { console.error('Could not hold the star while dragging', e); }
+        catch (e) { reportFailure(e); }
       }
       el.classList.add('dragging');
     });
@@ -2173,9 +2180,10 @@
     if (star && star.el) {
       // Set down: the lift comes off, and the star comes back to its size in treads.
       star.el.classList.remove('dragging');
-      if (star.el.releasePointerCapture) {
+      if (star.el.releasePointerCapture
+          && (!star.el.hasPointerCapture || star.el.hasPointerCapture(drag.pointerId))) {
         try { star.el.releasePointerCapture(drag.pointerId); }
-        catch (e) { console.error('Could not release the dragged star', e); }
+        catch (e) { reportFailure(e); }
       }
     }
     if (drag.moved) suppressClickUntil = Date.now() + DRAG_SUPPRESS_MS;
