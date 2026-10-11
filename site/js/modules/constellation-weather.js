@@ -389,8 +389,25 @@ function station(g, env, x, y, r, letter, size) {
 
 /* ---- when the front arrives ---------------------------------------------------------------- */
 
+// The hours the front takes: at its own speed, and on a ridged map at the ridge's speed past it.
 function frontHours(plan) {
-  return (plan.squares * KM) / plan.speed;
+  if (!plan.ridge) return (plan.squares * KM) / plan.speed;
+  return ((plan.squares - plan.ridge.squares) * KM) / plan.speed + (plan.ridge.squares * KM) / plan.ridge.speed;
+}
+
+// How many squares the front has come after `wait` hours.
+function travelled(plan, wait) {
+  const first = plan.ridge ? plan.squares - plan.ridge.squares : plan.squares;
+  const reach = (first * KM) / plan.speed;
+  if (!plan.ridge || wait <= reach) return (wait * plan.speed) / KM;
+  return first + ((wait - reach) * plan.ridge.speed) / KM;
+}
+
+// The row or column the ridge lies along.
+function ridgeAt(plan) {
+  const [c, r] = plan.station;
+  const k = plan.ridge.squares;
+  return plan.side === 'north' ? r - k : plan.side === 'south' ? r + k : plan.side === 'west' ? c - k : c + k;
 }
 
 function frontOk(p) {
@@ -398,7 +415,10 @@ function frontOk(p) {
   if (!Array.isArray(p.station) || p.station.length !== 2 || !p.station.every(Number.isInteger)) return false;
   const [c, r] = p.station;
   const d = p.squares;
-  if (!Number.isInteger(d) || d < 3 || d > 12 || !SPEEDS.includes(p.speed) || (d * KM) % p.speed !== 0) return false;
+  const rg = p.ridge == null ? null : p.ridge;
+  if (!Number.isInteger(d) || d < 3 || d > 12 || !SPEEDS.includes(p.speed)) return false;
+  if (rg && !(Number.isInteger(rg.squares) && rg.squares >= 1 && rg.squares < d && SPEEDS.includes(rg.speed) && rg.speed < p.speed && (rg.squares * KM) % rg.speed === 0)) return false;
+  if (((rg ? d - rg.squares : d) * KM) % p.speed !== 0) return false;
   if (!Number.isInteger(p.now) || p.now < 0 || p.now > 23) return false;
   if (c < 2 || c > GC - 2 || r < 2 || r > GR - 2) return false;
   const line = p.side === 'north' ? r - d : p.side === 'south' ? r + d : p.side === 'west' ? c - d : c + d;
@@ -411,11 +431,16 @@ function frontPlan(env) {
     const side = env.pick(SIDES);
     const vertical = side === 'north' || side === 'south';
     const squares = env.int(3, vertical ? GR - 3 : 12);
-    const speeds = SPEEDS.filter((v) => (squares * KM) % v === 0);
+    // Some maps carry a ridge between the front and the station, past which it slows.
+    const ridged = squares >= 5 && env.chance(0.4);
+    const rs = ridged ? env.int(2, squares - 2) : 0;
+    const speeds = SPEEDS.filter((v) => ((squares - rs) * KM) % v === 0 && (!ridged || v > 10));
+    if (!speeds.length) continue;
     const speed = env.pick(speeds);
     const c = vertical ? env.int(3, GC - 3) : side === 'west' ? env.int(squares + 1, GC - 2) : env.int(2, GC - 1 - squares);
     const r = !vertical ? env.int(3, GR - 3) : side === 'north' ? env.int(squares + 1, GR - 2) : env.int(2, GR - 1 - squares);
     const plan = { kind: 'front', station: [c, r], side, squares, speed, now: env.int(0, 23) };
+    if (ridged) plan.ridge = { squares: rs, speed: env.pick(SPEEDS.filter((v) => v < speed && (rs * KM) % v === 0)) };
     if (frontOk(plan)) return plan;
   }
   return { kind: 'front', station: [10, 9], side: 'north', squares: 6, speed: 20, now: 21 };
@@ -424,10 +449,13 @@ function frontPlan(env) {
 function carriedFront(env) {
   const p = env.card && env.card.of;
   if (!frontOk(p)) return null;
-  return { kind: 'front', station: p.station.slice(), side: p.side, squares: p.squares, speed: p.speed, now: p.now };
+  const plan = { kind: 'front', station: p.station.slice(), side: p.side, squares: p.squares, speed: p.speed, now: p.now };
+  if (p.ridge) plan.ridge = { squares: p.ridge.squares, speed: p.ridge.speed };
+  return plan;
 }
 
 function frontTitle(plan) {
+  if (plan.ridge) return 'the front over the ridge: ' + plan.speed + ', then ' + plan.ridge.speed + ' km/h';
   return 'when the front arrives: ' + plan.speed + ' km/h';
 }
 
@@ -516,6 +544,30 @@ function drawFront(g, w, h, env, plan, s, variant) {
     g.fillStyle = env.alpha(c.accent, 0.24);
     cover(g, rite, band.x, band.y, band.w, band.h, k);
   }
+  // The ridge, where a ridged front slows: a dotted line, named with the speed beyond it.
+  if (plan.ridge) {
+    const at = ridgeAt(plan);
+    const upright = plan.side === 'east' || plan.side === 'west';
+    g.save();
+    g.strokeStyle = env.alpha(c.accent2, 0.75);
+    g.lineWidth = 1.5;
+    g.setLineDash([geo.sq * 0.15, geo.sq * 0.2]);
+    g.beginPath();
+    if (upright) {
+      g.moveTo(geo.x(at), geo.top);
+      g.lineTo(geo.x(at), geo.bottom);
+    } else {
+      g.moveTo(geo.left, geo.y(at));
+      g.lineTo(geo.right, geo.y(at));
+    }
+    g.stroke();
+    g.restore();
+    const label = 'ridge: ' + plan.ridge.speed + ' km/h past it';
+    if (upright) {
+      const flip = at > GC * 0.6;
+      write(g, label, geo.x(at) + (flip ? -1 : 1) * geo.sq * 0.25, geo.y(0.6), size, flip ? 'right' : 'left', c.accent2, '600');
+    } else write(g, label, geo.x(0.3), geo.y(at) - geo.sq * 0.4, size, 'left', c.accent2, '600');
+  }
   g.strokeStyle = env.alpha(tone, 0.9);
   g.lineWidth = Math.max(1.5, geo.sq * 0.12);
   g.beginPath();
@@ -554,7 +606,7 @@ function drawFront(g, w, h, env, plan, s, variant) {
   }
   if (s.guess != null) {
     const origin = frontLine(plan, 0);
-    const travel = forecastWait(env, plan, s) * plan.speed / KM;
+    const travel = travelled(plan, forecastWait(env, plan, s));
     const at = origin.at + (origin.vertical ? origin.dx : origin.dy) * travel;
     const position = clamp(at, 0, origin.vertical ? GC : GR);
     const x = origin.vertical ? geo.x(position) : geo.left;
@@ -649,7 +701,7 @@ function frontPiece(env, plan) {
   };
   return {
     title: frontTitle(plan),
-    brief: 'Forecast when the front reaches the station. North is up; columns count east and rows south. The station is at column ' + plan.station[0] + ', row ' + plan.station[1] + '; the front lies along ' + (frontLine(plan, 0).vertical ? 'column ' : 'row ') + frontLine(plan, 0).at + ' and moves toward it at ' + plan.speed + ' km/h. Each square is ten kilometres. It is now ' + fmt(plan.now) + '; use the 24-hour clock, wrapping past midnight if needed. Change the hour to try a forecast: the dashed line shows where the front would be then, pinned to the edge if it leaves the map. The solid line is the starting front.',
+    brief: 'Forecast when the front reaches the station. North is up; columns count east and rows south. The station is at column ' + plan.station[0] + ', row ' + plan.station[1] + '; the front lies along ' + (frontLine(plan, 0).vertical ? 'column ' : 'row ') + frontLine(plan, 0).at + ' and moves toward it at ' + plan.speed + ' km/h.' + (plan.ridge ? ' A ridge lies along ' + (frontLine(plan, 0).vertical ? 'column ' : 'row ') + ridgeAt(plan) + '; past it the front slows to ' + plan.ridge.speed + ' km/h.' : '') + ' Each square is ten kilometres. It is now ' + fmt(plan.now) + '; use the 24-hour clock, wrapping past midnight if needed. Change the hour to try a forecast: the dashed line shows where the front would be then, pinned to the edge if it leaves the map. The solid line is the starting front.',
     goal: 'Say the hour the front reaches the station, and which side it comes from.',
     aspect: '4 / 3',
     checkLabel: 'log the forecast',
@@ -690,7 +742,7 @@ function frontPiece(env, plan) {
         s.guessAt = s.t;
         const wait = s.guess == null ? null : ((s.guess - plan.now) % 24 + 24) % 24;
         c.status(wait == null ? 'Enter an hour from 0 to 23.'
-          : 'Your hour allows ' + wait + ' h of travel: ' + wait * plan.speed + ' km. The dashed line is your forecast, not a verdict.');
+          : 'Your hour allows ' + wait + ' h of travel: ' + Math.round(travelled(plan, wait) * KM) + ' km. The dashed line is your forecast, not a verdict.');
       }
       if (id === 'side') {
         const next = SIDES.includes(value) ? value : '';
@@ -706,13 +758,19 @@ function frontPiece(env, plan) {
         c.status('you say it comes from the ' + s.side);
       }
       if (id === 'hint') {
-        const clues = [
+        const leg = plan.ridge ? plan.squares - plan.ridge.squares : plan.squares;
+        const clues = (plan.ridge ? [
+          'The front is ' + plan.squares + ' squares away and the ridge ' + plan.ridge.squares + ' from the station: ' + leg * KM + ' km before the ridge, ' + plan.ridge.squares * KM + ' km after it.',
+          'At ' + plan.speed + ' km/h it crosses ' + plan.speed / KM + ' grid squares an hour; past the ridge, ' + plan.ridge.speed / KM + '.',
+          'Time each leg and add them: ' + leg * KM + ' divided by ' + plan.speed + ', plus ' + plan.ridge.squares * KM + ' divided by ' + plan.ridge.speed + '.'
+        ] : [
           'The front is ' + plan.squares + ' squares away: ' + plan.squares * KM + ' km from the station.',
           'At ' + plan.speed + ' km/h it crosses ' + plan.speed / KM + ' grid squares in one hour.',
-          'Travel time is distance divided by speed: ' + plan.squares * KM + ' divided by ' + plan.speed + '.',
+          'Travel time is distance divided by speed: ' + plan.squares * KM + ' divided by ' + plan.speed + '.'
+        ]).concat([
           'The journey takes ' + hours + ' h. Add that to ' + fmt(plan.now) + '; subtract 24 if the sum reaches 24.',
           'The calculation gives ' + fmt(arrives) + ', arriving from the ' + plan.side + '.'
-        ];
+        ]);
         if (s.help < helps) {
           s.hinted = true;
           s.hintAt = s.t;
@@ -741,7 +799,7 @@ function frontPiece(env, plan) {
       return going || !settled(s, c, frontKey(c, plan, s), last);
     },
     end(c) {
-      s.lines = ['front ledger', 'from the ' + plan.side + ', ' + plan.squares * KM + ' km at ' + plan.speed + ' km/h', 'arrived ' + fmt(arrives) + (plan.now + hours >= 24 ? ', past midnight' : '')];
+      s.lines = ['front ledger', 'from the ' + plan.side + ', ' + plan.squares * KM + ' km at ' + plan.speed + ' km/h' + (plan.ridge ? ', then ' + plan.ridge.speed + ' past the ridge' : ''), 'arrived ' + fmt(arrives) + (plan.now + hours >= 24 ? ', past midnight' : '')];
       s.doneAt = s.t;
       c.status('the front comes in from the ' + plan.side + ' and reaches the station at ' + fmt(arrives));
     }
@@ -1103,7 +1161,7 @@ export default {
       const plan = d.plan;
       return {
         title: frontTitle(plan),
-        mono: 'now ' + fmt(plan.now) + '\nfront: ' + plan.squares + ' squares out, ' + plan.speed + ' km/h\n1 square = ' + KM + ' km',
+        mono: 'now ' + fmt(plan.now) + '\nfront: ' + plan.squares + ' squares out, ' + plan.speed + ' km/h' + (plan.ridge ? '\nridge ' + plan.ridge.squares + ' squares out: ' + plan.ridge.speed + ' km/h past it' : '') + '\n1 square = ' + KM + ' km',
         text: 'An omen on the map: a front is coming in along the wind. Read the map and the dial, and say when it reaches the station, and from which side.',
         aspect: '4 / 3',
         paint: (g, w, h, cardEnv) => frontPreview(g, w, h, cardEnv, plan),

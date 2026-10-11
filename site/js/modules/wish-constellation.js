@@ -22,7 +22,7 @@
    rolling another. */
 
 const WORDS = ['no', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine', 'ten'];
-const PLACE = ['nearest', 'second nearest', 'third nearest', 'fourth nearest', 'fifth nearest', 'sixth nearest'];
+const PLACE = ['nearest', 'second nearest', 'third nearest', 'fourth nearest', 'fifth nearest', 'sixth nearest', 'seventh nearest'];
 const LETTERS = 'ABCDEFG';
 const SKIES = 'ABCD';
 const PLAIN = { density: 1, scale: 1, turn: 0 };
@@ -353,7 +353,8 @@ function shiftOf(rank, n) {
 }
 
 function postcardPlan(env) {
-  const n = env.int(4, 6);
+  // Now and then a long exposure: seven lights to order instead of four to six.
+  const n = env.chance(0.25) ? 7 : env.int(4, 6);
   const points = gather(env, n, 15, [30, 96, 10, 90]);
   let ranks = shuffled(env, range(n));
   for (let guard = 0; guard < 12 && ranks.every((r, i) => r === i); guard++) ranks = shuffled(env, range(n));
@@ -363,7 +364,7 @@ function postcardPlan(env) {
 
 function carriedPostcard(env) {
   const p = env.card && env.card.of;
-  if (!p || p.kind !== 'postcard' || !okPoints(p.points, 4, 6)) return null;
+  if (!p || p.kind !== 'postcard' || !okPoints(p.points, 4, 7)) return null;
   const n = p.points.length;
   if (!isPerm(p.ranks, n) || p.ranks.every((r, i) => r === i)) return null;
   if (!Number.isInteger(p.number) || p.number < 101 || p.number > 999) return null;
@@ -376,7 +377,7 @@ function postcardOrder(plan) {
 }
 
 function postcardTitle(plan) {
-  return 'postcard ' + plan.number + ': left eye, right eye';
+  return 'postcard ' + plan.number + (plan.points.length === 7 ? ': a long exposure, seven lights' : ': left eye, right eye');
 }
 
 function postcardLayout(w, h) {
