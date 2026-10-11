@@ -1,6 +1,6 @@
 /* The quiet room: a ring that breathes, a dim room of lamps, and a shelf with a few keepsakes on
    it. As a card it is the ring, caught still at one point of its breath (paint), or one of the
-   three puzzles below (spark); as a piece it is one of those puzzles, and the card it was opened
+   four puzzles below (spark); as a piece it is one of those puzzles, and the card it was opened
    from says which. See js/feed.js for what a module is and js/stage.js for what a piece is.
 
    Three puzzles, each read from what happens in the room:
@@ -17,6 +17,8 @@
      the second look Two views of nine lamps, before and after someone pressed exactly two
                      switches. Find those switches and the row where most lamps changed. The
                      same neighbour-flipping rule applies; the views are on screen together.
+     the turned pane One switch was pressed, but the after view was turned. Compare the two
+                     panes to find the switch and the turn; some panes hold sixteen lamps.
 
    A card and the feature it opens as are one puzzle: the spark puts the whole puzzle on its spec
    as `of` -- the lamps that were pressed, the shelf's order and clues -- and piece(env) opens on
@@ -1208,6 +1210,263 @@ function secondLookPiece(env, plan) {
   };
 }
 
+/* ---- the turned pane: one press seen from another angle -------------------------------------- */
+
+const PANE_TURNS = ['upright', '90 degrees clockwise', 'upside down', '90 degrees counterclockwise'];
+
+function turnPane(lamps, n, turns) {
+  let shown = lamps.slice();
+  for (let turn = 0; turn < turns; turn++) {
+    const next = new Array(n * n);
+    for (let row = 0; row < n; row++) {
+      for (let col = 0; col < n; col++) next[col * n + n - 1 - row] = shown[row * n + col];
+    }
+    shown = next;
+  }
+  return shown;
+}
+
+function paneAfter(plan, pressed = plan.pressed, turn = plan.turn) {
+  const flipped = litBy([pressed], plan.n);
+  return turnPane(plan.before.map((lamp, i) => lamp ^ flipped[i]), plan.n, turn);
+}
+
+// Deal only pictures for which the two views identify one switch and one turn.
+function paneOptions(before, n) {
+  const seen = new Map();
+  const options = [];
+  for (let turn = 0; turn < 4; turn++) {
+    for (let pressed = 0; pressed < n * n; pressed++) {
+      const key = paneAfter({ n, before }, pressed, turn).join('');
+      seen.set(key, (seen.get(key) || 0) + 1);
+      options.push({ pressed, turn, key });
+    }
+  }
+  return options.filter((option) => seen.get(option.key) === 1);
+}
+
+function panePlan(env) {
+  const n = env.chance(0.5) ? 4 : 3;
+  const N = n * n;
+  for (let attempt = 0; attempt < 24; attempt++) {
+    const before = new Array(N).fill(0);
+    const count = env.int(Math.max(3, Math.floor(N / 3)), Math.min(N - 3, Math.ceil(N * 0.67)));
+    for (const i of shuffled(env, N).slice(0, count)) before[i] = 1;
+    const options = paneOptions(before, n);
+    if (options.length) {
+      const chosen = env.pick(options);
+      return { kind: 'turned-pane', n, before, pressed: chosen.pressed, turn: chosen.turn };
+    }
+  }
+  throw new Error('Could not deal a uniquely solvable turned pane.');
+}
+
+function carriedPane(env) {
+  const p = env.card && env.card.of;
+  if (!p || p.kind !== 'turned-pane' || ![3, 4].includes(p.n)) return null;
+  const N = p.n * p.n;
+  if (!Array.isArray(p.before) || p.before.length !== N || !p.before.every((lamp) => lamp === 0 || lamp === 1)) return null;
+  const lit = p.before.filter(Boolean).length;
+  if (lit < 2 || lit > N - 2 || !Number.isInteger(p.pressed) || p.pressed < 0 || p.pressed >= N
+    || !Number.isInteger(p.turn) || p.turn < 0 || p.turn >= 4) return null;
+  if (!paneOptions(p.before, p.n).some((option) => option.pressed === p.pressed && option.turn === p.turn)) return null;
+  return { kind: 'turned-pane', n: p.n, before: p.before.slice(), pressed: p.pressed, turn: p.turn };
+}
+
+function paneTitle(plan) {
+  return 'the turned pane: ' + WORDS[plan.before.filter(Boolean).length] + ' lamps before';
+}
+
+function paneRows(lamps, n) {
+  return Array.from({ length: n }, (_, row) => 'row ' + (row + 1) + ': '
+    + lamps.slice(row * n, (row + 1) * n).map((lamp) => lamp ? 'lit' : 'dark').join(', ')).join('; ');
+}
+
+function paneGeometry(w, h, n) {
+  const side = Math.min(w * 0.39, h * 0.54);
+  return { side, cell: side / n, lefts: [w * 0.07, w * 0.54], top: h * 0.22 };
+}
+
+function paneState(n) {
+  return { selected: new Array(n * n).fill(0), turn: null, hint: 0, hintAt: -1, colAt: -1,
+    doneAt: -1, t: 0, until: -1, size: '' };
+}
+
+function drawPane(g, w, h, env, plan, s) {
+  const n = plan.n;
+  const geo = paneGeometry(w, h, n);
+  const c = env.colors;
+  const v = env.variant || PLAIN;
+  const rite = riteOf(env);
+  const reduced = !!env.reduced;
+  const seal = s.doneAt < 0 ? 0 : rite.stair(came(s, s.doneAt, 1.2, reduced));
+  floor(g, w, h, env);
+  [plan.before, paneAfter(plan)].forEach((lamps, view) => {
+    const left = geo.lefts[view];
+    g.fillStyle = env.alpha(c.bg2, 0.44);
+    g.fillRect(left, geo.top, geo.side, geo.side);
+    if (view === 1 && seal) rite.paint(g, left, geo.top, geo.side, geo.side, seal, env.alpha(c.accent2, 0.12));
+    g.strokeStyle = env.alpha(c.muted, 0.6);
+    g.lineWidth = 1 + v.density * 0.3;
+    g.strokeRect(left, geo.top, geo.side, geo.side);
+    if (view === 0 && s.hint >= 1) {
+      rite.paint(g, left - 7, geo.top + Math.floor(plan.pressed / n) * geo.cell,
+        4, geo.cell, rite.stair(came(s, s.hintAt, 0.8, reduced)), c.accent);
+    }
+    if (view === 0 && s.hint >= 3) {
+      rite.paint(g, left + (plan.pressed % n) * geo.cell, geo.top + geo.side + 3,
+        geo.cell, 4, rite.stair(came(s, s.colAt, 0.8, reduced)), c.accent);
+    }
+    for (let i = 0; i < n * n; i++) {
+      const x = left + (i % n + 0.5) * geo.cell;
+      const y = geo.top + (Math.floor(i / n) + 0.5) * geo.cell;
+      const r = geo.cell * 0.25 * Math.min(1.1, Math.max(0.85, v.scale));
+      if (lamps[i]) {
+        const glow = g.createRadialGradient(x, y, r * 0.3, x, y, r * 1.8);
+        glow.addColorStop(0, env.alpha(c.accent2, 0.3));
+        glow.addColorStop(1, env.alpha(c.accent2, 0));
+        g.fillStyle = glow;
+        g.fillRect(x - r * 1.8, y - r * 1.8, r * 3.6, r * 3.6);
+      }
+      g.fillStyle = lamps[i] ? c.accent2 : env.alpha(c.muted, 0.38);
+      g.beginPath();
+      g.arc(x, y, r, 0, Math.PI * 2);
+      g.fill();
+      if (view === 0 && (s.selected[i] || (seal && i === plan.pressed))) {
+        g.strokeStyle = seal && i === plan.pressed ? c.accent2 : c.accent;
+        g.lineWidth = 2;
+        g.beginPath();
+        g.arc(x, y, r * 1.42, 0, Math.PI * 2);
+        g.stroke();
+      }
+    }
+    g.fillStyle = c.fg;
+    g.font = '500 ' + Math.max(11, Math.round(geo.cell * 0.3)) + 'px system-ui, sans-serif';
+    g.textAlign = 'center';
+    g.textBaseline = 'middle';
+    g.fillText(view ? 'after' : 'before', left + geo.side / 2, geo.top - h * 0.055);
+  });
+  caption(g, w, h, env, seal ? 'the panes agree' : 'one press, then one turn', h * 0.91, 0.9);
+}
+
+function panePreview(g, w, h, env, plan) {
+  drawPane(g, w, h, env, plan, paneState(plan.n));
+}
+
+function panePiece(env, plan) {
+  const n = plan.n;
+  const N = n * n;
+  const helps = asked(env).helps;
+  const answer = new Array(N).fill(0);
+  answer[plan.pressed] = 1;
+  const s = paneState(n);
+  const place = (i) => 'row ' + (Math.floor(i / n) + 1) + ', column ' + (i % n + 1);
+  const draw = (c) => {
+    s.size = sizeOf(c);
+    drawPane(c.g, c.w, c.h, c, plan, s);
+  };
+  return {
+    title: paneTitle(plan),
+    brief: 'One switch was pressed between these views. It flips its own lamp and the lamps directly above, below, left and right. The after pane may be upright, turned 90 degrees in either direction, or upside down. Before: '
+      + paneRows(plan.before, n) + '. After: ' + paneRows(paneAfter(plan), n) + '.',
+    goal: 'Mark the one switch pressed and choose how the after pane was turned.',
+    aspect: '4 / 3',
+    checkLabel: 'check the panes',
+    steps: [
+      { id: 'switch', ask: 'the one switch pressed: tap it in the before pane or mark it here',
+        kind: 'grid', rows: n, cols: n, labels: ['left alone', 'pressed'] },
+      { id: 'turn', ask: 'how the after pane was turned', kind: 'choice',
+        options: PANE_TURNS.map((label, value) => ({ label, value })) },
+      { id: 'hint', ask: 'a clue about the switch or the turn', kind: 'press', count: helps,
+        label: 'show a clue', optional: true }
+    ],
+    solution: { switch: answer, turn: plan.turn },
+    check(c) {
+      const marked = c.value('switch');
+      const turn = c.value('turn');
+      if (!Array.isArray(marked) || marked.length !== N || marked.filter(Boolean).length !== 1
+        || !Number.isInteger(turn) || turn < 0 || turn >= 4) {
+        return { solved: false, say: 'Mark exactly one switch and choose one turn to compare the panes.' };
+      }
+      const imagined = paneAfter(plan, marked.findIndex(Boolean), turn);
+      const after = paneAfter(plan);
+      const matches = imagined.filter((lamp, i) => lamp === after[i]).length;
+      return { solved: matches === N,
+        say: matches === N ? 'the two panes agree' : WORDS[matches] + ' of ' + WORDS[N] + ' lamps match the after pane' };
+    },
+    start(c) {
+      c.status('compare the before pane with the turned after pane');
+      draw(c);
+    },
+    apply(id, value, c) {
+      if (id === 'switch' && Array.isArray(value) && value.length === N) {
+        s.selected = value.map((cell) => cell ? 1 : 0);
+        const marked = s.selected.filter(Boolean).length;
+        c.status(marked === 1 ? place(s.selected.findIndex(Boolean)) + ' marked as the switch'
+          : marked + ' switches marked; mark exactly one');
+      }
+      if (id === 'turn') {
+        if (Number.isInteger(value) && value >= 0 && value < 4) {
+          s.turn = value;
+          c.status('after pane: ' + PANE_TURNS[value]);
+        } else c.status('choose one of the four turns');
+      }
+      if (id === 'hint') {
+        if (s.hint >= helps) c.status('no more clues at this difficulty');
+        else {
+          s.hint += 1;
+          c.hint();
+          if (s.hint === 1) {
+            s.hintAt = s.t;
+            stir(s, 0.8);
+            c.status('the pressed switch is in row ' + (Math.floor(plan.pressed / n) + 1));
+          } else if (s.hint === 2) {
+            c.status('the after pane is ' + (plan.turn % 2 ? 'turned sideways' : 'upright or upside down'));
+          } else if (s.hint === 3) {
+            s.colAt = s.t;
+            stir(s, 0.8);
+            c.status('the pressed switch is in column ' + (plan.pressed % n + 1));
+          } else if (s.hint === 4) c.status('the after pane is ' + PANE_TURNS[plan.turn]);
+          else c.status('mark ' + place(plan.pressed) + ' in the before pane');
+        }
+      }
+      draw(c);
+    },
+    tap(x, y, c) {
+      const geo = paneGeometry(c.w, c.h, n);
+      const px = x * c.w;
+      const py = y * c.h;
+      for (let view = 0; view < 2; view++) {
+        const col = Math.floor((px - geo.lefts[view]) / geo.cell);
+        const row = Math.floor((py - geo.top) / geo.cell);
+        if (col < 0 || col >= n || row < 0 || row >= n) continue;
+        const i = row * n + col;
+        if (view === 1) {
+          c.status('after pane, ' + place(i) + ': ' + (paneAfter(plan)[i] ? 'lit' : 'dark'));
+          return;
+        }
+        const next = new Array(N).fill(0);
+        next[i] = 1;
+        s.selected = next;
+        c.set('switch', next);
+        c.status(place(i) + ' marked as the switch');
+        draw(c);
+        return;
+      }
+      c.status('tap a lamp in the before pane to mark a switch, or inspect the after pane');
+    },
+    frame(t, dt, c) {
+      return tick(s, dt, c, draw);
+    },
+    end(c) {
+      s.doneAt = s.t;
+      stir(s, 1.2);
+      c.status('the panes agree; the switch was at ' + place(plan.pressed));
+      draw(c);
+    }
+  };
+}
+
 /* ---- the module ----------------------------------------------------------------------------- */
 
 function dealsLamps(env) {
@@ -1216,7 +1475,8 @@ function dealsLamps(env) {
 
 function dealt(env) {
   const lamps = dealsLamps(env);
-  return ((Math.imul(env.seed >>> 0, 0x9e3779b1) >>> 29) & 3) === 3 ? 'second-look' : lamps ? 'lamps' : 'shelf';
+  const face = (Math.imul(env.seed >>> 0, 0x9e3779b1) >>> 29) & 3;
+  return face === 3 ? 'second-look' : face === 0 ? 'turned-pane' : lamps ? 'lamps' : 'shelf';
 }
 
 export default {
@@ -1258,6 +1518,17 @@ export default {
         of: plan
       };
     }
+    if (kind === 'turned-pane') {
+      const plan = panePlan(env);
+      return {
+        title: paneTitle(plan),
+        quote: WORDS[plan.before.filter(Boolean).length] + ' lamps before; one press, then a turn',
+        text: 'Compare the two panes. Find the switch pressed and how the after view was turned.',
+        aspect: '4 / 3',
+        paint: (g, w, h, cardEnv) => panePreview(g, w, h, cardEnv, plan),
+        of: plan
+      };
+    }
     const plan = shelfPlan(env);
     const names = plan.items.map((name) => SHORT[name] || name);
     return {
@@ -1277,8 +1548,11 @@ export default {
     if (shelf) return shelfPiece(env, shelf);
     const secondLook = carriedSecondLook(env);
     if (secondLook) return secondLookPiece(env, secondLook);
+    const pane = carriedPane(env);
+    if (pane) return panePiece(env, pane);
     const kind = dealt(env);
     return kind === 'lamps' ? lampsPiece(env, lampsPlan(env))
-      : kind === 'shelf' ? shelfPiece(env, shelfPlan(env)) : secondLookPiece(env, secondLookPlan(env));
+      : kind === 'shelf' ? shelfPiece(env, shelfPlan(env))
+        : kind === 'second-look' ? secondLookPiece(env, secondLookPlan(env)) : panePiece(env, panePlan(env));
   }
 };
