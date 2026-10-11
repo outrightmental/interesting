@@ -1178,8 +1178,8 @@
     card.probe.hidden = false;
     refresh();
     t.mount(card.probe, {
-      onAnswer: function () { stopAskingInCard(true); card.open.focus(); },
-      onSkip: function () { stopAskingInCard(true); card.open.focus(); }
+      onAnswer: function () { stopAskingInCard(true); },
+      onSkip: function () { stopAskingInCard(true); }
     });
     // The focus goes to the question, not to an answer: onto the box that holds it, focusable for
     // that alone (tabindex -1, out of the tab order), so a screen reader is in the question and
@@ -1214,7 +1214,10 @@
       card.probe.removeAttribute('tabindex'); // focusable only while it holds a question
     }
     refresh();
-    if (closing) handOff();
+    if (closing) {
+      if (card && card.open) card.open.focus();
+      handOff();
+    }
   }
   function buildCard() {
     var host = document.getElementById('persona');
@@ -2291,23 +2294,14 @@
     }
     onSheetClosed();
   }
-  /* The focus going home, to the control that opened the sheet (or the avatar). Most often it is
-     there already: the browser's close of a modal dialog takes it back to where it was. Where it is
-     not -- a browser that does not focus the button it clicks, a sheet closed some other way -- it
-     is handed back on the next frame, where the look the browser takes at the page to focus it is
-     part of the restyle that frame does anyway, rather than a second one forced now. Unless the
-     focus has gone somewhere by then (the question, asked from the sheet, takes it at once): it
-     is only taken home from nowhere. */
+  /* Focus returns before handOff measures the portrait: focusing the avatar opens its label and
+     moves the portrait left. Deferring focus would shift the mark after its flight had begun.
+     A question asked from the sheet takes focus after closing returns, with no delayed restoration
+     left to take it back. */
   function focusHome(back) {
     var home = back && typeof back.focus === 'function' && document.contains(back) ? back : (card && card.open);
     if (!home || typeof home.focus !== 'function' || document.activeElement === home) return;
-    if (typeof window.requestAnimationFrame !== 'function') { home.focus(); return; }
-    window.requestAnimationFrame(function () {
-      var now = document.activeElement;
-      var adrift = !now || now === document.body || now === document.documentElement
-        || (sheet && typeof sheet.host.contains === 'function' && sheet.host.contains(now));
-      if (adrift && !(sheet && sheet.host.open) && document.contains(home)) home.focus();
-    });
+    home.focus();
   }
   function onSheetClosed() {
     if (!sheet || sheet.host.open || !sheetWasOpen) return;
