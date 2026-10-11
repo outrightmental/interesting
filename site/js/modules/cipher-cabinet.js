@@ -625,7 +625,7 @@ function wheelPiece(env) {
   };
   return {
     title: wheelTitle(p),
-    brief: 'A working of the wheel. The note was shifted some way round the alphabet, and the house sometimes writes a line backwards first. The wheel shows which letter stands for which at the setting you choose; it never reads the note for you. The bars beside it count the line\'s commonest letters, and the tallest nearly always wants to read E. One word of the note is underlined.',
+    brief: 'A working of the wheel. The note was shifted some way round the alphabet, and the house sometimes writes a line backwards first. The wheel shows which letter stands for which at the setting you choose; it never reads the note for you. The bars beside it count the line\'s commonest letters, and the tallest nearly always wants to read E. One word of the note is underlined. Tap the wheel to inspect a letter at your setting.',
     goal: 'Find the wheel setting and the reading direction, and read the underlined word.',
     aspect: '4 / 3',
     checkLabel: 'try the lock',
@@ -657,7 +657,7 @@ function wheelPiece(env) {
       return { solved: false, say: parts.join('; ') };
     },
     start(c) {
-      c.status('received: ' + received + '; the tallest bar beside the wheel nearly always wants to read E');
+      c.status('received: ' + received + '; commonest letters: ' + tally(received).slice(0, 5).map((entry) => entry.letter + ' ' + entry.count).join(', ') + '; the tallest nearly always wants to read E');
       draw(c, true);
     },
     apply(id, value, c) {
@@ -725,6 +725,24 @@ function wheelPiece(env) {
       draw(c);
       return !c.reduced && state.time < settledAt([[state.shiftAt, TURN], [state.reverseAt, SPAN], [state.guessAt, SPAN],
         ...state.hintAt.map((at) => [at, SPAN]), [state.reveal ? state.solvedAt : -1, REVEAL]]);
+    },
+    tap(x, y, c) {
+      const roomy = c.h >= 300 && c.w >= 420;
+      const v = env.variant || PLAIN;
+      const radius = Math.min(c.w * 0.19, c.h * (roomy ? 0.2 : 0.17)) * Math.min(1.1, Math.max(0.9, v.scale));
+      const dx = x * c.w - c.w / 2;
+      const dy = y * c.h - c.h * (roomy ? 0.52 : 0.5);
+      const distance = Math.hypot(dx, dy);
+      if (distance >= radius * 0.3 && distance <= radius * 1.2) {
+        const at = Math.atan2(dy, dx) + Math.PI / 2;
+        const index = ((Math.round(at * 26 / (2 * Math.PI)) % 26) + 26) % 26;
+        const letter = ALPHABET[index];
+        c.status('at ' + state.shift + ' turns, received ' + letter + ' reads ' + turn(letter, -state.shift) + '; turn the wheel to compare');
+      } else if (y < 0.76) {
+        c.status('commonest received letters: ' + tally(received).slice(0, 3).map((entry) => entry.letter + ' ' + entry.count).join(', ') + '; compare them with the wheel');
+      } else {
+        c.status('the underlined word has ' + word.length + ' letters; read it through the wheel, then consider the direction');
+      }
     },
     end(c) {
       state.reveal = true;
@@ -1082,7 +1100,7 @@ function grillePiece(env, carriedPlan) {
   };
   return {
     title: grilleTitle(p),
-    brief: 'One key, turned four ways. Thirty-six letters and a nine-hole key. From one notch, turned one way, the key\'s four views read the note out nine letters at a time, left to right and then down; from any other they read noise. The strips below the board follow the route you set.',
+    brief: 'One key, turned four ways. Thirty-six letters and a nine-hole key. From one notch, turned one way, the key\'s four views read the note out nine letters at a time, left to right and then down; from any other they read noise. The strips below the board follow the route you set. Tap a square to trace when your route reads its letter.',
     goal: 'Find the starting notch and the turn, and read the note\'s first word.',
     aspect: '1 / 1',
     checkLabel: 'try the key',
@@ -1168,6 +1186,24 @@ function grillePiece(env, carriedPlan) {
       draw(c);
       return !c.reduced && s.t < settledAt([[s.turnAt, TURN], [s.hintAt, SPAN], [s.guessAt, SPAN],
         [s.reveal ? s.solvedAt : -1, REVEAL]]);
+    },
+    tap(x, y, c) {
+      const v = env.variant || PLAIN;
+      const side = Math.min(c.w * 0.82, c.h * 0.6, Math.min(c.w * 0.78, c.h * 0.56) * v.scale);
+      const cell = side / SIDE;
+      const col = Math.floor((x * c.w - (c.w * (0.49 + v.turn * 0.02) - side / 2)) / cell);
+      const row = Math.floor((y * c.h - (c.h * (0.37 + v.turn * 0.02) - side / 2)) / cell);
+      if (row < 0 || row >= SIDE || col < 0 || col >= SIDE) {
+        c.status('tap a square to trace its letter through the four views of your key');
+        return;
+      }
+      const index = row * SIDE + col;
+      for (let view = 0; view < 4; view++) {
+        const place = openings(p, s.corner + s.direction * view).indexOf(index);
+        if (place < 0) continue;
+        c.status('row ' + (row + 1) + ', column ' + (col + 1) + ': ' + board[index] + '; your route reads it in view ' + (view + 1) + ', letter ' + (place + 1));
+        return;
+      }
     },
     end(c) {
       s.reveal = true;
@@ -1379,7 +1415,7 @@ function rodPiece(env, carriedPlan) {
   const spare = (k) => (k > 0 ? strip.length % k : 0);
   return {
     title: rodTitle(p),
-    brief: 'A note was written down a rod of a few flat faces, a face to each letter in turn, then unwound into one strip. Wind the strip back on the right number of faces and the rod reads the note down each column. The faces always divide the strip evenly: the end was padded with X.',
+    brief: 'A note was written down a rod of a few flat faces, a face to each letter in turn, then unwound into one strip. Wind it back on the right number of faces and read down each column. The faces divide the strip evenly; the end was padded with X. The strip reads ' + strip + '. Tap a letter on the rod to inspect its column.',
     goal: 'Find how many faces the rod has, and type the last word of the note.',
     aspect: '4 / 3',
     checkLabel: 'unwind it',
@@ -1417,7 +1453,7 @@ function rodPiece(env, carriedPlan) {
           s.faces = k;
           s.windAt = s.t;
         }
-        c.status('wound on ' + k + ' faces: ' + (spare(k) ? spare(k) + ' of the ' + strip.length + ' letters are left over' : 'every face holds ' + strip.length / k + ' letters'));
+        c.status('wound on ' + k + ' faces: ' + (spare(k) ? spare(k) + ' of the ' + strip.length + ' letters are left over' : 'every face holds ' + strip.length / k + ' letters') + '; read down: ' + rodWind(strip, k).reading);
       }
       if (id === 'word') {
         const guess = cleaned(value);
@@ -1447,6 +1483,21 @@ function rodPiece(env, carriedPlan) {
       draw(c);
       return !c.reduced && s.t < settledAt([[s.windAt, SPAN], [s.guessAt, SPAN], [s.hintAt, SPAN],
         [s.reveal ? s.solvedAt : -1, REVEAL]]);
+    },
+    tap(x, y, c) {
+      const v = env.variant || PLAIN;
+      const wind = rodWind(strip, s.faces);
+      const grow = Math.min(1.1, Math.max(0.85, v.scale));
+      const cell = Math.min(c.w * 0.8 * grow / wind.across, c.h * 0.4 * grow / s.faces);
+      const left = c.w / 2 - cell * wind.across / 2;
+      const top = c.h * (0.5 + v.turn * 0.02) - cell * s.faces / 2;
+      const row = Math.floor((y * c.h - top) / cell);
+      const column = Math.floor((x * c.w - left) / cell);
+      if (row < 0 || row >= s.faces || column < 0 || column >= wind.across) {
+        c.status('the strip has ' + strip.length + ' letters; tap a letter on the rod to read its column');
+        return;
+      }
+      c.status('face ' + (row + 1) + ', column ' + (column + 1) + ': ' + (wind.rows[row][column] || 'no letter') + '; this column reads ' + wind.rows.map((line) => line[column] || '').join(''));
     },
     end(c) {
       s.reveal = true;

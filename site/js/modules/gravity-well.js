@@ -600,7 +600,7 @@ function slingPiece(env, p) {
   const clampTo = (value, knob) => Math.max(knob.min, Math.min(knob.max, Math.round(Number(value)) || 0));
   return {
     title: slingTitle(p),
-    brief: 'A casting past the well. A probe leaves the pad at the left edge at the angle and the speed you set, and ' + p.name + ' bends its path the same way every time. Every check is a flight; the ring is where it has to pass.',
+    brief: 'A casting past the well. A probe leaves the pad at the left edge at the angle and speed you set, and ' + p.name + ' bends its path the same way every time. Every check is a flight; the ring at ' + p.rx + ' across and ' + p.ry + ' down the field is where it has to pass. Tap the ring, well or last flight to inspect it.',
     goal: 'Find an angle and a speed that carry the probe through the ring.',
     aspect: '16 / 10',
     checkLabel: 'release the probe',
@@ -693,6 +693,32 @@ function slingPiece(env, p) {
       // At rest once the flight has landed and its verdict is said, and every change on the field
       // was drawn whole: false, and the stage asks for no more frames.
       return (s.flight && s.clock < REPLAY + 1) || !settled(s, c);
+    },
+    tap(x, y, c) {
+      const map = fieldMap(c.w, c.h);
+      const px = x * c.w;
+      const py = y * c.h;
+      const ring = map.at(p.rx, p.ry);
+      const well = map.at(p.wx, p.wy);
+      const pad = map.at(LAUNCH_X, p.sy);
+      if (Math.hypot(px - ring.x, py - ring.y) <= Math.max(22, map.k * RING_R * 1.3)) {
+        c.status('the ring is at ' + p.rx + ' across and ' + p.ry + ' down the field; a flight must cross its opening');
+      } else if (Math.hypot(px - well.x, py - well.y) <= Math.max(22, map.k * WELL_R * 1.3)) {
+        c.status(p.name + ' bends a passing flight; a probe that touches the well cannot reach the ring');
+      } else if (Math.hypot(px - pad.x, py - pad.y) <= 24) {
+        c.status('the probe starts here; a positive launch angle points up the field');
+      } else if (s.flight) {
+        let nearest = null;
+        let distance = Infinity;
+        for (const point of s.flight.pts) {
+          const at = map.at(point.x, point.y);
+          const gap = Math.hypot(px - at.x, py - at.y);
+          if (gap < distance) { distance = gap; nearest = point; }
+        }
+        if (distance <= 24) {
+          c.status('here the last flight passed ' + widths(Math.hypot(nearest.x - p.rx, nearest.y - p.ry)) + ' ring-widths from the ring');
+        } else c.status(s.verdict + '; tap the trace to measure another point');
+      } else c.status('set an angle and speed, then release the probe to leave a trace you can inspect');
     },
     end(c) {
       c.status('through the ring. the probe flew on past ' + p.name + ' with its engine off the whole way');
@@ -977,7 +1003,7 @@ function moonsPiece(env, p) {
   const names = p.names.map((i) => FIRST[i]);
   return {
     title: moonsTitle(p),
-    brief: WORDS[n][0].toUpperCase() + WORDS[n].slice(1) + ' moons circle ' + p.name + '. Their orbit radii are ' + names.map((name, i) => name + ': ' + p.radii[i] + ' units').join('; ') + '. A larger radius means a longer period. For the lap count, divide the outer radius by the inner radius, raise that ratio to 1.5, and round to the nearest whole number. The ruler shows the same measurements.',
+    brief: WORDS[n][0].toUpperCase() + WORDS[n].slice(1) + ' moons circle ' + p.name + '. Their orbit radii are ' + names.map((name, i) => name + ': ' + p.radii[i] + ' units').join('; ') + '. A larger radius means a longer period. For the lap count, divide the outer radius by the inner radius, raise that ratio to 1.5, and round to the nearest whole number. The ruler shows the same measurements; tap a moon to inspect its radius.',
     goal: 'Put the moons in order of period, shortest first, and say how many laps the innermost makes while the outermost makes one.',
     aspect: '16 / 10',
     checkLabel: 'check the orbits',
@@ -1259,7 +1285,7 @@ function meetingPiece(env, p) {
   ];
   return {
     title: meetingTitle(p),
-    brief: 'Two moons of ' + p.name + ' start on the same line at tick 0. The ' + FIRST[p.names[0]] + ' moon makes a full lap every ' + p.inner + ' ticks; the ' + FIRST[p.names[1]] + ' moon takes ' + p.outer + '. Set a tick to turn them. They meet again when the faster moon has gained one full lap on the slower one.',
+    brief: 'Two moons of ' + p.name + ' start on the same line at tick 0. The ' + FIRST[p.names[0]] + ' moon makes a full lap every ' + p.inner + ' ticks; the ' + FIRST[p.names[1]] + ' moon takes ' + p.outer + '. Set a tick to turn them, then tap either moon to inspect its laps. They meet again when the faster moon has gained one full lap on the slower one.',
     goal: 'Find the first tick after 0 when they line up again, and count the inner moon\'s full laps by then.',
     aspect: '16 / 10',
     checkLabel: 'check the meeting',
@@ -1316,6 +1342,30 @@ function meetingPiece(env, p) {
       s.t += Math.max(0, dt);
       if (!settled(s, c)) draw(c);
       return !settled(s, c);
+    },
+    tap(x, y, c) {
+      const v = dials(env);
+      const radius = Math.min(c.w * 0.31, c.h * 0.32) * v.scale;
+      const radii = [radius * Math.pow(p.inner / p.outer, 2 / 3), radius];
+      const shown = meetingShown(s, riteOf(c), !!c.reduced);
+      const start = p.angle * Math.PI / 180 + v.turn * 0.6;
+      let nearest = -1;
+      let distance = Infinity;
+      for (let i = 0; i < 2; i++) {
+        const angle = start + 2 * Math.PI * shown / (i ? p.outer : p.inner);
+        const mx = c.w * 0.5 + Math.cos(angle) * radii[i];
+        const my = c.h * 0.52 + Math.sin(angle) * radii[i];
+        const gap = Math.hypot(x * c.w - mx, y * c.h - my);
+        if (gap < distance) { distance = gap; nearest = i; }
+      }
+      if (distance > Math.max(22, radius * 0.13)) {
+        c.status('at tick ' + s.tick + ', ' + (s.tick ? 'compare how far each moon has turned; tap one to count its laps' : 'both moons start together; tap one to read its period'));
+        return;
+      }
+      const period = nearest ? p.outer : p.inner;
+      const completed = Math.floor(shown / period);
+      const share = Math.round((shown / period - completed) * 100);
+      c.status('the ' + FIRST[p.names[nearest]] + ' moon: one lap takes ' + period + ' ticks; after ' + shown.toFixed(1) + ' ticks it has made ' + completed + ' full laps and ' + share + '% of another');
     },
     end(c) {
       s.open = true;

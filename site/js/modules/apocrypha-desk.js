@@ -678,6 +678,7 @@ function drawerPiece(env, plan) {
   const helps = asked(env).helps;
   const look = scenery(env);
   const s = drawerBlank(plan);
+  let inspected = -1;
   const draw = (c) => {
     drawCabinet(c.g, c.w, c.h, c, plan, s, look, env.variant);
     seen(s, c);
@@ -690,7 +691,7 @@ function drawerPiece(env, plan) {
   return {
     title: drawerTitle(plan),
     brief: 'A filing, by the card. ' + WORDS[total][0].toUpperCase() + WORDS[total].slice(1) + ' specimens go into the ' + WORDS[total] + ' drawers of the '
-      + (total === 5 ? 'tall cabinet' : 'cabinet') + ', top to bottom, and the card beside it says how. Exactly one arrangement fits every line on the card.',
+      + (total === 5 ? 'tall cabinet' : 'cabinet') + ', top to bottom. Exactly one arrangement fits the card\'s lines: ' + plan.clues.map((clue) => clueText(clue, names)).join('; ') + '. Tap a drawer to inspect it, or the card to read one line clearly.',
     goal: 'Put each specimen in the one drawer the card allows.',
     aspect: '4 / 3',
     checkLabel: 'check the cabinet',
@@ -748,6 +749,20 @@ function drawerPiece(env, plan) {
       if (!c.reduced) s.t += Math.max(0, Number(dt) || 0);
       if (due(s, c)) draw(c);
       return due(s, c);
+    },
+    tap(x, y, c) {
+      const geo = drawerGeometry(c.w, c.h, (env.variant || PLAIN).scale, total);
+      const px = x * c.w;
+      const py = y * c.h;
+      if (px >= geo.x && px < geo.x + geo.cw && py >= geo.y && py < geo.y + geo.ch) {
+        const slot = Math.floor((py - geo.y) / geo.slot);
+        const item = s.order[slot];
+        const clue = plan.clues.find((line) => line.a === item || line.b === item);
+        c.status(drawerWord(total, slot) + ' drawer: the ' + names[item] + '. ' + (clue ? 'The card says: ' + clueText(clue, names) : 'Its place follows from the other lines on the card.'));
+      } else if (x >= 0.48) {
+        inspected = (inspected + 1) % plan.clues.length;
+        c.status('card line ' + (inspected + 1) + ' of ' + plan.clues.length + ': ' + clueText(plan.clues[inspected], names) + '; tap again for the next line');
+      } else c.status('tap a drawer to inspect its specimen, or the card to read its clues');
     },
     end(c) {
       s.solvedAt = s.t;
@@ -1040,12 +1055,12 @@ function oddPiece(env, plan) {
   const feature = FEATURES.find((f) => f.value === plan.rule.thenAttr);
   return {
     title: oddTitle(plan),
-    brief: 'The drawer keeps one rule. Six specimens lie in it, each with a body, some legs and a marking, and the rule is pinned to it: it names a kind of specimen by one feature and says what that kind must, or must not, have. Five of the six keep the rule. One is of the kind it names and fails on the second feature.',
+    brief: 'The drawer keeps one rule. Six specimens lie in it, each with a body, some legs and a marking, and the rule is pinned to it: it names a kind of specimen by one feature and says what that kind must, or must not, have. Five of the six keep the rule. One is of the kind it names and fails on the second feature. Tap a specimen to inspect its features.',
     goal: 'Find the one that breaks the rule, and name the feature it fails on.',
     aspect: '4 / 3',
     checkLabel: 'check the drawer',
     steps: [
-      { id: 'pick', ask: 'the one that breaks the rule', kind: 'pick', count: 1, items: plan.specs.map((spec, i) => ({ label: 'specimen ' + (i + 1), value: i })) },
+      { id: 'pick', ask: 'the one that breaks the rule', kind: 'pick', count: 1, items: plan.specs.map((spec, i) => ({ label: 'specimen ' + (i + 1) + ': ' + describe(spec), value: i })) },
       { id: 'choice', ask: 'the feature it fails on', kind: 'choice', options: FEATURES },
       { id: 'hint', ask: 'one specimen vouched for', kind: 'press', count: 1, label: 'vouch for one', optional: true }
     ],
@@ -1112,6 +1127,19 @@ function oddPiece(env, plan) {
       if (!c.reduced) s.t += Math.max(0, Number(dt) || 0);
       if (due(s, c)) draw(c);
       return due(s, c);
+    },
+    tap(x, y, c) {
+      const geo = trayGeometry(c.w, c.h, (env.variant || PLAIN).scale);
+      const px = x * c.w;
+      const py = y * c.h;
+      if (px < geo.x || px >= geo.x + geo.tw || py < geo.y || py >= geo.y + geo.th) {
+        c.status('the rule is ' + ruleText(plan.rule) + '; tap one of the six specimens to inspect it');
+        return;
+      }
+      const col = Math.floor((px - geo.x) / geo.cw);
+      const row = Math.floor((py - geo.y) / geo.ch);
+      const index = row * 3 + col;
+      c.status('specimen ' + (index + 1) + ': ' + describe(plan.specs[index]) + '; compare it with the rule on the card');
     },
     end(c) {
       s.reveal = true;
@@ -1286,7 +1314,7 @@ function forgedPiece(env, plan) {
   }
   return {
     title: forgedTitle(plan),
-    brief: 'The seal is a sum. Five catalogue cards lie on the desk, each with a four-figure number, and the slip under them gives the rule a true number keeps: it ends in the last digit of the sum of its first three. Four of the cards keep it. One was written by someone who did not know the rule.',
+    brief: 'The seal is a sum. Five catalogue cards lie on the desk, each with a four-figure number, and the slip under them gives the rule a true number keeps: it ends in the last digit of the sum of its first three. Four of the cards keep it. One was written by someone who did not know the rule. Tap a card to inspect its addition.',
     goal: 'Find the forged card, and say which digit it should end in.',
     aspect: '4 / 3',
     checkLabel: 'check the cards',
@@ -1355,6 +1383,28 @@ function forgedPiece(env, plan) {
       if (!c.reduced) s.t += Math.max(0, Number(dt) || 0);
       if (due(s, c)) draw(c);
       return due(s, c);
+    },
+    tap(x, y, c) {
+      const v = env.variant || PLAIN;
+      const cw = Math.min(c.w * 0.3, c.h * 0.42) * v.scale;
+      const ch = cw * 0.62;
+      const px = x * c.w;
+      const py = y * c.h;
+      let nearest = -1;
+      let distance = Infinity;
+      for (let i = 0; i < plan.numbers.length; i++) {
+        const cx = c.w * (0.16 + 0.17 * i) + (v.turn - 0.5) * c.w * 0.03;
+        const cy = c.h * (0.3 + i % 2 * 0.18);
+        const gap = Math.max(Math.abs(px - cx) / (cw * 0.6), Math.abs(py - cy) / (ch * 0.8));
+        if (gap < distance) { distance = gap; nearest = i; }
+      }
+      if (distance > 1.2) {
+        c.status('a true number ends in the last digit of the sum of its first three; tap a card to inspect its addition');
+        return;
+      }
+      const number = plan.numbers[nearest];
+      const sum = Number(number[0]) + Number(number[1]) + Number(number[2]);
+      c.status('card ' + (nearest + 1) + ', APC-' + number + ': ' + number.slice(0, 3).split('').join(' + ') + ' = ' + sum + '; compare the last digit of the sum with the card');
     },
     end(c) {
       s.reveal = true;
