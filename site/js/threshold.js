@@ -383,6 +383,18 @@
       gathered: { tending: 3, analytic: 2, rooted: 1 },
       separate: { verbal: 3, brooding: 2, divinatory: 1 },
       open: { attentive: 3, tender: 1, cosmic: 1 }
+    },
+    {
+      probe: 'shadow-table', name: 'the moving lamp', kind: 'lamp',
+      ask: 'Three objects on a table. Move the lamp to change their shadows, then open a puzzle whenever you like.',
+      objects: [
+        { label: 'key', x: 23, y: 32, weights: { analytic: 3, geometric: 1, restless: 1 } },
+        { label: 'shell', x: 77, y: 32, weights: { attentive: 3, brooding: 1, divinatory: 1 } },
+        { label: 'seed', x: 50, y: 76, weights: { rooted: 2, tending: 2, tender: 1 } }
+      ],
+      left: { verbal: 2, curious: 1 }, right: { tempestuous: 2, metrical: 1 },
+      high: { cosmic: 2, geometric: 1 }, low: { ceremonial: 2, tending: 1 },
+      roamed: { curious: 2, restless: 1 }, untouched: { divinatory: 2, tender: 1 }
     }
   ];
 
@@ -1261,7 +1273,7 @@
       place: placeProbe, draw: drawProbe, windows: windowsProbe, balance: balanceProbe,
       slider: sliderProbe, sky: skyProbe, keys: keysProbe, knock: knockProbe,
       rubbing: rubbingProbe, cairn: cairnProbe, compass: compassProbe, dye: dyeProbe,
-      censer: censerProbe, thread: threadProbe
+      censer: censerProbe, thread: threadProbe, lamp: lampProbe
     };
     (kinds[probe.kind] || choiceProbe)(probe, body, trace, answer, finish);
     return probe;
@@ -4014,6 +4026,129 @@
       finish(0);
     });
     refresh();
+  }
+  // The lamp and its shadows follow the visitor's hand; nothing runs while the table is still.
+  function lampProbe(probe, body, trace, answer, finish) {
+    var room = el('button', 'probe-shadow-room');
+    room.type = 'button';
+    room.setAttribute('aria-label', 'Move the lamp among a key, a shell and a seed. Press to jump to the next object, or use arrow keys.');
+    var objects = probe.objects.map(function (spec) {
+      var cast = el('span', 'probe-shadow-cast');
+      var object = el('span', 'probe-shadow-object', spec.label);
+      cast.setAttribute('aria-hidden', 'true');
+      object.setAttribute('aria-hidden', 'true');
+      cast.style.left = object.style.left = spec.x + '%';
+      cast.style.top = object.style.top = spec.y + '%';
+      room.appendChild(cast);
+      room.appendChild(object);
+      return { spec: spec, cast: cast, x: spec.x / 100, y: spec.y / 100 };
+    });
+    var lamp = el('span', 'probe-shadow-lamp');
+    lamp.setAttribute('aria-hidden', 'true');
+    room.appendChild(lamp);
+    body.appendChild(room);
+    body.appendChild(el('p', 'probe-count', 'Tap or drag on the table. With a keyboard, focus the table and use arrow keys, or press it to jump between objects. You can open a puzzle without moving the lamp.'));
+    var done = el('button', 'btn-filled', 'open a puzzle');
+    done.type = 'button';
+    body.appendChild(done);
+
+    var point = { x: 0.5, y: 0.5 };
+    var travel = 0;
+    var changed = false;
+    var dragging = null;
+    var jump = -1;
+    var read = false;
+    function ranked() {
+      var box = room.getBoundingClientRect();
+      var w = box.width || 480;
+      var h = box.height || 300;
+      return objects.map(function (object) {
+        var dx = (object.x - point.x) * w;
+        var dy = (object.y - point.y) * h;
+        return { object: object, dx: dx, dy: dy, distance: Math.hypot(dx, dy) / w };
+      }).sort(function (a, b) { return a.distance - b.distance; });
+    }
+    function paint() {
+      room.style.setProperty('--lamp-x', (point.x * 100).toFixed(1) + '%');
+      room.style.setProperty('--lamp-y', (point.y * 100).toFixed(1) + '%');
+      ranked().forEach(function (entry) {
+        entry.object.cast.style.setProperty('--shadow-angle', Math.atan2(entry.dy, entry.dx).toFixed(3) + 'rad');
+        entry.object.cast.style.setProperty('--shadow-extent', (0.45 + Math.min(1, entry.distance) * 0.7).toFixed(2));
+      });
+    }
+    function report() {
+      note(trace, 'The lamp is closest to the ' + ranked()[0].object.spec.label + '.');
+    }
+    function aim(x, y) {
+      x = unit(x);
+      y = unit(y);
+      var dx = x - point.x;
+      var dy = y - point.y;
+      if (dx || dy) {
+        changed = true;
+        travel += Math.hypot(dx * 1.6, dy);
+      }
+      point.x = x;
+      point.y = y;
+      paint();
+    }
+    function aimAt(ev) {
+      var box = room.getBoundingClientRect();
+      if (box.width && box.height) aim((ev.clientX - box.left) / box.width, (ev.clientY - box.top) / box.height);
+    }
+    room.addEventListener('pointerdown', function (ev) {
+      if (read || ev.button !== 0) return;
+      dragging = ev.pointerId;
+      if (typeof room.setPointerCapture === 'function' && ev.pointerId != null) room.setPointerCapture(ev.pointerId);
+      aimAt(ev);
+    });
+    room.addEventListener('pointermove', function (ev) {
+      if (!read && dragging !== null && ev.pointerId === dragging) aimAt(ev);
+    });
+    room.addEventListener('pointerup', function (ev) {
+      if (read || dragging === null || ev.pointerId !== dragging) return;
+      dragging = null;
+      report();
+    });
+    function release(ev) { if (ev.pointerId === dragging) dragging = null; }
+    room.addEventListener('pointercancel', release);
+    room.addEventListener('lostpointercapture', release);
+    room.addEventListener('click', function (ev) {
+      if (read || ev.detail !== 0) return;
+      jump = (jump + 1) % objects.length;
+      aim(objects[jump].x, objects[jump].y);
+      report();
+    });
+    room.addEventListener('keydown', function (ev) {
+      if (read) return;
+      var steps = { ArrowLeft: [-0.08, 0], ArrowRight: [0.08, 0], ArrowUp: [0, -0.08], ArrowDown: [0, 0.08] };
+      var step = steps[ev.key];
+      if (!step) return;
+      ev.preventDefault();
+      var x = unit(point.x + step[0]);
+      var y = unit(point.y + step[1]);
+      if (x === point.x && y === point.y) note(trace, 'The lamp is at the edge. Move it another way.');
+      else { aim(x, y); report(); }
+    });
+    done.addEventListener('click', function () {
+      if (read) return;
+      read = true;
+      if (!changed) add(answer, probe.untouched, 1);
+      else {
+        var near = ranked();
+        add(answer, near[0].object.spec.weights, 1);
+        if (near[1].distance - near[0].distance < 0.06) add(answer, near[1].object.spec.weights, 0.5);
+        if (point.x < 0.38) add(answer, probe.left, 1);
+        if (point.x > 0.62) add(answer, probe.right, 1);
+        if (point.y < 0.38) add(answer, probe.high, 1);
+        if (point.y > 0.62) add(answer, probe.low, 1);
+        if (travel > 1.2) add(answer, probe.roamed, 1);
+      }
+      room.setAttribute('aria-disabled', 'true');
+      room.tabIndex = -1;
+      retire(done, finish());
+    });
+    paint();
   }
   function describe(reading) {
     var o = reading && reading.orientation;

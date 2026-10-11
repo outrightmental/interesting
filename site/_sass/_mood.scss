@@ -747,6 +747,75 @@ button.probe-thread-pin[data-linked='true'] {
   box-shadow: inset 0 0 0 2px var(--md-sys-color-primary);
 }
 
+// The shadows change only as the lamp is moved, with no animation running at rest.
+button.probe-shadow-room {
+  position: relative;
+  display: block;
+  width: min(100%, 30rem);
+  aspect-ratio: 8 / 5;
+  min-height: 180px;
+  padding: 0;
+  border-radius: var(--md-sys-shape-corner-medium);
+  background: cut.shades(var(--md-sys-color-surface-container-high), 80%);
+  color: var(--md-sys-color-on-surface);
+  overflow: hidden;
+  touch-action: none;
+  cursor: crosshair;
+}
+
+button.probe-shadow-room::before,
+button.probe-shadow-room::after {
+  content: none;
+}
+
+.probe-shadow-cast {
+  position: absolute;
+  width: clamp(4rem, 23vw, 7rem);
+  height: 0.65rem;
+  border-radius: var(--md-sys-shape-corner-full);
+  background: var(--md-sys-color-outline);
+  transform-origin: 0 50%;
+  transform: rotate(var(--shadow-angle, 0rad)) scaleX(var(--shadow-extent, 1));
+  pointer-events: none;
+}
+
+.probe-shadow-object {
+  position: absolute;
+  z-index: 1;
+  display: grid;
+  place-items: center;
+  min-width: 44px;
+  height: 44px;
+  padding-inline: 0.4rem;
+  border-radius: var(--md-sys-shape-corner-full);
+  background: var(--md-sys-color-surface-container-highest);
+  color: var(--md-sys-color-on-surface);
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+  @include type.scale(label-large);
+}
+
+.probe-shadow-lamp {
+  position: absolute;
+  z-index: 2;
+  top: var(--lamp-y, 50%);
+  left: var(--lamp-x, 50%);
+  width: 44px;
+  height: 44px;
+  border: 3px solid var(--md-sys-color-tertiary);
+  border-radius: var(--md-sys-shape-corner-full);
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+}
+
+.probe-shadow-lamp::after {
+  content: '';
+  position: absolute;
+  inset: calc(50% - 3px);
+  border-radius: var(--md-sys-shape-corner-full);
+  background: var(--md-sys-color-tertiary);
+}
+
 .probe-pad {
   width: 100%;
   height: auto;
