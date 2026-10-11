@@ -16,6 +16,8 @@
    configurations through interestingFeed.previewSky(), so changing a star reveals a real world's
    response rather than an imitation. Moving a star updates the preview when the move ends.
    A pending preview is invalidated as soon as its stars change, even during a drag.
+   Dragging preserves the grab point within the star's touch target; picking it up does not
+   reposition it. Only the trailing pointer click is suppressed, never keyboard activation.
    Closing the sheet keeps a move just as releasing the star does. Replacing the sky releases
    any drag before rendering, so a later pointer release cannot restore the previous sky.
    The first preview's picture and words stay available for comparison while that world is being
@@ -2009,17 +2011,25 @@
     el.addEventListener('focus', function () { if (placing !== el && locate()) select(index); });
     el.addEventListener('click', function (ev) {
       ev.stopPropagation();
-      if (Date.now() < suppressClickUntil || !locate()) return;
+      if (followsDrag(ev) || !locate()) return;
       select(index);
     });
     el.addEventListener('pointerdown', function (ev) {
       if (activeDrag || (typeof ev.button === 'number' && ev.button !== 0) || !locate()) return;
       ev.preventDefault();
       ev.stopPropagation();
-      // The field's box, read once for the drag: it does not move under a star being dragged.
-      activeDrag = { index: index, pointerId: ev.pointerId, moved: false, box: sheet.field.getBoundingClientRect() };
-      el.focus();
-      select(index);
+      // Keep the grab point, not the centre of the 44px target, under the pointer.
+      // Focusing must not scroll the sheet away from the box measured for this drag.
+      var box = sheet.field.getBoundingClientRect();
+      activeDrag = {
+        index: index, pointerId: ev.pointerId, moved: false, box: box,
+        grabX: typeof ev.clientX === 'number'
+          ? ev.clientX - box.left - 22 - star.x / 100 * Math.max(1, box.width - 44) : 0,
+        grabY: typeof ev.clientY === 'number'
+          ? ev.clientY - box.top - 22 - star.y / 100 * Math.max(1, box.height - 44) : 0
+      };
+      el.focus({ preventScroll: true });
+      if (selected !== index) select(index);
       if (el.setPointerCapture) {
         try { el.setPointerCapture(ev.pointerId); }
         catch (e) { console.error('Could not hold the star while dragging', e); }
@@ -2040,7 +2050,6 @@
         placeElement(star);
         nudge(star.el, star.x - fromX, star.y - fromY);
         var kept = setStars(serialize(), 'moved');
-        drawField();
         select(index);
         sheetStatus('Moved.' + namedLine() + keptNote(kept));
       } else if (ev.key === 'Delete' || ev.key === 'Backspace') {
@@ -2171,6 +2180,9 @@
     }
     if (drag.moved) suppressClickUntil = Date.now() + DRAG_SUPPRESS_MS;
     return drag;
+  }
+  function followsDrag(ev) {
+    return ev.detail !== 0 && Date.now() < suppressClickUntil;
   }
   function endDrag(pointerId) {
     if (!activeDrag || activeDrag.pointerId !== pointerId) return;
@@ -2446,7 +2458,7 @@
       }
     });
     sheet.field.addEventListener('click', function (ev) {
-      if (Date.now() < suppressClickUntil) return;
+      if (followsDrag(ev)) return;
       if (ev.target !== sheet.field && ev.target !== sheet.canvas) return;
       // The star lands where the finger fell, and it is the mark of the press: it grows there as a
       // curve from its own point (_sass/_persona.scss, is-placed), and nothing else is done to it
@@ -2464,7 +2476,8 @@
       if (!activeDrag || activeDrag.pointerId !== ev.pointerId) return;
       var star = fieldStars[activeDrag.index];
       if (!star) return;
-      var point = pointInField(ev.clientX, ev.clientY, activeDrag.box);
+      var point = pointInField(ev.clientX - activeDrag.grabX,
+        ev.clientY - activeDrag.grabY, activeDrag.box);
       var x = Number(point.x.toFixed(2));
       var y = Number(point.y.toFixed(2));
       if (star.x === x && star.y === y) return;
