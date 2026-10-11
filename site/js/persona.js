@@ -11,7 +11,10 @@
 
    A star's editable words give it a glint in both the portrait and the sheet. A short path
    through nearby thoughts makes those words readable together; choosing or moving a star changes
-   the path. Sky cards follow the words without changing their seed; a puzzle already begun keeps
+   the path. Its default first star, nearest the middle of the constellation, carries its thought
+   as the portrait's label on every page. A hollow diamond marks that middle in the sheet, and a
+   ring identifies the star carrying the thought. Both follow the sky without another saved setting.
+   Sky cards follow the words without changing their seed; a puzzle already begun keeps
    its clues. The sheet's optional puzzle preview borrows the feed's own modules and card
    configurations through interestingFeed.previewSky(), so changing a star reveals a real world's
    response rather than an imitation. Moving a star updates the preview when the move ends.
@@ -71,8 +74,8 @@
     'a question that bends the room', 'room left for surprise', 'a quiet day, still progress',
     'the edge where ideas hatch', 'curiosity used as a compass', 'breathe, then build'
   ];
-  var ASKING_TEXT = 'Before it offers anything, this site asks one sideways question. Whatever '
-    + 'you answer picks a world to suggest; every world stays open below either way.';
+  var ASKING_TEXT = 'A sideways question is open in the page; answer it for a suggested world, '
+    + 'or take any world below.';
 
   /* ---- the rites the persona asks the engine for ------------------------------------------ */
   /* Nothing the persona writes or takes away is switched while a visitor is watching (README:
@@ -685,6 +688,10 @@
     }
     return path;
   }
+  function portraitThought(list) {
+    var path = threadOf(list);
+    return path.length ? (list[path[0]].text.trim() || 'a star without words') : '';
+  }
   function read() { return store ? store.read(SKY, []) : { status: 'unavailable', value: [] }; }
   function stars() { return clean(read().value); }
   var listeners = [];
@@ -916,7 +923,7 @@
      drawn only once its place has come up. Each tread draws more of the sky than the last and
      never less. The lines and stars share one pale ink, without a style read on every move. */
   var STAR_INK = 'rgba(236, 244, 255, 0.96)';
-  function drawSky(ctx, list, w, h, pad, dotRadius, lineWidth, route, pass, guide) {
+  function drawSky(ctx, list, w, h, pad, dotRadius, lineWidth, route, pass, guide, carrying) {
     var path = route || threadOf(list);
     var ink = STAR_INK;
     if (guide) drawFigureGuide(ctx, guide, w, h, pad, ink);
@@ -981,6 +988,13 @@
       ctx.arc(points[p].x, points[p].y, dotRadius * starGleam(list[p].text)
         * (path.indexOf(p) === -1 ? 1 : 1.7), 0, Math.PI * 2);
       ctx.fill();
+      if (p === carrying) {
+        ctx.strokeStyle = STAR_INK;
+        ctx.lineWidth = lineWidth;
+        ctx.beginPath();
+        ctx.arc(points[p].x, points[p].y, dotRadius ? dotRadius * 3.5 : 12, 0, Math.PI * 2);
+        ctx.stroke();
+      }
     }
   }
   function sizeCanvas(canvas, w, h) {
@@ -1014,23 +1028,16 @@
       ? ' This browser keeps nothing between visits, so your persona lasts for this page.' : '';
   }
   function describeSky(saved, list) {
-    if (list.length) return 'Your sky reads as ' + skyName(list) + ': ' + skyRead(list) + '.';
-    if (saved.status === 'unreadable') return 'What this browser kept of your sky cannot be read, so it starts fresh.';
-    return 'No stars yet.';
+    if (list.length) return 'Your sky reads as ' + skyName(list) + ': ' + skyRead(list);
+    if (saved.status === 'unreadable') return 'What this browser kept of your sky cannot be read, so it starts fresh';
+    return 'Your portrait has no stars yet';
   }
   function cardText(saved, list, r) {
     if (askingInCard) return ASKING_TEXT;
-    if (!list.length && !readOf(r) && saved.status !== 'unreadable') {
-      return 'No persona yet. Yours is a small sky you place star by star, one sideways question '
-        + 'you answer, and the difficulty every puzzle on this site is dealt at: several worlds '
-        + 'read the stars, each its own way, the answer picks a world to suggest, and the '
-        + 'difficulty says how much a piece will show you. ' + describeDifficulty()
-        + ' Set it up here, or take any world below.' + keptClause();
-    }
-    // Joined rather than concatenated: the reading says nothing at all until there is one, and
-    // two sentences with an empty one between them used to read with a gap in the middle.
-    return [describeSky(saved, list), describeReading(r), describeDifficulty()]
-      .filter(function (part) { return !!part; }).join(' ') + keptClause();
+    return [describeSky(saved, list),
+      readOf(r) ? 'your ' + r.orientation.name + ' reading suggests ' + r.orientation.worldName : 'no reading yet',
+      'puzzles are set to ' + difficulty().name].join('; ')
+      + (store && store.persistent === false ? '; your settings last for this page' : '') + '.';
   }
   function refresh() {
     if (!card) return;
@@ -1082,14 +1089,14 @@
       if (arrival) rite(card.open, 'arriving', arrival + 100);
     }
     var label = list.length || isRead ? 'open persona' : 'set up persona';
-    var named = list.length ? skyName(list) : '';
+    var thought = portraitThought(list);
     // The label is revealed only while it can be seen: beside the empty, beckoning avatar, or
     // printed beside the portrait under the pointer (is-waxing, js/motion.js).
     var shown = (!list.length && !isRead) || askingInCard
       || !!(card.open.classList && card.open.classList.contains('is-waxing'));
-    if (card.label) say(card.label, named || label, !shown);
-    else card.open.textContent = named || label;
-    if (named) card.open.setAttribute('aria-label', label + ': ' + named);
+    if (card.label) say(card.label, thought || label, !shown);
+    else card.open.textContent = thought || label;
+    if (thought) card.open.setAttribute('aria-label', label + ': ' + thought);
     else card.open.removeAttribute('aria-label');
     if (card.portrait && !behind) {
       // Drawn whole, at once: what moves as the first sky is cast is the stylesheet's edge across
@@ -1151,7 +1158,8 @@
       return { x: 50 + (star.x - centre.cx) * 2 * scale,
         y: 50 + (star.y - centre.cy) * scale, text: star.text };
     });
-    drawSky(ctx, miniature, size, size, size * 0.15, size * 0.032, size * 0.018, threadOf(list), null);
+    var path = threadOf(list);
+    drawSky(ctx, miniature, size, size, size * 0.15, size * 0.032, size * 0.018, path, null, null, path[0]);
   }
   // A question asked where the visitor cannot see it -- from the sheet, say, with the page scrolled
   // away from the threshold it is asked on -- is brought to them: the page steps to it by the

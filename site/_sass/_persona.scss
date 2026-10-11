@@ -29,8 +29,8 @@
 //   beckon      while there is no persona at all, the star in the empty portrait turns a quarter
 //               turn a beat, in even clicks, three beats as the page arrives and then it rests
 //               (persona-beckon); it holds still while a veil is up
-//   name        the sky's name opens beside the portrait on wax, its words cut in by a slice at the
-//               register's slant, and cut back out on wane
+//   name        the carried thought opens beside the portrait on wax, its words cut in by a slice
+//               at the register's slant, and cut back out on wane
 //   flight      the mark going home on the straight line in landing treads (persona-flight), its
 //               ring opening round the portrait as it lands (persona-flight-ring), and the two cut
 //               away by one slice pointing the way they came, the leading side first, as if they
@@ -141,6 +141,10 @@
   @include type.scale(label-large);
 }
 
+.persona[data-sky='set'] .persona-label {
+  @include type.rite;
+}
+
 // The one lit control on a page with no persona yet: the label shows, and the button is filled.
 // Filled, it shows nothing of the page behind it, so it blurs nothing either: a blur behind an
 // opaque fill would be work with nothing to show for it.
@@ -222,8 +226,8 @@ html[data-lightbox] .persona[data-state='empty'] .persona-portrait::after {
   animation-delay: var(--portrait-cast-after, 0ms);
 }
 
-// With a persona the portrait is enough at rest, and the label carries the sky's name -- what the
-// persona reads the arrangement as (js/persona.js, skyName). It is printed beside the portrait on
+// With a persona the portrait is enough at rest, and the label carries the thought nearest the
+// middle of its stars (js/persona.js, portraitThought). It is printed beside the portrait on
 // wax (is-waxing from js/motion.js), as the site's name is printed beside the logo opposite it
 // (_nav.scss): hover either mark and it says who it is. The room for the name opens at once, and
 // the words are cut into it by a slice at the register's slant (--reveal-angle), the edge every
