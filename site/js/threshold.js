@@ -13,22 +13,25 @@
   var MEMORY_PULL = 0.6;
   var ARRIVAL_GAP_MS = 30 * 60 * 1000;
 
+  // Each orientation is named by the world it opens onto: its name is that world's orientation in
+  // _data/worlds.json, read from the list the layout writes, so the reading and the card's overline
+  // always say the same words.
   var ORIENTATIONS = [
-    { id: 'tender', name: 'banked low', pull: 'wants less asked of it', world: 'quiet-room.html' },
-    { id: 'restless', name: 'wound tight', pull: 'wants to shove something and watch it go', world: 'kinetic-floor.html' },
-    { id: 'analytic', name: 'cold and clear', pull: 'wants a mechanism to take apart', world: 'machine-shop.html' },
-    { id: 'rooted', name: 'low and slow', pull: 'wants something that grows downward', world: 'loam.html' },
-    { id: 'verbal', name: 'full of half-sentences', pull: 'wants words put in the fire', world: 'word-kiln.html' },
-    { id: 'curious', name: 'magpie', pull: 'wants a strange specimen in a drawer', world: 'apocrypha-desk.html' },
-    { id: 'cosmic', name: 'looking up', pull: 'wants distance and scale', world: 'wish-constellation.html' },
-    { id: 'ceremonial', name: 'wants a rite', pull: 'wants to light something on purpose', world: 'star-lantern.html' },
-    { id: 'brooding', name: 'in the long look', pull: 'wants to re-read its own record', world: 'constellation-diary.html' },
-    { id: 'tempestuous', name: 'weather coming', pull: 'wants pressure, front and squall', world: 'constellation-weather.html' },
-    { id: 'attentive', name: 'ears first', pull: 'wants to listen to something decay', world: 'constellation-echo.html' },
-    { id: 'tending', name: 'minding something', pull: 'wants a living thing to keep', world: 'wish-terrarium.html' },
-    { id: 'divinatory', name: 'asking elsewhere', pull: 'wants an answer it did not author', world: 'sky-archive.html' },
-    { id: 'geometric', name: 'after symmetry', pull: 'wants a pattern to close', world: 'orbital-weaver.html' },
-    { id: 'metrical', name: 'counting in echoes', pull: 'wants a pulse to keep time with', world: 'pulse-loom.html' }
+    { id: 'tender', pull: 'wants less asked of it', world: 'quiet-room.html' },
+    { id: 'restless', pull: 'wants to shove something and watch it go', world: 'kinetic-floor.html' },
+    { id: 'analytic', pull: 'wants a mechanism to take apart', world: 'machine-shop.html' },
+    { id: 'rooted', pull: 'wants something that grows downward', world: 'loam.html' },
+    { id: 'verbal', pull: 'wants words put in the fire', world: 'word-kiln.html' },
+    { id: 'curious', pull: 'wants a strange specimen in a drawer', world: 'apocrypha-desk.html' },
+    { id: 'cosmic', pull: 'wants distance and scale', world: 'wish-constellation.html' },
+    { id: 'ceremonial', pull: 'wants to light something on purpose', world: 'star-lantern.html' },
+    { id: 'brooding', pull: 'wants to re-read its own record', world: 'constellation-diary.html' },
+    { id: 'tempestuous', pull: 'wants pressure, front and squall', world: 'constellation-weather.html' },
+    { id: 'attentive', pull: 'wants to listen to something decay', world: 'constellation-echo.html' },
+    { id: 'tending', pull: 'wants a living thing to keep', world: 'wish-terrarium.html' },
+    { id: 'divinatory', pull: 'wants an answer it did not author', world: 'sky-archive.html' },
+    { id: 'geometric', pull: 'wants a pattern to close', world: 'orbital-weaver.html' },
+    { id: 'metrical', pull: 'wants a pulse to keep time with', world: 'pulse-loom.html' }
   ];
 
   var worldData = document.getElementById('site-worlds');
@@ -36,6 +39,7 @@
   ORIENTATIONS.forEach(function (orientation) {
     var world = worldList.find(function (entry) { return entry.file === orientation.world; });
     if (!world) throw new Error('Missing world in the shared list: ' + orientation.world);
+    orientation.name = world.orientation;
     orientation.worldName = world.name;
   });
 

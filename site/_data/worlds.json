@@ -57,7 +57,7 @@
   ],
   "edges": [
     { "file": "error.html", "name": "lost in space", "gloss": "the 404 page",
-      "what": "A wrong turn still lands in the river: a puzzle opens here, with every world below." },
+      "what": "A wrong turn lands here, and the rite goes on: a puzzle opens, and every world is below." },
     { "file": "sitemap.xml", "name": "sitemap.xml", "gloss": "machine-readable",
       "what": "Get the same page list as XML, for a search engine to read." }
   ]

@@ -1,26 +1,22 @@
-{# A world page takes its name and first line from its path and worlds.worlds, the threshold from worlds.wayIn; the 404 brings its own as stageRead and stageLine. #}
+{# The stage's name (its h1) and first line (its h2) are its page's one entry in _data/worlds.json -- a world from worlds, the threshold from wayIn, the 404 from edges -- as the layout's title is, so a page is called the same thing everywhere. A world's entry (one with a mood) also writes data-stage-world. The 404 adds one plain line of its own over the title, as stageRead. #}
 {%- set stageFile = (page.filePathStem | replace('/', '')) + '.html' -%}
-{%- set stageEntry = null -%}
-{%- for world in worlds.worlds %}{% if world.file == stageFile %}{% set stageEntry = world %}{% endif %}{% endfor -%}
 {%- set stagePage = null -%}
-{%- for link in worlds.wayIn %}{% if link.file == stageFile %}{% set stagePage = link %}{% endif %}{% endfor -%}
+{%- for list in [worlds.worlds, worlds.wayIn, worlds.edges] %}{% for entry in list %}{% if entry.file == stageFile %}{% set stagePage = entry %}{% endif %}{% endfor %}{% endfor -%}
+{%- set stageEntry = stagePage if stagePage and stagePage.mood else null -%}
 <main class='stage{% if threshold %} stage-threshold{% endif %}' id='stage' data-mode='{% if threshold %}quiet{% else %}idle{% endif %}'{% if stageEntry %} data-stage-world='{{ stageEntry.file | replace('.html', '') }}'{% endif %}{% if threshold %} data-threshold='true'{% endif %}{% if stageRandom %} data-stage-random='true'{% endif %}>
   <div class='stage-inner' id='stage-inner'>
     <div class='stage-head' id='stage-head'>
-      <h1 class='stage-world' id='stage-world'>{{ stageEntry.name if stageEntry else (stagePage.name if stagePage else title) }}</h1>
+      <h1 class='stage-world' id='stage-world'>{{ stagePage.name if stagePage else title }}</h1>
       {# The sigil: the working's number, beside the world's name, which is the seed in the piece's own
          address. js/stage.js writes it when a piece begins and takes it away with the piece; it is
          hidden until then, so the threshold at rest and a page without scripting show none. #}
       <p class='stage-sigil' id='stage-sigil' hidden></p>
 {%- if threshold %}
       <p class='stage-read' id='stage-read' hidden></p>
-      <h2 class='stage-title' id='stage-title' tabindex='-1'>{{ description if description else (stagePage.what if stagePage else '') }}</h2>
-{%- else %}
-{%- if stageRead %}
+{%- elif stageRead %}
       <p class='stage-read' id='stage-read'>{{ stageRead }}</p>
 {%- endif %}
-      <h2 class='stage-title' id='stage-title' tabindex='-1'>{{ stageLine if stageLine else (stageEntry.what if stageEntry else '') }}</h2>
-{%- endif %}
+      <h2 class='stage-title' id='stage-title' tabindex='-1'>{{ stagePage.what if stagePage else '' }}</h2>
       <p class='stage-brief' id='stage-brief'></p>
       {# The goal: one line that says what counts as solved. A puzzle without one is a toy, so js/stage.js
          shows it for every piece that states one and hides it only while nothing is on. #}

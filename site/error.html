@@ -1,18 +1,16 @@
 ---
 layout: layout.njk
-title: lost in space
-description: 'There is no page at this address. The rite goes on: a puzzle opens here, and every world is below.'
 inlineStyles: true
 siteRoot: /
 ---
 {#-
   The 404. CloudFront returns this page for any address that is not a page, so it is written from
-  the site's root (siteRoot) with its styles inline (inlineStyles); see the layout. Its feature is
+  the site's root (siteRoot) with its styles inline (inlineStyles); see the layout. Its name and its
+  line are its entry in _data/worlds.json (edges), as every page's are. Its feature is
   the stage with no world of its own: it says, in one line over the title, that there is no page
   here, and opens whatever puzzle the feed deals first, so a wrong turn lands in the river like any other
   arrival. The sparkles logo and the feed below are the ways on, with scripting or without.
 -#}
 {%- set stageRandom = true -%}
 {%- set stageRead = 'no page at this address (404)' -%}
-{%- set stageLine = 'The rite goes on. A puzzle opens here, and every world is below.' -%}
 {% include 'stage.njk' %}
