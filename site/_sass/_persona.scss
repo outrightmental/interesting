@@ -754,6 +754,23 @@ button.persona-figure[aria-expanded='true'] {
   overflow-wrap: anywhere;
 }
 
+// The album: a shape made once stays found (js/persona.js, recordFigure). A found mark wears a
+// hairline of the tertiary -- the reading's own ink -- inside its edge, so the row reads at a
+// glance as made, found before, or still to make; the line under the row keeps the count, and
+// with all five found it is one of the rite's words.
+button.persona-figure[data-found='true'] {
+  box-shadow: inset 0 0 0 1px color-mix(in oklab, var(--md-sys-color-tertiary) 60%, transparent);
+}
+
+.persona-figures-found {
+  color: var(--md-sys-color-tertiary);
+}
+
+.persona-figures-found[data-all='true'] {
+  color: var(--md-sys-color-primary);
+  @include type.rite;
+}
+
 // Set, the mark rests in two shades split by the fill's curve, and its state layer is split by
 // the same curve, so under the pointer it still shows the one edge. That rule weighs less than the
 // press's ink and the ink going (button.is-stamping::after, button.is-uninking::after,

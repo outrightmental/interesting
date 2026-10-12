@@ -696,6 +696,7 @@
     });
   }
   function announce(list, how, kept) {
+    recordFigure(list);
     refresh();
     var failures = [];
     // Readers receive independent snapshots; one faulty reader must not silence the others.
@@ -1018,9 +1019,12 @@
   }
   function cardText(saved, list, r) {
     if (askingInCard) return ASKING_TEXT;
+    var album = foundFigures();
     return [describeSky(saved, list),
       readOf(r) ? 'your ' + r.orientation.name + ' reading suggests ' + r.orientation.worldName : 'no reading yet',
-      'puzzles are set to ' + difficulty().name].join('; ')
+      'puzzles are set to ' + difficulty().name]
+      .concat(album.length ? [album.length + ' of ' + FIGURES.length + ' named shapes found'] : [])
+      .join('; ')
       + (store && store.persistent === false ? '; your settings last for this page' : '') + '.';
   }
   function refresh() {
@@ -1626,6 +1630,46 @@
     { name: 'the moth', rule: 'four or more stars, each matched by one opposite it, left to right', min: 4 }
   ];
   var guiding = null;
+  /* The album: which named shapes this visitor has ever made (figureOf), kept for good under its
+     own name in the local-state document. Only ever added to -- a shape made once stays found --
+     so there is nothing to lose: the marks under the sky remember, the line under them keeps the
+     count, and making all five is the sky's own long work. */
+  var FOUND = 'figures';
+  var justFound = '';
+  function foundFigures() {
+    var saved = store ? store.read(FOUND, []) : null;
+    var kept = saved && Array.isArray(saved.value) ? saved.value : [];
+    var out = [];
+    for (var i = 0; i < FIGURES.length; i++) {
+      if (kept.indexOf(FIGURES[i].name) !== -1) out.push(FIGURES[i].name);
+    }
+    return out;
+  }
+  function foundLine(found) {
+    if (!found.length) return '';
+    if (found.length === FIGURES.length) {
+      return 'All ' + FIGURES.length + ' named shapes found: ' + found.join(', ') + '. The sky knows your hand.';
+    }
+    return found.length + ' of ' + FIGURES.length + ' named shapes found: ' + found.join(', ')
+      + '. The ✧ shapes are still to make.';
+  }
+  function recordFigure(list) {
+    var name = figureOf(list);
+    if (!name) return;
+    var found = foundFigures();
+    if (found.indexOf(name) !== -1) return;
+    found.push(name);
+    if (store) store.set(FOUND, found);
+    justFound = name;
+  }
+  function renderFound(found) {
+    var line = sheet && sheet.found;
+    if (!line || !found.length) return;
+    line.setAttribute('data-all', found.length === FIGURES.length ? 'true' : 'false');
+    var words = foundLine(found);
+    if (line.hidden) makeRoom(function () { say(line, words, show(line)); }, [line]);
+    else say(line, words);
+  }
   function figureTargets(f, count) {
     var n = Math.max(f.min, Math.min(f.max || MAX_STARS, count));
     var points = [];
@@ -1702,7 +1746,7 @@
       next = 'This shape needs exactly ' + f.max + ' stars. Remove ' + (count - f.max)
         + ' using remove this star, or choose another guide.';
     } else if (figureOf(fieldStars) === f.name) {
-      next = 'Your sky makes it now. Close the sheet to carry the shape and its ring in your portrait, or keep shaping.';
+      next = 'Your sky makes it now, and it stays found. Close the sheet to carry the shape and its ring in your portrait, or keep shaping.';
     } else if (selected >= 0 && guiding.targets[selected]) {
       next = guideMove(fieldStars[selected], guiding.targets[selected]);
     } else {
@@ -1755,11 +1799,13 @@
   // the task that made it -- so also when a sky is set and the sheet opened in one go -- and is
   // the engine's again at once, so a hover, a press or a pointer leaving it plays as on any
   // control.
-  function markFigure(chip, f, on) {
-    var words = (on ? '✦ ' : '✧ ') + f.name;
+  function markFigure(chip, f, on, found) {
+    var words = (on ? '✦ ' : found ? '✶ ' : '✧ ') + f.name;
     var expanded = !!(guiding && guiding.figure === f);
     var label = f.name + ': ' + f.rule + (on ? '. Your sky makes this now.' : '')
+      + (!on && found ? '. Found: you have made this shape before.' : '')
       + (expanded ? '. Guide shown; press to hide it.' : '. Press for a guide.');
+    if (chip.getAttribute('data-found') !== String(!!found)) chip.setAttribute('data-found', String(!!found));
     if (on ? chip.getAttribute('data-set') !== 'true' : chip.hasAttribute('data-set')) {
       var unseen = chip.isConnected && !sheet.host.open && typeof Promise === 'function' && !chip.hasAttribute('data-rite');
       if (unseen) chip.setAttribute('data-rite', 'none');
@@ -1775,11 +1821,12 @@
   function buildFigures() {
     if (!sheet || !sheet.figures || sheet.figureChips) return;
     var made = figureOf(stars());
+    var album = foundFigures();
     sheet.figureChips = FIGURES.map(function (f) {
       var chip = element('button', 'persona-figure');
       chip.type = 'button';
       chip.setAttribute('aria-controls', 'persona-figure-guide');
-      markFigure(chip, f, made === f.name);
+      markFigure(chip, f, made === f.name, album.indexOf(f.name) !== -1);
       chip.addEventListener('click', function () { tellFigure(f); });
       sheet.figures.appendChild(chip);
       return chip;
@@ -1790,7 +1837,11 @@
   function renderFigures(made) {
     if (!sheet || !sheet.figureChips) return;
     if (made === undefined) made = figureOf(serialize());
-    for (var i = 0; i < FIGURES.length; i++) markFigure(sheet.figureChips[i], FIGURES[i], made === FIGURES[i].name);
+    var album = foundFigures();
+    for (var i = 0; i < FIGURES.length; i++) {
+      markFigure(sheet.figureChips[i], FIGURES[i], made === FIGURES[i].name, album.indexOf(FIGURES[i].name) !== -1);
+    }
+    renderFound(album);
   }
   function renderThread() {
     var path = threadOf(fieldStars, selected);
@@ -1844,7 +1895,12 @@
     var list = serialize();
     var named = skyName(list);
     if (!named) return '';
-    if (figureOf(list)) return ' A figure with a name of its own: ' + named + '.';
+    if (figureOf(list)) {
+      var fresh = justFound && justFound === named;
+      justFound = '';
+      return ' A figure with a name of its own: ' + named
+        + (fresh ? ' — found for good. ' + foundLine(foundFigures()) : '.');
+    }
     var near = guiding ? '' : nearFigure(list);
     return ' Your sky reads as ' + named + ' now.' + (near ? ' Close to a named shape: ' + near + '.' : '');
   }
@@ -1946,7 +2002,7 @@
       change();
       return;
     }
-    var parts = [sheet.guide, sheet.name, sheet.thread, sheet.figures, sheet.wordsForm, sheet.drop, sheet.seed, sheet.remove, sheet.clear, sheet.status, sheet.answer];
+    var parts = [sheet.guide, sheet.name, sheet.thread, sheet.figures, sheet.found, sheet.wordsForm, sheet.drop, sheet.seed, sheet.remove, sheet.clear, sheet.status, sheet.answer];
     var section = sheet.field.parentNode;
     for (var next = section ? section.nextElementSibling : null; next; next = next.nextElementSibling) parts.push(next);
     var items = parts.filter(function (part) { return part && !part.hidden; });
@@ -2391,6 +2447,7 @@
       guide: document.getElementById('persona-figure-guide'),
       thread: document.getElementById('persona-thread'),
       figures: document.getElementById('persona-figures'),
+      found: document.getElementById('persona-figures-found'),
       wordsForm: document.getElementById('persona-star-words'),
       words: document.getElementById('persona-star-thought'),
       neighbor: document.getElementById('persona-star-neighbor'),
