@@ -1188,14 +1188,25 @@
     if (previous) previous();
     var active = true;
     var lentFocus = false;
+    var cleanups = [];
     function releaseFocus() {
       if (lentFocus && host.getAttribute('tabindex') === '-1') host.removeAttribute('tabindex');
       lentFocus = false;
     }
-    mounts.set(host, function () {
+    function stopEffects() {
+      while (cleanups.length) cleanups.pop()();
+    }
+    function dispose() {
+      if (!active) return;
       active = false;
       releaseFocus();
-    });
+      stopEffects();
+    }
+    function onDispose(cleanup) {
+      if (active) cleanups.push(cleanup);
+      else cleanup();
+    }
+    mounts.set(host, dispose);
     if (selector) selector.value = '';
     noteProbe(probe.probe);
     host.textContent = '';
@@ -1234,6 +1245,7 @@
     skip.addEventListener('click', function () {
       if (answered || !current()) return;
       answered = true;
+      stopEffects();
       // Focus leaves the frame before the frame is hidden from assistive tech: it rests on the
       // host (focusable for the length of the rite) until whoever asked moves it on.
       lentFocus = !host.hasAttribute('tabindex');
@@ -1244,7 +1256,7 @@
         if (!current()) { releaseFocus(); return; }
         if (frame.parentNode === host) host.removeChild(frame);
         if (!host.firstElementChild) host.textContent = '';
-        releaseFocus();
+        dispose();
         if (typeof opts.onSkip === 'function') opts.onSkip(probe);
       });
     });
@@ -1302,7 +1314,7 @@
       }
       host.setAttribute('data-probe-state', 'read');
       var handed = false;
-      function hand() { if (handed || !current()) return; handed = true; if (typeof opts.onAnswer === 'function') opts.onAnswer(reading, probe); }
+      function hand() { if (handed || !current()) return; handed = true; dispose(); if (typeof opts.onAnswer === 'function') opts.onAnswer(reading, probe); }
       var after = wait ? sealLength : 0;
       var gone = seedOf();
       var k = 0;
@@ -1318,7 +1330,7 @@
       rubbing: rubbingProbe, cairn: cairnProbe, compass: compassProbe, dye: dyeProbe,
       censer: censerProbe, thread: threadProbe, lamp: lampProbe, tiles: tilesProbe
     };
-    (kinds[probe.kind] || choiceProbe)(probe, body, trace, answer, finish);
+    (kinds[probe.kind] || choiceProbe)(probe, body, trace, answer, finish, onDispose);
     return probe;
   }
   function optionButton(label, detail) {
@@ -1595,10 +1607,14 @@
     });
     body.appendChild(button);
   }
-  function holdProbe(probe, body, trace, answer, finish) {
+  function holdProbe(probe, body, trace, answer, finish, onDispose) {
     var started = 0;
     var ticker = null;
     var marks = 0;
+    onDispose(function () {
+      started = 0;
+      if (ticker) window.clearTimeout(ticker);
+    });
     var button = el('button', 'probe-big');
     button.type = 'button';
     button.textContent = probe.label;
@@ -2316,7 +2332,7 @@
   // sky is drawn only when a tread lands: a star's own short stair is the only thing that waits on
   // the frames, and only while that star is coming out; there is no twinkle, and nothing comes out
   // while the sky is not there to be seen.
-  function skyProbe(probe, body, trace, answer, finish) {
+  function skyProbe(probe, body, trace, answer, finish, onDispose) {
     var full = probe.full || 48;
     var sky = el('canvas', 'probe-pad');
     sky.width = 600;
@@ -2480,6 +2496,13 @@
       }
     }) : null;
     if (watch) watch.observe(sky);
+    function stop() {
+      stopped = true;
+      if (timer) window.clearTimeout(timer);
+      timer = 0;
+      if (watch) watch.disconnect();
+    }
+    onDispose(stop);
     sky.addEventListener('click', function (ev) {
       var box = sky.getBoundingClientRect();
       if (!box.width || !box.height) return;
@@ -2491,10 +2514,7 @@
     });
     enough.addEventListener('click', function () {
       if (stopped) return;
-      stopped = true;
-      if (timer) window.clearTimeout(timer);
-      timer = 0;
-      if (watch) watch.disconnect();
+      stop();
       var n = stars.length;
       bucket(probe.buckets, n, answer);
       if (n >= full) add(answer, probe.filled, 1);
@@ -3663,7 +3683,7 @@
   // swing waits where it stands while it is scrolled out of view, set aside behind a lightbox or in
   // a tab out of sight; and it rests the moment it is caught, where it was caught: the scene is
   // sealed from the censer out, in treads, with the chain cut warm -- the reading's one seal.
-  function censerProbe(probe, body, trace, answer, finish) {
+  function censerProbe(probe, body, trace, answer, finish, onDispose) {
     var still = stilled();
     var A0 = 0.78;
     var DAMP = 0.93;
@@ -3896,6 +3916,7 @@
       else hold();
     }) : null;
     if (watch) watch.observe(g ? scene : body);
+    onDispose(stop);
     function seize() {
       if (caught) return;
       caught = true;
