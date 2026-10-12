@@ -2180,11 +2180,54 @@
     return reachable;
   }
 
-  // The arrow keys walk the stars in their order -- down or right to the next, up or left to the
-  // one before, round the ends -- and Home and End go to the first and the last, so a keyboard
-  // travels the constellation as the eye does rather than one Tab at a time. Only while the
-  // constellation is the thing the lightbox holds: the state interface keeps its own keys, its
-  // text box included.
+  // Measure the layout actually shown, including the side-by-side cascade. Without browser
+  // geometry, the live constellation already holds the same centres in its ray coordinates.
+  function optionPoint(node) {
+    if (!node) return null;
+    if (typeof node.getBoundingClientRect === 'function') {
+      var box = node.getBoundingClientRect();
+      if (box && (box.width || box.height)) {
+        return { x: box.left + box.width / 2, y: box.top + box.height / 2 };
+      }
+    }
+    if (html.getAttribute('data-nav') !== 'live' || !outward) return null;
+    var point = outward.get(node.parentNode);
+    return point ? { x: point.x + (node.offsetWidth || 0) / 2, y: point.y } : null;
+  }
+
+  // Sideways travel favours the nearest row in the other orbit. A destination must lie more
+  // sideways than vertically away, so a stacked phone layout keeps its ordinary reading order.
+  function acrossOrbit(stars, at, forward) {
+    var option = stars[at] && stars[at].parentNode;
+    var orbit = option && option.parentNode;
+    if (!orbit || !orbit.classList || !orbit.classList.contains('sparknav-orbit')) return -1;
+    var from = optionPoint(stars[at]);
+    if (!from) return -1;
+    var best = Infinity;
+    var chosen = -1;
+    for (var i = 0; i < stars.length; i++) {
+      var candidate = stars[i].parentNode;
+      var other = candidate && candidate.parentNode;
+      if (!other || other === orbit || !other.classList
+          || !other.classList.contains('sparknav-orbit')) continue;
+      var point = optionPoint(stars[i]);
+      if (!point) continue;
+      var along = (point.x - from.x) * (forward ? 1 : -1);
+      var cross = Math.abs(point.y - from.y);
+      if (along <= 1 || along < cross) continue;
+      var distance = along + cross * 2;
+      if (distance < best) {
+        best = distance;
+        chosen = i;
+      }
+    }
+    return chosen;
+  }
+
+  // Up and Down walk the stars in reading order, round the ends. Left and Right cross to the
+  // nearest row of the other orbit when it lies beside this one, otherwise keeping that walk.
+  // Home and End go to the first and last. Only while the constellation holds the lightbox:
+  // the state interface keeps its own keys, its text box included.
   function stepFocus(event) {
     if (stateHosted) return;
     var key = event.key;
@@ -2201,6 +2244,10 @@
     var at = stars.indexOf(document.activeElement);
     var to = home ? 0 : end ? stars.length - 1
       : at === -1 ? 0 : (at + (forward ? 1 : stars.length - 1)) % stars.length;
+    if (key === 'ArrowLeft' || key === 'ArrowRight') {
+      var across = acrossOrbit(stars, at, forward);
+      if (across !== -1) to = across;
+    }
     if (typeof event.preventDefault === 'function') event.preventDefault();
     stars[to].focus();
   }
