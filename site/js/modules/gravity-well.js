@@ -17,10 +17,10 @@
                      moons in order of period and say how many laps the innermost makes while the
                      outermost makes one. A wrong check says how many moons stand in the right
                      place and whether the count is off by one or by more.
-     the meeting     Two moons start on one line and orbit at different periods. Turn the system to
-                     any tick, find the first time they meet again, and count the inner moon's
-                     completed laps. The scene follows the visitor's time setting and remains
-                     theirs to turn after the check.
+     the meeting     Two moons orbit at different periods; some pairs give the outer moon a
+                     half-lap head start. Find their first meeting and count only the inner
+                     moon's completed laps since the start. The scene follows the visitor's
+                     time setting and remains theirs to turn after the check.
 
    A card and the feature it opens as are one puzzle: the spark puts the whole plan on its spec as
    `of` -- the well, the ring, the solution it was flown from; the radii, the step, the moons --
@@ -1127,8 +1127,17 @@ function meetingTick(p) {
   return p.inner * p.outer / (p.outer - p.inner);
 }
 
+function meetingFirst(p) {
+  return meetingTick(p) * (p.offset || 1);
+}
+
+function meetingTogether(p, tick) {
+  const gain = tick / p.inner - tick / p.outer - (p.offset || 0);
+  return Math.abs(gain - Math.round(gain)) < 1e-9;
+}
+
 function meetingLaps(p) {
-  return p.outer / (p.outer - p.inner);
+  return Math.floor(meetingFirst(p) / p.inner);
 }
 
 function meetingPlan(env) {
@@ -1138,7 +1147,7 @@ function meetingPlan(env) {
     name: 'the ' + env.pick(FIRST) + ' ' + env.pick(SECOND),
     inner: periods[0], outer: periods[1],
     names: shuffled(env, FIRST.map((_, i) => i)).slice(0, 2),
-    angle: env.int(0, 359)
+    angle: env.int(0, 359), offset: env.chance(0.5) ? 0.5 : 0
   };
 }
 
@@ -1149,8 +1158,9 @@ function carriedMeeting(env) {
   if (!MEETING_PERIODS.some(([inner, outer]) => inner === p.inner && outer === p.outer)) return null;
   if (!Array.isArray(p.names) || p.names.length !== 2 || !p.names.every((i) => Number.isInteger(i) && i >= 0 && i < FIRST.length) || p.names[0] === p.names[1]) return null;
   if (!Number.isInteger(p.angle) || p.angle < 0 || p.angle >= 360) return null;
+  if (p.offset !== undefined && p.offset !== 0 && p.offset !== 0.5) return null;
   return { kind: 'meeting', number: p.number, name: p.name, inner: p.inner, outer: p.outer,
-    names: p.names.slice(), angle: p.angle };
+    names: p.names.slice(), angle: p.angle, offset: p.offset || 0 };
 }
 
 function meetingTitle(p) {
@@ -1178,7 +1188,7 @@ function meetingScene(g, w, h, env, p, s, v) {
   const radii = [radius * Math.pow(p.inner / p.outer, 2 / 3), radius];
   const shown = meetingShown(s, rite, reduced);
   const landed = shown === s.tick;
-  const joined = landed && s.tick > 0 && s.tick % meetingTick(p) === 0;
+  const joined = landed && s.tick > 0 && meetingTogether(p, s.tick);
   // The reunion: its glow widens in treads from the moment the turn landed, on the roll of that
   // setting, and its line comes with the first of them; once found (end), the line deepens up a
   // stair of its own.
@@ -1200,10 +1210,15 @@ function meetingScene(g, w, h, env, p, s, v) {
   g.beginPath();
   g.moveTo(cx, cy);
   g.lineTo(cx + Math.cos(start) * radius, cy + Math.sin(start) * radius);
+  if (p.offset) {
+    const outerStart = start + Math.PI * 2 * p.offset;
+    g.moveTo(cx, cy);
+    g.lineTo(cx + Math.cos(outerStart) * radius, cy + Math.sin(outerStart) * radius);
+  }
   g.stroke();
   body(g, env, cx, cy, Math.max(4, radius * 0.095), 4, false);
   [p.inner, p.outer].forEach((period, i) => {
-    const angle = start + 2 * Math.PI * shown / period;
+    const angle = start + 2 * Math.PI * (shown / period + (i ? (p.offset || 0) : 0));
     const x = cx + Math.cos(angle) * radii[i];
     const y = cy + Math.sin(angle) * radii[i];
     const r = Math.max(3, radius * 0.055);
@@ -1251,8 +1266,8 @@ function meetingScene(g, w, h, env, p, s, v) {
 
 // The reading's words for a tick.
 function meetingReading(p, tick) {
-  return tick === 0 ? 'tick 0: together at the start'
-    : 'tick ' + tick + (tick % meetingTick(p) === 0 ? ': together again' : ': still apart');
+  return tick === 0 ? (p.offset ? 'tick 0: outer moon half a lap ahead' : 'tick 0: together at the start')
+    : 'tick ' + tick + (meetingTogether(p, tick) ? ': together' : ': still apart');
 }
 
 // The reading under the moons: the words that stood hold while the system turns, and are cut over
@@ -1272,21 +1287,21 @@ function meetingPreview(g, w, h, env, p) {
 
 function meetingPiece(env, p) {
   const helps = asked(env).helps;
-  const first = meetingTick(p);
+  const first = meetingFirst(p);
   const laps = meetingLaps(p);
   const s = meetingState();
   const draw = (c) => drawn(s, c, () => meetingScene(c.g, c.w, c.h, c, p, s, dials(env)));
   const clues = [
     'Each tick the inner gains ' + (p.outer - p.inner) + '/' + (p.inner * p.outer) + ' of a lap on the outer.',
     'At tick ' + p.inner + ', the inner has made one lap; the outer has not.',
-    'At tick ' + (first / 2) + ', the inner is half a lap ahead.',
+    'The inner must gain ' + (p.offset || 1) + ' lap on the outer before their next meeting. At tick ' + (first / 2) + ', it has gained half of that.',
     'They are still apart at tick ' + (first - 1) + '.',
     'At their first reunion the inner has made ' + laps + ' full laps.'
   ];
   return {
     title: meetingTitle(p),
-    brief: 'Two moons of ' + p.name + ' start on the same line at tick 0. The ' + FIRST[p.names[0]] + ' moon makes a full lap every ' + p.inner + ' ticks; the ' + FIRST[p.names[1]] + ' moon takes ' + p.outer + '. Set a tick to turn them, then tap either moon to inspect its laps. They meet again when the faster moon has gained one full lap on the slower one.',
-    goal: 'Find the first tick after 0 when they line up again, and count the inner moon\'s full laps by then.',
+    brief: 'Two moons circle ' + p.name + ' in the same direction. At tick 0, ' + (p.offset ? 'the outer moon starts half a lap ahead' : 'they start together') + '. The inner ' + FIRST[p.names[0]] + ' moon takes ' + p.inner + ' ticks per lap; the outer ' + FIRST[p.names[1]] + ' takes ' + p.outer + '. A meeting means one is directly behind the other as seen from the planet; opposite sides do not count. Set a tick to turn them, or tap a moon to inspect it. Count only whole laps travelled since tick 0, not an unfinished lap.',
+    goal: 'Find the first tick after 0 when both moons point in the same direction from the planet, and count the inner moon\'s completed laps.',
     aspect: '16 / 10',
     checkLabel: 'check the meeting',
     steps: [
@@ -1301,13 +1316,14 @@ function meetingPiece(env, p) {
       if (tick === first && count === laps) {
         return { solved: true, say: 'together again at tick ' + first + ': the inner moon has made ' + laps + ' full laps' };
       }
-      const position = tick === 0 ? 'they are together only at the start'
-        : tick > 0 && tick % first === 0 ? 'they meet at this tick, but not for the first time'
-          : 'they are apart at this tick';
+      const position = tick === first ? 'this is their first meeting'
+        : tick === 0 ? (p.offset ? 'they are apart at the start' : 'they are together only at the start')
+          : tick > 0 && meetingTogether(p, tick) ? 'they meet at this tick, but not for the first time'
+            : 'they are apart at this tick';
       return { solved: false, say: position + '; the inner lap count is ' + (count === laps ? 'right' : 'off') };
     },
     start(c) {
-      c.status('both moons start on one line; set a tick to turn them');
+      c.status((p.offset ? 'the outer moon starts half a lap ahead' : 'both moons start together') + '; set a tick to turn them');
       draw(c);
     },
     apply(id, value, c) {
@@ -1322,8 +1338,7 @@ function meetingPiece(env, p) {
           s.tickAt = s.t;
           s.sets += 1;
         }
-        c.status('tick ' + s.tick + ': ' + (s.tick === 0 ? 'together at the start'
-          : s.tick % first === 0 ? 'on the same line again' : 'the moons are apart'));
+        c.status(meetingReading(p, s.tick));
       }
       if (id === 'laps' && Number.isFinite(Number(value))) {
         c.status('the inner moon has made ' + Math.round(Number(value)) + ' full laps, you say');
@@ -1352,14 +1367,14 @@ function meetingPiece(env, p) {
       let nearest = -1;
       let distance = Infinity;
       for (let i = 0; i < 2; i++) {
-        const angle = start + 2 * Math.PI * shown / (i ? p.outer : p.inner);
+        const angle = start + 2 * Math.PI * (shown / (i ? p.outer : p.inner) + (i ? (p.offset || 0) : 0));
         const mx = c.w * 0.5 + Math.cos(angle) * radii[i];
         const my = c.h * 0.52 + Math.sin(angle) * radii[i];
         const gap = Math.hypot(x * c.w - mx, y * c.h - my);
         if (gap < distance) { distance = gap; nearest = i; }
       }
       if (distance > Math.max(22, radius * 0.13)) {
-        c.status('at tick ' + s.tick + ', ' + (s.tick ? 'compare how far each moon has turned; tap one to count its laps' : 'both moons start together; tap one to read its period'));
+        c.status('at tick ' + s.tick + ', ' + (s.tick ? 'compare how far each moon has turned; tap one to count its laps' : p.offset ? 'the outer moon starts half a lap ahead; tap one to read its period' : 'both moons start together; tap one to read its period'));
         return;
       }
       const period = nearest ? p.outer : p.inner;
@@ -1395,10 +1410,13 @@ function deal(env) {
 export default {
   id: 'gravity-well',
   needsSky: false,
+  animate(g, w, h, env, t) {
+    return false;
+  },
   // The card is a still picture, whichever puzzle it deals: its moons are set going only by the
   // solving of the puzzle they belong to, the probe flies only when released and the meeting turns
-  // only to a tick that is set, so a card waits for nothing, has no animate, and the feed never
-  // animates it (it paints it again only for a new size or a new roll).
+  // only to a tick that is set. A card waits for nothing, so animate returns false and the feed
+  // paints it again only for a new size or a new roll.
   paint(g, w, h, env) {
     const plan = deal(env);
     if (plan.kind === 'moons') moonsPreview(g, w, h, env, plan);
@@ -1422,7 +1440,7 @@ export default {
       const p = plan;
       return {
         title: meetingTitle(p),
-        text: 'Two moons start together. Turn the system to find their first meeting and count the inner moon\'s full laps.',
+        text: (p.offset ? 'The outer moon has a half-lap head start. ' : 'Two moons start together. ') + 'Turn the system to find their first meeting after the start. Count completed laps, not part-laps.',
         mono: FIRST[p.names[0]] + ' ' + p.inner + ' ticks/lap / ' + FIRST[p.names[1]] + ' ' + p.outer + ' ticks/lap',
         aspect: '16 / 10',
         paint: (g, w, h, cardEnv) => meetingPreview(g, w, h, cardEnv, p),

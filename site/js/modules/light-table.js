@@ -20,8 +20,9 @@
                         neighbour, measures a trial, or compares its turns. Once solved, the beam
                         follows the visitor's order rather than keeping the answer's brightness.
      the spectrum key Six lamps each show their red, green and blue strengths and their power.
-                        Choose two whose light adds to the three bars of a target, then add
-                        their power readings. Selecting lamps lights a comparison on the table.
+                        Some targets need two lamps, others three. Match all three colour totals,
+                        then add the power readings. Inspect lamps and use progressively more
+                        specific hints; the comparison stays live after the target is matched.
 
    A card and the feature it opens as are one puzzle: the spark puts the whole plan on its spec as
    `of` -- the lamp, the distances, the angles -- and piece(env) opens on that rather than rolling
@@ -1059,6 +1060,19 @@ const SPECTRUM_LAMPS = [
 const SPECTRUM_COLORS = ['#ff9d86', '#b5f4ad', '#a9c8ff'];
 const LAMP_NAMES = ['A', 'B', 'C', 'D', 'E', 'F'];
 
+function spectrumGroups(count) {
+  const groups = [];
+  function choose(from, names) {
+    if (names.length === count) {
+      groups.push(names);
+      return;
+    }
+    for (let i = from; i < LAMP_NAMES.length; i++) choose(i + 1, names.concat(LAMP_NAMES[i]));
+  }
+  choose(0, []);
+  return groups;
+}
+
 function spectrumSum(plan, names) {
   const sum = [0, 0, 0];
   for (const name of names) {
@@ -1078,12 +1092,10 @@ function spectrumPlan(env) {
     const j = env.int(0, i);
     [lamps[i], lamps[j]] = [lamps[j], lamps[i]];
   }
-  const first = env.int(0, 5);
-  const other = env.int(0, 4);
-  const second = other >= first ? other + 1 : other;
+  const count = env.chance(0.4) ? 3 : 2;
   return {
     kind: 'spectrum', number: env.int(100, 999), lamps,
-    pair: [LAMP_NAMES[first], LAMP_NAMES[second]].sort()
+    pair: env.pick(spectrumGroups(count)).slice()
   };
 }
 
@@ -1094,14 +1106,11 @@ function carriedSpectrum(env) {
     lamp && Array.isArray(lamp.bars) && lamp.bars.length === 3 &&
     lamp.bars.every((n) => Number.isInteger(n) && n >= 0 && n <= 2) &&
     Number.isInteger(lamp.watts) && lamp.watts >= 2 && lamp.watts <= 9)) return null;
-  if (!Array.isArray(p.pair) || p.pair.length !== 2 || p.pair[0] === p.pair[1] ||
+  if (!Array.isArray(p.pair) || ![2, 3].includes(p.pair.length) || new Set(p.pair).size !== p.pair.length ||
     !p.pair.every((name) => LAMP_NAMES.includes(name))) return null;
   const lamps = p.lamps.map((lamp) => ({ bars: lamp.bars.slice(), watts: lamp.watts }));
   const plan = { kind: 'spectrum', number: p.number, lamps, pair: p.pair.slice() };
-  const sums = [];
-  for (let i = 0; i < 6; i++) for (let j = i + 1; j < 6; j++) {
-    sums.push(spectrumSum(plan, [LAMP_NAMES[i], LAMP_NAMES[j]]).join('/'));
-  }
+  const sums = spectrumGroups(plan.pair.length).map((names) => spectrumSum(plan, names).join('/'));
   return new Set(sums).size === sums.length ? plan : null;
 }
 
@@ -1197,7 +1206,11 @@ function spectrumPreview(g, w, h, env, plan) {
 
 function spectrumPiece(env, plan) {
   const helps = asked(env).helps;
+  const count = plan.pair.length;
+  const howMany = count === 3 ? 'three' : 'two';
   const target = spectrumSum(plan, plan.pair);
+  const firstLamp = plan.lamps[LAMP_NAMES.indexOf(plan.pair[0])];
+  const remainder = target.map((value, channel) => value - firstLamp.bars[channel]);
   const power = plan.pair.reduce((total, name) => total + plan.lamps[LAMP_NAMES.indexOf(name)].watts, 0);
   const s = spectrumState();
   const draw = (c) => {
@@ -1206,40 +1219,41 @@ function spectrumPiece(env, plan) {
     s.drawnAt = s.t;
   };
   const hints = [
-    'Compare one channel at a time. The target bars are sums, not either lamp alone.',
-    'Start with the tallest target bar: find two lamp numbers that add to it.',
-    'A zero on one lamp leaves that channel entirely to its partner.',
-    'Check all three colour totals before you add the watts.',
-    'Once the bars match, add only the two selected watt labels.'
+    'The tallest target bar is ' + ['red', 'green', 'blue'][target.indexOf(Math.max(...target))] +
+      ': the ' + howMany + ' lamp readings must add to ' + Math.max(...target) + ' in that channel.',
+    'Light only adds here. A lamp exceeding the target in any channel cannot belong; a zero target rules out every lamp with light in that channel.',
+    'One matching group includes lamp ' + plan.pair[0] + '. Its strengths are R' + firstLamp.bars[0] + ' G' + firstLamp.bars[1] + ' B' + firstLamp.bars[2] + '.',
+    'With lamp ' + plan.pair[0] + ' chosen, the remaining ' + (count - 1) + ' lamp' + (count === 3 ? 's need' : ' needs') + ' R' + remainder[0] + ' G' + remainder[1] + ' B' + remainder[2] + ' together.',
+    'The matching group has power labels ' + plan.pair.map((name) => plan.lamps[LAMP_NAMES.indexOf(name)].watts + ' W').join(' + ') + '. Add each label once.'
   ];
   return {
     title: spectrumTitle(plan),
-    brief: 'Six lamps shine through a prism. Each shows red, green and blue strengths (R/G/B) and its power in watts. Two lamps add channel by channel. The target is R' + target[0] + ' G' + target[1] + ' B' + target[2] + '. The lamps are ' + plan.lamps.map((lamp, i) => LAMP_NAMES[i] + ': R' + lamp.bars[0] + ' G' + lamp.bars[1] + ' B' + lamp.bars[2] + ', ' + lamp.watts + ' W').join('; ') + '.',
-    goal: 'Choose two lamps whose red, green and blue totals match the target, then enter their combined power.',
+    brief: 'Six lamps shine through a prism. Each shows red, green and blue strengths (R/G/B) and its power in watts. Choose ' + howMany + ' lamps and add their strengths channel by channel. Tap a lamp in the picture to inspect it. The target is R' + target[0] + ' G' + target[1] + ' B' + target[2] + '. The lamps are ' + plan.lamps.map((lamp, i) => LAMP_NAMES[i] + ': R' + lamp.bars[0] + ' G' + lamp.bars[1] + ' B' + lamp.bars[2] + ', ' + lamp.watts + ' W').join('; ') + '.',
+    goal: 'Choose ' + howMany + ' lamps whose red, green and blue totals match the target, then enter their combined power.',
     aspect: '4 / 3',
     checkLabel: 'check the table',
     steps: [
-      { id: 'pair', ask: 'the two lamps to light', kind: 'pick', count: 2,
+      { id: 'pair', ask: 'the ' + howMany + ' lamps to light', kind: 'pick', count,
         items: LAMP_NAMES.map((name) => ({ label: 'lamp ' + name, value: name })) },
-      { id: 'power', ask: 'their combined power, in watts', kind: 'number', min: 4, max: 18, step: 1, unit: 'W' },
+      { id: 'power', ask: 'their combined power, in watts', kind: 'number', min: count * 2, max: count * 9, step: 1, unit: 'W' },
       { id: 'hint', ask: 'take a closer look at the prism', kind: 'press', count: helps,
         label: 'look again', optional: true }
     ],
     solution: { pair: plan.pair.slice(), power },
     check(c) {
       const chosen = c.value('pair');
-      const valid = Array.isArray(chosen) && chosen.length === 2 && new Set(chosen).size === 2 &&
+      const valid = Array.isArray(chosen) && chosen.length === count && new Set(chosen).size === count &&
         chosen.every((name) => LAMP_NAMES.includes(name));
       const pairRight = valid && plan.pair.every((name) => chosen.includes(name));
       const powerRight = Number(c.value('power')) === power;
-      if (pairRight && powerRight) return { solved: true, say: 'the three colours meet in the prism; the two lamps use ' + power + ' W together' };
+      if (pairRight && powerRight) return { solved: true, say: 'the three colours meet in the prism; the ' + howMany + ' lamps use ' + power + ' W together' };
       const sum = valid ? spectrumSum(plan, chosen) : [0, 0, 0];
       const matching = sum.filter((value, i) => value === target[i]).length;
       const labelsAgree = valid && chosen.reduce((total, name) => total + plan.lamps[LAMP_NAMES.indexOf(name)].watts, 0) === Number(c.value('power'));
-      return { solved: false, say: matching + ' of 3 colour bars match the target; the power entry ' + (labelsAgree ? 'matches' : 'does not match') + ' the two lamp labels' };
+      return { solved: false, say: matching + ' of 3 colour bars match the target; the power entry ' + (labelsAgree ? 'matches' : 'does not match') + ' the selected lamp labels' };
     },
     start(c) {
-      c.status('the target is lit; choose two lamps to compare with it');
+      c.status('the target is lit; choose ' + howMany + ' lamps to compare with it');
       draw(c);
     },
     apply(id, value, c) {
@@ -1254,24 +1268,48 @@ function spectrumPiece(env, plan) {
         draw(c);
       }
       if (id === 'power' && Number.isFinite(Number(value))) {
-        c.status(Number(value) + ' W for the two lamps, you say');
+        c.status(Number(value) + ' W for the ' + howMany + ' lamps, you say');
       }
-      if (id === 'hint' && s.looks < helps) {
-        c.hint();
-        s.looks += 1;
-        s.lookAt = s.t;
-        c.status(hints[s.looks - 1]);
-        draw(c);
+      if (id === 'hint') {
+        if (s.looks >= helps) c.status('no looks left at this difficulty; the lamp readings and comparison stay available');
+        else {
+          c.hint();
+          s.looks += 1;
+          s.lookAt = s.t;
+          c.status(hints[s.looks - 1]);
+          draw(c);
+        }
       }
     },
     frame(t, dt, c) {
       s.t += Math.max(0, dt);
       return step(s, c, Math.max(s.changedAt, s.lookAt, s.openAt), draw);
     },
+    tap(x, y, c) {
+      const index = plan.lamps.findIndex((source, i) => {
+        const left = 0.04 + (i % 3) * 0.32;
+        const top = 0.64 + Math.floor(i / 3) * 0.17;
+        return x >= left && x <= left + 0.28 && y >= top && y <= top + 0.14;
+      });
+      if (index >= 0) {
+        const source = plan.lamps[index];
+        const name = LAMP_NAMES[index];
+        c.status('Lamp ' + name + ': R' + source.bars[0] + ' G' + source.bars[1] + ' B' + source.bars[2] +
+          ', ' + source.watts + ' W; ' + (s.selected.includes(name) ? 'selected.' : 'not selected. Choose it with the lamp controls.'));
+      } else if (x >= 0.54 && y >= 0.25 && y <= 0.52) {
+        const sum = spectrumSum(plan, s.selected);
+        const gaps = target.map((value, channel) => {
+          const gap = value - sum[channel];
+          return ['red', 'green', 'blue'][channel] + ': ' + (gap === 0 ? 'matched' : Math.abs(gap) + (gap > 0 ? ' short' : ' too much'));
+        });
+        c.status(s.selected.length ? 'Your comparison: ' + gaps.join('; ') + '.' : 'No lamps selected. Choose ' + howMany + ' to light the comparison.');
+      } else c.status('The target is R' + target[0] + ' G' + target[1] + ' B' + target[2] +
+        '. Tap a lamp to inspect it, or the comparison bars to measure the difference.');
+    },
     end(c) {
       s.open = true;
       s.openAt = s.t;
-      c.status('the target and your two lamps carry the same three colours');
+      c.status('the target and your ' + howMany + ' lamps carry the same three colours; try another group and inspect how the comparison changes');
       draw(c);
     }
   };
@@ -1312,7 +1350,7 @@ export default {
       const target = spectrumSum(plan, plan.pair);
       return {
         title: spectrumTitle(plan),
-        text: 'Six coloured lamps, one target in the prism. Find the pair whose light adds up, then add their power readings.',
+        text: 'Six coloured lamps, one target in the prism. Find the ' + (plan.pair.length === 3 ? 'three' : 'two') + ' whose light adds up, then add their power readings. Tap the comparison to measure what differs.',
         mono: 'R' + target[0] + ' / G' + target[1] + ' / B' + target[2],
         aspect: '4 / 3',
         paint: (ctx, cw, ch, cardEnv) => spectrumPreview(ctx, cw, ch, cardEnv, plan),

@@ -16,10 +16,10 @@
                       is highest, how many lie west of the meridian, whether one is west of
                       another. Every line can be checked against the sky, and exactly two are
                       false. Find them. A wrong check says whether one of the two is right.
-     the second watch A comparison. The first watch drew the sky and the second drew it again,
-                      side by side, and one star is not where it was. Name it, the way it
-                      went, and how far. Coordinates make the distance readable; the
-                      hint, at its price, names the half of the sky the mover is in.
+     the second watch A comparison. One star moved, but some watches also shifted the telescope.
+                      A fixed reference marks that common shift: subtract it before naming
+                      the genuine mover, its direction and distance. Coordinates keep every
+                      measurement readable; help narrows down where the mover began.
 
    A card and the feature it opens as are one entry: the spark puts the whole plan on its spec as
    `of` -- the stars, the sequence, the lines -- and piece(env) opens on that rather than rolling
@@ -1166,6 +1166,18 @@ function driftDistance(plan) {
   return Math.abs(plan.to.x - from.x) + Math.abs(plan.to.y - from.y);
 }
 
+const WATCH_SHIFTS = [{ x: 0, y: 0 }, { x: 6, y: 0 }, { x: -6, y: 0 }, { x: 0, y: 6 }, { x: 0, y: -6 }];
+
+function driftShifted(points, shift) {
+  return points.map((p) => ({ x: p.x + shift.x, y: p.y + shift.y }));
+}
+
+function driftShiftFor(env, points, to) {
+  const options = WATCH_SHIFTS.slice(1).filter((shift) =>
+    driftShifted(points.concat([to]), shift).every((p) => p.x >= 4 && p.x <= 96 && p.y >= 4 && p.y <= 96));
+  return env.chance(0.5) && options.length ? env.pick(options) : WATCH_SHIFTS[0];
+}
+
 function driftPlan(env) {
   const number = 1 + env.int(0, 398);
   for (let attempt = 0; attempt < 40; attempt++) {
@@ -1175,7 +1187,8 @@ function driftPlan(env) {
     const way = WAYS[env.int(0, 3)].value;
     const by = env.int(14, 22);
     const to = { x: points[star].x + MOVE[way][0] * by, y: points[star].y + MOVE[way][1] * by };
-    if (driftOk(points, star, to)) return { kind: 'drift', number, points, star, to };
+    if (driftOk(points, star, to)) return { kind: 'drift', number, points, star, to,
+      shift: driftShiftFor(env, points, to) };
   }
   return { kind: 'drift', number, points: copyPoints(SPARE_SKY), star: 0, to: { x: 32, y: 22 } };
 }
@@ -1185,7 +1198,12 @@ function carriedDrift(env) {
   if (!p || p.kind !== 'drift' || !okPoints(p.points, 5, 7)) return null;
   if (!Number.isInteger(p.number) || p.number < 1 || p.number > 399) return null;
   if (!Number.isInteger(p.star) || p.star < 0 || p.star >= p.points.length || !driftOk(p.points, p.star, p.to)) return null;
-  const plan = { kind: 'drift', number: p.number, points: copyPoints(p.points), star: p.star, to: { x: p.to.x, y: p.to.y } };
+  const shift = p.shift === undefined ? WATCH_SHIFTS[0] : p.shift;
+  if (!shift || !WATCH_SHIFTS.some((q) => q.x === shift.x && q.y === shift.y)) return null;
+  if ((shift.x || shift.y) && !driftShifted(p.points.concat([p.to]), shift)
+    .every((q) => q.x >= 4 && q.x <= 96 && q.y >= 4 && q.y <= 96)) return null;
+  const plan = { kind: 'drift', number: p.number, points: copyPoints(p.points), star: p.star,
+    to: { x: p.to.x, y: p.to.y }, shift: { x: shift.x, y: shift.y } };
   return driftWay(plan) && driftDistance(plan) <= 30 ? plan : null;
 }
 
@@ -1196,7 +1214,7 @@ function driftTitle(plan) {
 function driftSecond(plan) {
   const q = copyPoints(plan.points);
   q[plan.star] = { x: plan.to.x, y: plan.to.y };
-  return q;
+  return driftShifted(q, plan.shift || WATCH_SHIFTS[0]);
 }
 
 // The two drawings side by side in the sky: the first watch on the left, the second on the right.
@@ -1266,6 +1284,18 @@ function driftScene(g, w, h, c, plan, s, v, plates) {
   g.fillStyle = c.alpha(c.colors.muted, 0.9);
   g.fillText('first watch', pw * 0.5, top * 0.5);
   g.fillText('second watch', pw * 1.5, top * 0.5);
+  const shift = plan.shift || WATCH_SHIFTS[0];
+  [0, pw].forEach((x0, i) => {
+    const reference = driftPanel([{ x: 50 + (i ? shift.x : 0), y: 50 + (i ? shift.y : 0) }], x0, pw, fr)[0];
+    g.strokeStyle = c.alpha(c.colors.fg, 0.85);
+    g.lineWidth = 1.5;
+    g.beginPath();
+    g.moveTo(reference.x - 5, reference.y);
+    g.lineTo(reference.x + 5, reference.y);
+    g.moveTo(reference.x, reference.y - 5);
+    g.lineTo(reference.x, reference.y + 5);
+    g.stroke();
+  });
   const first = driftPanel(plan.points, 0, pw, fr);
   const later = driftPanel(driftSecond(plan), pw, pw, fr);
   const done = s.doneAt >= 0;
@@ -1274,7 +1304,7 @@ function driftScene(g, w, h, c, plan, s, v, plates) {
   if (done) {
     // Written up: the place the star left is cut on at its moment, and the way it went is drawn
     // across in treads from there to where it stands now.
-    const from = driftPanel(plan.points, pw, pw, fr)[plan.star];
+    const from = driftPanel(driftShifted(plan.points, shift), pw, pw, fr)[plan.star];
     if (told.flicker(doneP)) ring(g, from.x, from.y, 3 * scale, c.alpha(gold, 0.6), 1);
     const reach = told.stair(doneP);
     if (reach > 0) path(g, [from, later[plan.star]], c.alpha(gold, 0.8), reach);
@@ -1295,9 +1325,10 @@ function driftScene(g, w, h, c, plan, s, v, plates) {
   if (s.was >= 0 && s.was < first.length && s.was !== s.picked) wear(s.was);
   const markOn = marked && moverRing(rite, s, s.picked, reduced).on;
   const step = page(g, w, h, fr.split, c, ink, fr.m, Math.max(5, Math.round(5 * v.density)));
-  const lines = [OPENER + ' entry ' + plan.number + ', the second watch', 'coordinates: right, then down; each scale runs from 0 to 100.'];
+  const lines = [OPENER + ' entry ' + plan.number + ', the second watch',
+    'reference +: first (50, 50); second (' + (50 + shift.x) + ', ' + (50 + shift.y) + ').'];
   const written = done && told.flicker(doneP);
-  lines.push(written ? 'star ' + LETTERS[plan.star] + ' drifted ' + driftWay(plan) + ' by ' + driftDistance(plan) + ' steps.' : 'one star moved straight. which, which way, and how far?');
+  lines.push(written ? 'star ' + LETTERS[plan.star] + ' drifted ' + driftWay(plan) + ' by ' + driftDistance(plan) + ' steps.' : 'subtract the reference shift. which star still moved?');
   if (s.half) lines.push('in the first drawing, the mover is in the ' + s.half + ' half.');
   const halfOn = !s.half || named.flicker(came(s, s.halfAt, HALF, reduced));
   // The marked star's coordinates, read off the page, are cut on with its ring.
@@ -1322,6 +1353,7 @@ function driftPiece(env, plan) {
   const way = driftWay(plan);
   const distance = driftDistance(plan);
   const second = driftSecond(plan);
+  const shift = plan.shift || WATCH_SHIFTS[0];
   const s = driftState();
   const plates = {};
   const paced = pace();
@@ -1347,8 +1379,8 @@ function driftPiece(env, plan) {
   }
   return {
     title: driftTitle(plan),
-    brief: 'Compare two watches: the first drawing is on the left, the second on the right. One of the ' + WORDS[n] + ' stars moved straight; the rest stayed put. Each star\'s control lists its first and second coordinates: right, then down, on scales from 0 to 100. Choose a star to read those coordinates on the page too. Subtract the changed coordinate to measure the distance. ' + (margin ? 'Your distance may be ' + margin + ' steps out.' : 'The distance must be exact.'),
-    goal: 'Name the star that moved, its direction, and how many coordinate steps it moved.',
+    brief: 'Compare two watches, left then right. One of the ' + WORDS[n] + ' stars moved straight; the telescope may also have shifted the whole view. The + marks a fixed reference: first (50, 50), second (' + (50 + shift.x) + ', ' + (50 + shift.y) + '). Subtract that reference change from every star\'s coordinate change. Only the moving star has a change left: its direction and distance are your answer. Each star\'s control lists both coordinates, right then down, from 0 to 100; choosing it reads them on the page too. ' + (margin ? 'Your distance may be ' + margin + ' steps out.' : 'The distance must be exact.'),
+    goal: 'Correct for the reference shift, then name the moving star, its direction and its distance in coordinate steps.',
     aspect: '4 / 3',
     checkLabel: 'compare the watches',
     steps: [
@@ -1371,7 +1403,7 @@ function driftPiece(env, plan) {
       return { solved: false, say: WORDS[right] + ' of three details match; ' + (distanceRight ? 'the distance is within the allowed margin' : off === 1 ? 'the distance is off by one step' : 'the distance is outside the allowed margin') };
     },
     start(c) {
-      c.status('read the second drawing against the first, star by star');
+      c.status('compare the + reference first, then subtract its change from each star\'s change');
       draw(c);
     },
     apply(id, value, c) {
@@ -1403,7 +1435,7 @@ function driftPiece(env, plan) {
           } else if (s.hints === 2) {
             c.status('in the first drawing, the moving star is in the ' + (from.y < 50 ? 'upper' : 'lower') + ' half');
           } else if (s.hints === 3) {
-            c.status('the drift changes the ' + (from.x === plan.to.x ? 'down coordinate; compare heights' : 'right coordinate; compare left and right positions'));
+            c.status('after subtracting the reference change, the drift changes only the ' + (from.x === plan.to.x ? 'down coordinate; compare heights' : 'right coordinate; compare left and right positions'));
           } else if (s.hints === 4) {
             c.status('compare star ' + LETTERS[plan.star] + ' in the two drawings');
           } else {
@@ -1508,8 +1540,8 @@ export default {
       const plan = cached;
       return {
         title: driftTitle(plan),
-        quote: 'One of the ' + WORDS[plan.points.length] + ' stars is not where the first watch left it.',
-        text: 'Two drawings of one sky, a watch apart. Find the moving star, its direction and its distance; compare the coordinates to write a complete account.',
+        quote: 'A fixed reference, ' + WORDS[plan.points.length] + ' stars, and one genuine mover.',
+        text: 'The telescope may have shifted between watches. Compare the fixed reference first, then find the star that moved, its direction and its distance.',
         aspect: '4 / 3',
         paint: (g, w, h, cardEnv) => driftPreview(g, w, h, cardEnv, plan),
         of: plan
