@@ -14,6 +14,8 @@
                      few clues say how they stand -- left of, next to, at an end, two apart. The
                      clues are drawn from the true order and pruned until exactly one order fits
                      them all. A wrong check says how many stand in the right place and no more.
+                     Tap two keepsakes to swap them, or a clue to read it. A hint names the clues
+                     that establish a keepsake's place; all clues also stand in the piece's brief.
      the second look Two views of nine lamps, before and after someone pressed exactly two
                      switches. Find those switches and the row where most lamps changed. The
                      same neighbour-flipping rule applies; the views are on screen together.
@@ -607,6 +609,7 @@ function holds(clue, order) {
     case 'notEnd': return at(clue.a) !== 0 && at(clue.a) !== n - 1;
     case 'slot': return at(clue.a) === clue.k;
     case 'notNext': return Math.abs(at(clue.a) - at(clue.b)) > 1;
+    case 'between': return (at(clue.a) - at(clue.b)) * (at(clue.a) - at(clue.c)) < 0;
     default: return false;
   }
 }
@@ -622,6 +625,7 @@ function clueText(clue, names) {
     case 'notEnd': return 'the ' + a + ' is not at either end';
     case 'slot': return 'the ' + a + ' is ' + ORDINAL[clue.k] + ' from the left';
     case 'notNext': return 'the ' + a + ' is not next to the ' + b;
+    case 'between': return 'the ' + a + ' stands somewhere between the ' + b + ' and the ' + names[clue.c];
     default: return '';
   }
 }
@@ -667,6 +671,11 @@ function trueClues(order) {
       if (Math.abs(pa - pb) === 1 && a < b) out.push({ t: 'nextTo', a, b });
       if (Math.abs(pa - pb) >= 2 && a < b) out.push({ t: 'apart', a, b, d: Math.abs(pa - pb) });
       if (Math.abs(pa - pb) > 1 && a < b) out.push({ t: 'notNext', a, b });
+      if (pb < pa) {
+        for (let c = 0; c < n; c++) {
+          if (order.indexOf(c) > pa) out.push({ t: 'between', a, b, c });
+        }
+      }
     }
   }
   return out;
@@ -722,13 +731,14 @@ function carriedShelf(env) {
   if (!isPerm(p.order) || !isPerm(p.start)) return null;
   if (p.start.every((v, i) => v === p.order[i])) return null;
   if (!Array.isArray(p.clues) || !p.clues.length || p.clues.length > 7) return null;
-  const okClue = (c) => c && typeof c === 'object' && ['leftOf', 'nextTo', 'apart', 'end', 'notEnd', 'slot', 'notNext'].includes(c.t)
+  const okClue = (c) => c && typeof c === 'object' && ['leftOf', 'nextTo', 'apart', 'end', 'notEnd', 'slot', 'notNext', 'between'].includes(c.t)
     && Number.isInteger(c.a) && c.a >= 0 && c.a < n
     && (['end', 'notEnd', 'slot'].includes(c.t) || (Number.isInteger(c.b) && c.b >= 0 && c.b < n && c.b !== c.a))
+    && (c.t !== 'between' || (Number.isInteger(c.c) && c.c >= 0 && c.c < n && c.c !== c.a && c.c !== c.b))
     && (c.t !== 'apart' || (Number.isInteger(c.d) && c.d >= 2 && c.d < n))
     && (c.t !== 'slot' || (Number.isInteger(c.k) && c.k >= 0 && c.k < n));
   if (!p.clues.every(okClue)) return null;
-  const clues = p.clues.map((c) => ({ t: c.t, a: c.a, b: c.b, d: c.d, k: c.k }));
+  const clues = p.clues.map((c) => ({ t: c.t, a: c.a, b: c.b, c: c.c, d: c.d, k: c.k }));
   const only = fits(clues, permutations(n));
   if (only.length !== 1 || !only[0].every((v, i) => v === p.order[i])) return null;
   return { kind: 'shelf', items: p.items.slice(), order: p.order.slice(), clues, start: p.start.slice() };
@@ -740,7 +750,117 @@ function shelfTitle(plan) {
 
 function shelfGeometry(w, h, n) {
   const span = w * 0.8;
-  return { span, left: (w - span) / 2, cell: span / n, shelfY: h * 0.4 };
+  return { span, left: (w - span) / 2, cell: span / n, shelfY: h * 0.3 };
+}
+
+function shelfClues(plan, names) {
+  return plan.clues.map((clue, i) => (i + 1) + '. ' + capital(clueText(clue, names)) + '.').join(' ');
+}
+
+// Remove any premise that is unnecessary to establish this item's position.
+function shelfReason(plan, item) {
+  const perms = permutations(plan.items.length);
+  const slot = plan.order.indexOf(item);
+  let proof = plan.clues.map((_, i) => i);
+  for (let i = proof.length - 1; i >= 0; i--) {
+    const rest = proof.slice(0, i).concat(proof.slice(i + 1));
+    const possible = fits(rest.map((index) => plan.clues[index]), perms);
+    if (possible.length && possible.every((order) => order.indexOf(item) === slot)) proof = rest;
+  }
+  return proof;
+}
+
+function drawKeepsake(g, x, y, r, name, env, variant) {
+  g.save();
+  g.translate(x, y);
+  g.rotate((variant.turn || 0) * 0.14);
+  g.scale(r, r);
+  g.lineWidth = Math.max(0.13, 1.2 / r);
+  g.lineCap = 'round';
+  g.lineJoin = 'round';
+  g.strokeStyle = env.colors.accent2;
+  g.fillStyle = env.mix(env.colors.bg2, env.colors.accent, 0.28);
+  g.beginPath();
+  switch (SHORT[name]) {
+    case 'key':
+      g.arc(-0.6, -0.2, 0.45, 0, Math.PI * 2);
+      g.moveTo(-0.15, -0.2); g.lineTo(1.15, -0.2);
+      g.moveTo(0.65, -0.2); g.lineTo(0.65, 0.35);
+      g.moveTo(1.05, -0.2); g.lineTo(1.05, 0.2);
+      break;
+    case 'note':
+      g.rect(-0.95, -0.7, 1.9, 1.4);
+      g.moveTo(-0.95, -0.7); g.lineTo(0, 0.1); g.lineTo(0.95, -0.7);
+      break;
+    case 'stone':
+      g.ellipse(0, 0, 1.05, 0.67, -0.16, 0, Math.PI * 2);
+      g.fill();
+      g.moveTo(-0.6, -0.15); g.quadraticCurveTo(-0.2, -0.5, 0.35, -0.35);
+      break;
+    case 'thread':
+      g.ellipse(0, -0.65, 0.7, 0.22, 0, 0, Math.PI * 2);
+      g.moveTo(-0.7, -0.65); g.lineTo(-0.7, 0.65);
+      g.moveTo(0.7, -0.65); g.lineTo(0.7, 0.65);
+      g.moveTo(0.7, 0.65); g.ellipse(0, 0.65, 0.7, 0.22, 0, 0, Math.PI * 2);
+      for (let i = -1; i <= 1; i++) {
+        g.moveTo(-0.6, i * 0.3); g.lineTo(0.6, i * 0.3 + 0.12);
+      }
+      g.moveTo(0.7, 0.4); g.quadraticCurveTo(1.5, 0.4, 1.2, 0.9);
+      break;
+    case 'stub':
+      g.moveTo(-1, -0.65); g.lineTo(0.85, -0.65); g.lineTo(0.6, -0.2);
+      g.lineTo(0.95, 0.15); g.lineTo(0.7, 0.65); g.lineTo(-1, 0.65); g.closePath();
+      g.moveTo(-0.55, -0.35); g.lineTo(-0.55, 0.35);
+      g.moveTo(-0.2, -0.15); g.lineTo(0.35, -0.15);
+      break;
+    case 'bell':
+      g.moveTo(-1, 0.55); g.quadraticCurveTo(-0.65, 0.2, -0.6, -0.35);
+      g.bezierCurveTo(-0.55, -1, 0.55, -1, 0.6, -0.35);
+      g.quadraticCurveTo(0.65, 0.2, 1, 0.55); g.closePath(); g.fill();
+      g.moveTo(0.2, 0.8); g.arc(0, 0.8, 0.2, 0, Math.PI);
+      g.moveTo(0, -0.85); g.lineTo(0, -1.15);
+      break;
+    case 'rosemary':
+      g.moveTo(-0.4, 0.8); g.lineTo(0.4, -0.95);
+      for (let i = 0; i < 4; i++) {
+        const sx = -0.25 + i * 0.17;
+        const sy = 0.45 - i * 0.37;
+        g.moveTo(sx - 0.48, sy - 0.22); g.lineTo(sx, sy);
+        g.lineTo(sx + 0.5, sy - 0.04);
+      }
+      break;
+    case 'pencil':
+      g.moveTo(-1.1, 0.1); g.lineTo(0.75, -0.45); g.lineTo(1.2, -0.28);
+      g.lineTo(0.88, 0.03); g.lineTo(-0.97, 0.58); g.closePath();
+      g.moveTo(0.75, -0.45); g.lineTo(0.88, 0.03);
+      break;
+    case 'matchbook':
+      g.rect(-0.75, -0.85, 1.5, 1.7);
+      g.moveTo(-0.75, 0.35); g.lineTo(0.75, 0.35);
+      for (let i = -1; i <= 1; i++) {
+        g.moveTo(i * 0.35, -0.45); g.lineTo(i * 0.35, 0.15);
+      }
+      break;
+    case 'shell':
+      g.arc(0, 0.6, 1.15, Math.PI, Math.PI * 2);
+      g.lineTo(0, 0.8); g.closePath();
+      for (let i = 1; i < 5; i++) {
+        const a = Math.PI + i * Math.PI / 5;
+        g.moveTo(0, 0.65); g.lineTo(Math.cos(a), 0.6 + Math.sin(a));
+      }
+      break;
+    case 'coin':
+      g.arc(0, 0, 0.85, 0, Math.PI * 2); g.fill();
+      g.moveTo(0, -0.5); g.lineTo(0.35, 0); g.lineTo(0, 0.5);
+      g.lineTo(-0.35, 0); g.closePath();
+      break;
+    case 'bead':
+      g.arc(0, 0, 0.75, 0, Math.PI * 2); g.fill();
+      g.moveTo(0.22, 0); g.arc(0, 0, 0.22, 0, Math.PI * 2);
+      break;
+  }
+  g.stroke();
+  g.restore();
 }
 
 // The shelf as it opens: the keepsakes in the opening order, each standing where it is (from = its
@@ -749,7 +869,13 @@ function shelfGeometry(w, h, n) {
 function shelfState(plan) {
   const n = plan.items.length;
   const from = new Array(n).fill(0).map((_, item) => plan.start.indexOf(item));
-  return { order: plan.start.slice(), hinted: [], t: 0, until: -1, size: '', from, movedAt: new Array(n).fill(-1), hintAt: new Array(n).fill(-1), doneAt: -1 };
+  return { order: plan.start.slice(), hinted: [], selected: null, selectedAt: -1, reasons: [], t: 0, until: -1, size: '', from, movedAt: new Array(n).fill(-1), hintAt: new Array(n).fill(-1), doneAt: -1 };
+}
+
+function shelfPosition(env, s, item) {
+  const own = rollFor(riteOf(env), 0x3a7e + item);
+  const p = came(s, s.movedAt[item], 0.9, !!env.reduced);
+  return s.from[item] + (s.order.indexOf(item) - s.from[item]) * own.ease(p);
 }
 
 function drawShelf(g, w, h, env, plan, s, variant) {
@@ -806,23 +932,19 @@ function drawShelf(g, w, h, env, plan, s, variant) {
     // the first the longest way and each after it shorter, never a glide -- the way the engine's
     // FLIP moves a thing changing places, and its name travels over it in the same treads, so a
     // name never leaves the shelf while its keepsake is on the way.
-    const p = came(s, s.movedAt[item], 0.9, reduced);
-    const x = slotX(s.from[item]) + (slotX(slot) - slotX(s.from[item])) * own.ease(p);
-    // The keepsake: a small shape, one per item, with its name over it.
-    g.fillStyle = env.alpha(c.accent, 0.85);
-    g.beginPath();
-    const kind = item % 4;
-    if (kind === 0) g.arc(x, geo.shelfY - r, r, 0, Math.PI * 2);
-    else if (kind === 1) g.rect(x - r, geo.shelfY - r * 2, r * 2, r * 2);
-    else if (kind === 2) {
-      g.moveTo(x, geo.shelfY - r * 2.2);
-      g.lineTo(x + r, geo.shelfY);
-      g.lineTo(x - r, geo.shelfY);
-      g.closePath();
-    } else {
-      g.ellipse(x, geo.shelfY - r, r * 1.3, r * 0.7, 0, 0, Math.PI * 2);
+    const x = slotX(shelfPosition(env, s, item));
+    if (s.selected === item) {
+      const chosen = came(s, s.selectedAt, 0.6, reduced);
+      own.paint(g, x - geo.cell * 0.4, geo.shelfY - r * 4.2, geo.cell * 0.8, r * 4.1,
+        own.stair(chosen), env.alpha(c.accent, 0.18));
+      if (own.flicker(chosen)) {
+        g.strokeStyle = c.accent;
+        g.lineWidth = 2;
+        g.strokeRect(x - geo.cell * 0.4, geo.shelfY - r * 4.2, geo.cell * 0.8, r * 4.1);
+      }
     }
-    g.fill();
+    // The keepsake: a small shape, one per item, with its name over it.
+    drawKeepsake(g, x, geo.shelfY - r * 1.2, r, plan.items[item], env, v);
     g.fillStyle = env.alpha(c.fg, 0.9);
     g.fillText(names[item], x, geo.shelfY - r * 2.6);
     g.fillStyle = env.alpha(c.muted, 0.7);
@@ -838,16 +960,22 @@ function drawShelf(g, w, h, env, plan, s, variant) {
   g.textAlign = 'left';
   g.textBaseline = 'middle';
   const x0 = w * 0.08;
-  let y = h * 0.56;
+  const line = h * 0.44 / plan.clues.length;
   plan.clues.forEach((clue, i) => {
-    g.fillStyle = env.alpha(c.accent2, 0.9);
+    const y = h * 0.49 + i * line;
+    if (s.reasons.includes(i)) {
+      g.fillStyle = env.alpha(c.accent, 0.18);
+      g.fillRect(x0 - 4, y - line * 0.44, w * 0.84 + 8, line * 0.88);
+    }
+    g.fillStyle = c.accent2;
     g.fillText(String(i + 1) + '.', x0, y);
-    g.fillStyle = env.alpha(c.fg, 0.9);
-    g.fillText(clueText(clue, names), x0 + clueSize * 1.6, y);
-    y += clueSize * 1.55;
+    g.fillStyle = c.fg;
+    const label = clueText(clue, names).replace(/\bthe /g, '').replace('stands somewhere ', '')
+      .replace(' is ', ' ').replace(' are exactly ', ': ').replace('at either end', 'at an end');
+    g.fillText(label, x0 + clueSize * 1.6, y, w * 0.84 - clueSize * 1.6);
   });
   g.fillStyle = env.alpha(c.muted, 0.12 * v.density);
-  g.fillRect(0, h * 0.5, w, 1);
+  g.fillRect(0, h * 0.42, w, 1);
 }
 
 function shelfPreview(g, w, h, env, plan) {
@@ -874,16 +1002,30 @@ function shelfPiece(env, plan) {
     for (let i = 0; i < n; i++) if (cur[i] === plan.order[i]) right += 1;
     return right;
   }
+  function arrange(next, c) {
+    const before = s.order.slice();
+    const positions = plan.items.map((_, item) => shelfPosition(c, s, item));
+    s.order = next.map(Number);
+    s.selected = null;
+    for (let slot = 0; slot < n; slot++) {
+      const item = s.order[slot];
+      if (before.indexOf(item) !== slot) {
+        s.from[item] = positions[item];
+        s.movedAt[item] = s.t;
+        stir(s, 0.9);
+      }
+    }
+  }
   return {
     title: shelfTitle(plan),
-    brief: 'A reading of the shelf. ' + capital(WORDS[n]) + ' keepsakes stand on it, left to right, and '
-      + WORDS[plan.clues.length] + ' clues under it say how. Exactly one order fits them all.',
+    brief: 'Arrange ' + WORDS[n] + ' keepsakes from left to right so every clue fits. Tap two keepsakes to swap them, or use the order buttons. A between clue does not require neighbours. Exactly one order fits. '
+      + shelfClues(plan, names),
     goal: 'Put the keepsakes in the one order every clue allows.',
     aspect: '4 / 3',
     checkLabel: 'check the shelf',
     steps: [
       { id: 'order', ask: 'the keepsakes, left to right', kind: 'order', items: plan.items.map((name, i) => ({ label: name, value: i })), value: plan.start.slice() },
-      { id: 'hint', ask: 'where one keepsake belongs', kind: 'press', count: 1, label: 'show me one', optional: true }
+      { id: 'hint', ask: 'where one keepsake belongs, and which clues prove it', kind: 'press', count: helps, label: 'explain one place', optional: true }
     ],
     solution: { order: plan.order.slice() },
     check(c) {
@@ -895,22 +1037,12 @@ function shelfPiece(env, plan) {
       };
     },
     start(c) {
-      c.status(WORDS[plan.clues.length] + ' clues under the shelf');
+      c.status('tap two keepsakes to swap them; tap a numbered clue to read its full sentence');
       draw(c);
     },
     apply(id, value, c) {
       if (id === 'order' && Array.isArray(value) && value.length === n) {
-        const before = s.order.slice();
-        s.order = value.map(Number);
-        // Every keepsake that changed slot sets out from the slot it stood in.
-        for (let slot = 0; slot < n; slot++) {
-          const item = s.order[slot];
-          if (before.indexOf(item) !== slot) {
-            s.from[item] = before.indexOf(item);
-            s.movedAt[item] = s.t;
-            stir(s, 0.9);
-          }
-        }
+        arrange(value, c);
         c.status('left to right: ' + s.order.map((i) => names[i]).join(', '));
       }
       if (id === 'hint') {
@@ -920,9 +1052,12 @@ function shelfPiece(env, plan) {
         if (next !== undefined) {
           s.hinted.push(next);
           s.hintAt[next] = s.t;
+          s.reasons = shelfReason(plan, next);
           stir(s, 1.1);
           c.hint();
-          c.status('the ' + names[next] + ' belongs ' + ORDINAL[plan.order.indexOf(next)] + ' from the left');
+          c.status((s.reasons.length === 1 ? 'Clue ' : 'Clues ') + s.reasons.map((i) => i + 1).join(', ')
+            + (s.reasons.length === 1 ? ' leaves' : ' leave') + ' only the ' + ORDINAL[plan.order.indexOf(next)]
+            + ' place for the ' + names[next] + '. ' + s.reasons.map((i) => capital(clueText(plan.clues[i], names)) + '.').join(' '));
         } else if (s.hinted.length >= helps) {
           c.status('that is all the shelf will show at this difficulty; the rest is yours');
         } else {
@@ -931,13 +1066,51 @@ function shelfPiece(env, plan) {
       }
       draw(c);
     },
+    tap(x, y, c) {
+      const geo = shelfGeometry(c.w, c.h, n);
+      if (y >= 0.44 && y <= 0.97) {
+        const i = Math.max(0, Math.min(plan.clues.length - 1, Math.round((y - 0.49) / (0.44 / plan.clues.length))));
+        c.status('Clue ' + (i + 1) + '. ' + capital(clueText(plan.clues[i], names)) + '.');
+        return;
+      }
+      const px = x * c.w;
+      const py = y * c.h;
+      if (px < geo.left || px > geo.left + geo.span || py < geo.shelfY - geo.cell * 0.8 || py > geo.shelfY + c.h * 0.1) {
+        c.status('tap two keepsakes to swap them, or tap a numbered clue to read it');
+        return;
+      }
+      const at = (px - geo.left) / geo.cell - 0.5;
+      const item = s.order.reduce((near, next) => Math.abs(shelfPosition(c, s, next) - at)
+        <= Math.abs(shelfPosition(c, s, near) - at) ? next : near);
+      if (s.selected === item) {
+        s.selected = null;
+        c.status('the ' + names[item] + ' is released; nothing moved');
+      } else if (s.selected === null) {
+        s.selected = item;
+        s.selectedAt = s.t;
+        stir(s, 0.6);
+        c.status('the ' + names[item] + ' is selected; tap another keepsake to swap them, or this one to release it');
+      } else {
+        const first = s.selected;
+        const next = s.order.slice();
+        const a = next.indexOf(first);
+        const b = next.indexOf(item);
+        [next[a], next[b]] = [next[b], next[a]];
+        arrange(next, c);
+        c.set('order', next);
+        c.status('swapped the ' + names[first] + ' and the ' + names[item] + '; left to right: '
+          + next.map((i) => names[i]).join(', '));
+      }
+      draw(c);
+    },
     frame(t, dt, c) {
       return tick(s, dt, c, draw);
     },
     end(c) {
+      s.selected = null;
       s.doneAt = s.t;
       stir(s, 2.6);
-      c.status(s.order.map((i) => names[i]).join(' - ') + ': kept, and left still');
+      c.status(s.order.map((i) => names[i]).join(' - ') + ': every clue fits. The keepsakes are still yours to move.');
     }
   };
 }
@@ -1479,10 +1652,30 @@ function dealt(env) {
   return face === 3 ? 'second-look' : face === 0 ? 'turned-pane' : lamps ? 'lamps' : 'shelf';
 }
 
+const plans = new WeakMap();
+function planFor(env) {
+  let plan = plans.get(env);
+  if (!plan) {
+    plan = carriedLamps(env) || carriedShelf(env) || carriedSecondLook(env) || carriedPane(env);
+    if (!plan) {
+      const kind = dealt(env);
+      plan = kind === 'lamps' ? lampsPlan(env) : kind === 'shelf' ? shelfPlan(env)
+        : kind === 'second-look' ? secondLookPlan(env) : panePlan(env);
+    }
+    plans.set(env, plan);
+  }
+  return plan;
+}
+
 export default {
   id: 'quiet-room',
   needsSky: false,
   paint(ctx, w, h, env) {
+    const plan = planFor(env);
+    if (plan.kind === 'shelf') {
+      shelfPreview(ctx, w, h, env, plan);
+      return;
+    }
     // The breath caught where the configuration caught it, at the size it asks for.
     room(ctx, w, h, env);
   },
@@ -1494,9 +1687,9 @@ export default {
     return false;
   },
   spark(env) {
-    const kind = dealt(env);
+    const plan = planFor(env);
+    const kind = plan.kind;
     if (kind === 'lamps') {
-      const plan = lampsPlan(env);
       const count = litBy(plan.presses, plan.n).filter(Boolean).length;
       return {
         title: lampsTitle(plan),
@@ -1508,7 +1701,6 @@ export default {
       };
     }
     if (kind === 'second-look') {
-      const plan = secondLookPlan(env);
       return {
         title: secondLookTitle(plan),
         quote: 'nine lamps, two views, two presses between them',
@@ -1519,7 +1711,6 @@ export default {
       };
     }
     if (kind === 'turned-pane') {
-      const plan = panePlan(env);
       return {
         title: paneTitle(plan),
         quote: WORDS[plan.before.filter(Boolean).length] + ' lamps before; one press, then a turn',
@@ -1529,30 +1720,21 @@ export default {
         of: plan
       };
     }
-    const plan = shelfPlan(env);
     const names = plan.items.map((name) => SHORT[name] || name);
     return {
       title: shelfTitle(plan),
       quote: clueText(plan.clues[0], names),
       text: (plan.clues.length === 1 ? 'That is the one clue.' : capital(WORDS[plan.clues.length - 1]) + ' more clues wait under the shelf.')
-        + ' Put the keepsakes in the one order that fits them all.',
+        + ' Swap the keepsakes into the one order that fits. Ask for a hint to see which clues prove one place.',
       aspect: '4 / 3',
       paint: (g, w, h, cardEnv) => shelfPreview(g, w, h, cardEnv, plan),
       of: plan
     };
   },
   piece(env) {
-    const lamps = carriedLamps(env);
-    if (lamps) return lampsPiece(env, lamps);
-    const shelf = carriedShelf(env);
-    if (shelf) return shelfPiece(env, shelf);
-    const secondLook = carriedSecondLook(env);
-    if (secondLook) return secondLookPiece(env, secondLook);
-    const pane = carriedPane(env);
-    if (pane) return panePiece(env, pane);
-    const kind = dealt(env);
-    return kind === 'lamps' ? lampsPiece(env, lampsPlan(env))
-      : kind === 'shelf' ? shelfPiece(env, shelfPlan(env))
-        : kind === 'second-look' ? secondLookPiece(env, secondLookPlan(env)) : panePiece(env, panePlan(env));
+    const plan = planFor(env);
+    return plan.kind === 'lamps' ? lampsPiece(env, plan)
+      : plan.kind === 'shelf' ? shelfPiece(env, plan)
+        : plan.kind === 'second-look' ? secondLookPiece(env, plan) : panePiece(env, plan);
   }
 };
