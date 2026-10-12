@@ -401,7 +401,7 @@ function wheelScene(g, w, h, c, p, s, variant) {
     if (on) glow(g, c, q.x, q.y, size * 1.4, col.accent2, 0.6);
     write(g, ch, q.x, q.y, size, on ? col.accent2 : c.alpha(col.fg, 0.9), 'center', 600);
   });
-  // What the archive asks, under the wheel, and the letters left off the rim.
+  // What the archive asks, over the wheel, and the letters left off the rim at its foot.
   const fs = Math.max(10, Math.min(16, Math.min(w, h) * 0.036));
   write(g, 'the archive asks for', cx, h * 0.045 + fs * 0.1, fs * 0.85, c.alpha(col.muted, 0.9), 'center', 500);
   write(g, p.word.split('').join('  '), cx, h * 0.045 + fs * 1.3, fs * 1.4, col.accent2, 'center', 700);
@@ -416,13 +416,14 @@ function wheelScene(g, w, h, c, p, s, variant) {
   if (foot) write(g, foot, w * 0.5, h * 0.9, fs * 0.8, s.trial || s.told ? col.accent2 : col.fg, 'center', 500);
 }
 
-function wheelBlank(angle) {
-  return { angle: angle || 0, t: 0, told: false, toldAt: null, doneAt: null,
+function wheelBlank() {
+  return { angle: 0, t: 0, told: false, toldAt: null,
     from: 0, target: 0, turnAt: null, turns: 0, trial: null };
 }
 
+// The wheel as a card shows it: the rim at its starting setting, the same on the card and the stage.
 function wheelPreview(g, w, h, env, p) {
-  wheelScene(g, w, h, env, p, wheelBlank(0), env.variant);
+  wheelScene(g, w, h, env, p, wheelBlank(), env.variant);
 }
 
 function wheelPiece(env, p) {
@@ -432,13 +433,8 @@ function wheelPiece(env, p) {
   // The wheel turns to its notch in a few clicks of this piece's rite, rolled afresh for the solve
   // by rite.at, each landing on a notch, and stops on the last: never a smooth turn, never past it
   // and back.
-  const s = wheelBlank(0);
+  const s = wheelBlank();
   const draw = (c) => drawn(s, c, () => wheelScene(c.g, c.w, c.h, c, p, s, env.variant));
-  const solve = () => {
-    if (s.doneAt != null) return;
-    s.doneAt = s.t;
-    s.dirty = true;
-  };
   function turnTo(n, cw, c) {
     s.trial = { n, cw, read: reading(p, n, cw) };
     s.from = s.angle;
@@ -471,7 +467,7 @@ function wheelPiece(env, p) {
         { label: 'counterclockwise', value: 'ccw' }
       ] },
       { id: 'ask', ask: 'one direction that reaches the word', kind: 'press', count: 1, label: 'ask the archive', optional: true }
-    ].filter(Boolean),
+    ],
     solution: { count: p.t, way: p.cw ? 'cw' : 'ccw' },
     check(c) {
       const n = Number(c.value('count'));
@@ -483,8 +479,8 @@ function wheelPiece(env, p) {
       if (read === p.word) return { solved: true, say: notches(n) + ' ' + wayWord(cw) + ': the stars read ' + p.word };
       // Within the margin the difficulty allows, the wheel is taken as turned to the setting that
       // reads: the stars are a notch or two wide of their letters and the lock still gives.
-      if (cw === !!p.cw && Math.abs(n - p.t) <= margin) {
-        return { solved: true, say: notches(p.t) + ' ' + wayWord(!!p.cw) + ': the stars read ' + p.word };
+      if (cw === p.cw && Math.abs(n - p.t) <= margin) {
+        return { solved: true, say: notches(p.t) + ' ' + wayWord(p.cw) + ': the stars read ' + p.word };
       }
       if (reading(p, n, !cw) === p.word) return { solved: false, say: 'the count fits one way round; the direction is off' };
       let land = 0;
@@ -509,11 +505,9 @@ function wheelPiece(env, p) {
     },
     frame(t, dt, c) {
       s.t += Math.max(0, dt);
-      if (c.done) solve();
       return framed(s, c, draw);
     },
     end(c) {
-      solve();
       // Every solve is answered in the archive's own voice, as the omens' is: the line is the
       // plan's, so one wheel always reads the same and another wheel reads another.
       const n = Number(c.value('count'));
@@ -871,7 +865,7 @@ function omensPiece(env, p) {
       const right = picked.filter((i) => p.truth.includes(i)).length;
       const placed = c.value('quadrant') === quadrant;
       if (picked.length === 2 && right === 2 && placed) return { solved: true, say: 'both picked omens hold; the brightest star is in the marked quadrant' };
-      return { solved: false, say: (right === 0 ? 'none' : WORDS[right]) + ' of your ' + (picked.length === 1 ? 'one' : WORDS[picked.length] || String(picked.length)) + ' picked omens hold; the brightest star is ' + (placed ? 'in' : 'outside') + ' the marked quadrant' };
+      return { solved: false, say: (right === 0 ? 'none' : WORDS[right]) + ' of your ' + (WORDS[picked.length] || String(picked.length)) + ' picked omens hold; the brightest star is ' + (placed ? 'in' : 'outside') + ' the marked quadrant' };
     },
     start(c) {
       c.status(WORDS[p.pts.length] + ' stars, five omens; two hold');
@@ -1094,7 +1088,7 @@ function routePreview(g, w, h, env, p) {
 function routePiece(env, p) {
   const helps = asked(env).helps;
   const trail = routeWalk(p);
-  const end = trail[trail.length - 1] + 1;
+  const lastStar = trail[trail.length - 1] + 1;
   const sum = trail.slice(1).reduce((total, index) => total + p.lights[index], 0);
   const s = routeBlank();
   // A new star marked as the last one is sealed on a roll of this mark's own, and the one marked
@@ -1118,12 +1112,12 @@ function routePiece(env, p) {
       { id: 'sum', ask: 'brightness added along the route', kind: 'number', min: 0, max: 45, step: 1, value: 0 },
       { id: 'hint', ask: 'show the next landing', kind: 'press', count: 1, label: 'show a step', optional: true }
     ],
-    solution: { end, sum },
+    solution: { end: lastStar, sum },
     check(c) {
-      const lastMatches = Number(c.value('end')) === end;
+      const lastMatches = Number(c.value('end')) === lastStar;
       const sumMatches = Number(c.value('sum')) === sum;
       return { solved: lastMatches && sumMatches, say: lastMatches && sumMatches
-        ? 'the route ends at star ' + end + ' and its landings add to ' + sum
+        ? 'the route ends at star ' + lastStar + ' and its landings add to ' + sum
         : 'the last star ' + (lastMatches ? 'matches' : 'does not match') + '; the brightness total ' + (sumMatches ? 'matches' : 'does not match') };
     },
     start(c) {
@@ -1179,7 +1173,7 @@ function routePiece(env, p) {
       // Every solve is answered in the archive's own voice: the line is the plan's, so one route
       // always reads the same and another route reads another.
       const line = READINGS[(p.start + p.moves.length + p.lights[trail[trail.length - 1]]) % READINGS.length];
-      c.status('The route ends at star ' + end + '; its landings add to ' + sum + '. The archive reads: ' + line);
+      c.status('The route ends at star ' + lastStar + '; its landings add to ' + sum + '. The archive reads: ' + line);
       draw(c);
     }
   };
@@ -1205,11 +1199,14 @@ export default {
   needsSky: true,
   paint(g, w, h, env) {
     const p = deal(env);
-    if (p.kind === 'wheel') {
-      // The rim starts at the same setting on the card and on the stage.
-      wheelScene(g, w, h, env, p, wheelBlank(0), env.variant);
-    } else if (p.kind === 'route') routePreview(g, w, h, env, p);
+    if (p.kind === 'wheel') wheelPreview(g, w, h, env, p);
+    else if (p.kind === 'route') routePreview(g, w, h, env, p);
     else omensPreview(g, w, h, env, p);
+  },
+  animate() {
+    // A card of the archive is a still picture: its stars do not breathe and its wheel waits to
+    // be turned, so the loop lets it go at once (js/feed.js has the contract animate is held to).
+    return false;
   },
   spark(env) {
     const p = deal(env);

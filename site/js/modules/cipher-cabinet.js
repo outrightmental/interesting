@@ -1,5 +1,5 @@
-/* The cipher cabinet: notes from a house whose rooms move, locked two ways. As a card it is a
-   locked note (paint, spark); as a piece it is one of the two puzzles below, and the card it was
+/* The cipher cabinet: notes from a house whose rooms move, locked three ways. As a card it is a
+   locked note (paint, spark); as a piece it is one of the three puzzles below, and the card it was
    opened from says which. See js/feed.js for what a module is and js/stage.js for what a piece
    is.
 
@@ -665,7 +665,7 @@ function wheelPiece(env, carriedPlan) {
       return { solved: false, say: parts.join('; ') };
     },
     start(c) {
-      c.status('received: ' + received + '; commonest letters: ' + tally(received).slice(0, 5).map((entry) => entry.letter + ' ' + entry.count).join(', ') + '; the tallest nearly always wants to read E');
+      c.status('received: ' + received + '; commonest letters: ' + tally(received).slice(0, LEDGER).map((entry) => entry.letter + ' ' + entry.count).join(', ') + '; the tallest nearly always wants to read E');
       draw(c, true);
     },
     apply(id, value, c) {
