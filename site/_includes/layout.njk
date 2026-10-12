@@ -155,7 +155,7 @@
     <p class='panel-note persona-sheet-intro'>Your persona travels in the portrait: your sky of stars, a reading from one sideways answer, and how hard puzzles are. Change your sky here to change what worlds make of it. Your reading suggests where to begin. This browser keeps your settings between visits when it can.</p>
     <section class='persona-section' aria-labelledby='persona-sky-title'>
       <h3 id='persona-sky-title' class='panel-label'>constellation</h3>
-      <p class='panel-note'>Tap the sky to place a star; choose one to edit its words, then drag it or use its arrow keys to move it. The hollow diamond marks the middle of your stars. The nearest star is ringed: its thought travels in your portrait on every page. Move a different star closer to change it. The numbered path joins nearby thoughts. Press a named shape for guides; press again to hide them. Guides leave your stars as they are. A shape you make stays in your portrait.</p>
+      <p class='panel-note'>Tap the sky to place a star. Choose one to edit its words, then drag it or use its arrow keys to move it. The hollow diamond marks the middle; the ringed star lends its thought to your portrait on every page. The numbered path joins nearby thoughts. Press a named shape for a guide without moving your stars.</p>
       <div class='persona-sky' id='persona-sky'><canvas class='persona-sky-canvas' aria-hidden='true'></canvas></div>
       <p class='panel-note persona-figure-guide' id='persona-figure-guide' aria-live='polite' aria-atomic='true' hidden></p>
       <p class='persona-sky-name' id='persona-sky-name' hidden></p>
@@ -164,7 +164,10 @@
       <form class='persona-star-words' id='persona-star-words' hidden>
         <label for='persona-star-thought'>what this star carries (up to 160 characters)</label>
         <input id='persona-star-thought' type='text' maxlength='160' required autocomplete='off'>
-        <button type='submit'>keep these words</button>
+        <div class='controls'>
+          <button type='submit'>keep these words</button>
+          <button id='persona-carry-thought' type='button' class='btn-text' aria-describedby='persona-star-neighbor' disabled>carry these words</button>
+        </div>
         <p class='panel-note' id='persona-star-neighbor' aria-live='polite'></p>
       </form>
       <div class='controls'>

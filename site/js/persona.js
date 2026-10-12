@@ -14,6 +14,8 @@
    the path. Its default first star, nearest the middle of the constellation, carries its thought
    as the portrait's label on every page. A hollow diamond marks that middle in the sheet, and a
    ring identifies the star carrying the thought. Both follow the sky without another saved setting.
+   The words form can swap a chosen thought into that star without moving any stars; focus follows
+   the words to their new star, and the carrier is named for screen readers as well as ringed.
    Sky cards follow the words without changing their seed; a puzzle already begun keeps
    its clues. The sheet's optional puzzle preview borrows the feed's own modules and card
    configurations through interestingFeed.previewSky(), so changing a star reveals a real world's
@@ -1545,12 +1547,17 @@
     return list.length + ' star' + (list.length === 1 ? ' is' : 's are') + ' placed. The cards that read this sky follow your changes.';
   }
   function renderNeighbor() {
-    if (!sheet || !sheet.neighbor || selected < 0 || !fieldStars[selected]) return;
+    if (!sheet || selected < 0 || !fieldStars[selected]) return;
+    var carrying = threadOf(fieldStars)[0];
+    if (sheet.carry) sheet.carry.disabled = carrying === selected;
+    var portrait = carrying === selected ? 'This star supplies the thought in your portrait.'
+      : 'Your portrait carries: "' + (fieldStars[carrying].text.trim() || 'a star without words')
+        + '". Carrying these words swaps the two thoughts; neither star moves.';
     var path = threadOf(fieldStars, selected);
     var line = path.length < 2 ? 'Place another star to see which thought comes next.'
       : 'Next thought: "' + (fieldStars[path[1]].text || 'a star without words')
         + '". Move this star to change which thought comes next.';
-    say(sheet.neighbor, line);
+    say(sheet.neighbor, portrait + ' ' + line);
   }
   function keptNote(kept) {
     return kept || !store || store.persistent ? '' : ' Kept for this page only: this browser stores nothing between visits.';
@@ -1792,9 +1799,12 @@
   }
   function renderThread() {
     var path = threadOf(fieldStars, selected);
+    var carrying = threadOf(fieldStars)[0];
     for (var i = 0; i < fieldStars.length; i++) {
       var el = fieldStars[i].el;
       if (!el) continue;
+      var label = starLabel(fieldStars[i], i === carrying);
+      if (el.getAttribute('aria-label') !== label) el.setAttribute('aria-label', label);
       var place = path.indexOf(i);
       if (place < 0) {
         // A place taken away goes as it came, not at once: the old number stays on the star
@@ -1848,7 +1858,22 @@
     var box = measured || sheet.field.getBoundingClientRect();
     if (!box.width || !box.height) return;
     var ctx = sizeCanvas(sheet.canvas, box.width, box.height);
-    if (ctx) drawSky(ctx, fieldStars, box.width, box.height, 22, 0, 1.1, threadOf(fieldStars, selected), pass, guiding);
+    if (!ctx) return;
+    var carrying = threadOf(fieldStars)[0];
+    drawSky(ctx, fieldStars, box.width, box.height, 22, 0, 1.1, threadOf(fieldStars, selected), pass, guiding, carrying);
+    var centre = skyTraits(fieldStars);
+    if (!centre) return;
+    var x = 22 + centre.cx / 100 * (box.width - 44);
+    var y = 22 + centre.cy / 100 * (box.height - 44);
+    ctx.strokeStyle = STAR_INK;
+    ctx.lineWidth = 1.1;
+    ctx.beginPath();
+    ctx.moveTo(x, y - 5);
+    ctx.lineTo(x + 5, y);
+    ctx.lineTo(x, y + 5);
+    ctx.lineTo(x - 5, y);
+    ctx.lineTo(x, y - 5);
+    ctx.stroke();
   }
   // The field redrawn: its name, its thread and the lines between its stars -- at the tread the
   // sky is at, if it is still being cast, so a star chosen or dragged mid-cast joins the cast
@@ -2002,7 +2027,10 @@
       y: clamp((clientY - box.top - 22) / Math.max(1, box.height - 44) * 100, 1, 99) };
   }
   function serialize() { return fieldStars.map(function (s) { return { x: s.x, y: s.y, text: s.text }; }); }
-  function starLabel(star) { return 'star: ' + star.text + '. Arrow keys move it.'; }
+  function starLabel(star, carrying) {
+    return 'star: ' + (star.text.trim() || 'a star without words') + '. '
+      + (carrying ? 'This thought travels in your portrait. ' : '') + 'Arrow keys move it.';
+  }
   function createStarElement(star, index) {
     var el = document.createElement('button');
     el.type = 'button';
@@ -2371,6 +2399,7 @@
       wordsForm: document.getElementById('persona-star-words'),
       words: document.getElementById('persona-star-thought'),
       neighbor: document.getElementById('persona-star-neighbor'),
+      carry: document.getElementById('persona-carry-thought'),
       answer: document.getElementById('persona-sky-answer'),
       answerRead: document.getElementById('persona-sky-read'),
       answerLabel: document.getElementById('persona-sky-read-label'),
@@ -2532,8 +2561,7 @@
         onCancel: function () { sheetStatus('Kept as it was.'); }
       });
     });
-    if (sheet.wordsForm && sheet.words) sheet.wordsForm.addEventListener('submit', function (ev) {
-      ev.preventDefault();
+    function keepStarWords(carry) {
       if (selected < 0 || !fieldStars[selected]) {
         sheetStatus('Choose a star to give it words.');
         return;
@@ -2544,15 +2572,36 @@
         sheet.words.focus();
         return;
       }
+      var before = carry ? serialize() : null;
+      var carrierIndex = carry ? threadOf(fieldStars)[0] : selected;
       var star = fieldStars[selected];
+      if (carry && carrierIndex !== selected) {
+        star.text = fieldStars[carrierIndex].text;
+        placeElement(star);
+        star = fieldStars[carrierIndex];
+      }
       star.text = words.slice(0, 160);
       sheet.words.value = star.text;
       if (star.el) star.el.setAttribute('aria-label', starLabel(star));
       placeElement(star);
       var kept = setStars(serialize(), 'worded');
+      if (carry) {
+        select(carrierIndex);
+        focusStar(carrierIndex);
+        if (sheet.host.open && !sameStars(before, serialize())) noteSet('sky', star.el || sheet.field);
+      }
       drawField();
-      sheetStatus('This star now carries: "' + star.text + '". The cards that read your sky follow these words.' + keptNote(kept));
-    });
+      sheetStatus((carry
+        ? 'Your portrait now carries: "' + star.text + '". Your stars have not moved.'
+        : 'This star now carries: "' + star.text + '". The cards that read your sky follow these words.') + keptNote(kept));
+    }
+    if (sheet.wordsForm && sheet.words) {
+      sheet.wordsForm.addEventListener('submit', function (ev) {
+        ev.preventDefault();
+        keepStarWords(false);
+      });
+      if (sheet.carry) sheet.carry.addEventListener('click', function () { keepStarWords(true); });
+    }
     if (sheet.remove) sheet.remove.addEventListener('click', function () {
       if (selected >= 0) removeStar(selected);
     });
