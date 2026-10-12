@@ -18,6 +18,10 @@
                 sandier soil drains faster. A wrong check says sandier or less sandy than the
                 bed wants, and no more. Solved, the bed takes the blend and goes on taking
                 whatever blend the visitor mixes next, each draining at its own pace.
+                Some beds offer three bags: match both sand and clay using ten equal parts,
+                with C filling whatever A and B leave. Independent bag compositions guarantee
+                one solution. Live samples show both shares; hints explain exchanges and narrow
+                the counts. The matched bed takes root while the cups remain available to compare.
      the route  A root enters a four-column bed. Each cell sends it down-left, straight down or
                 down-right into the next layer. Follow it to its exit and count its left turns.
                 A look halfway costs a hint; a wrong check says how many readings fit.
@@ -683,6 +687,7 @@ function shareOf(a, b, parts) {
 }
 
 function mixPlan(env) {
+  if (env.rnd() < 0.5) return blendPlan(env);
   const a = env.int(1, 9) * 10;
   const bags = Array.from({ length: 9 }, (_, i) => (i + 1) * 10)
     .filter((share) => Math.abs(share - a) >= 30);
@@ -730,20 +735,20 @@ function bag(g, env, x, y, r, share, name, tilt, density, size) {
   write(g, share + '% sand', x, y + r * 1.15 + size * 0.8, size, env.alpha(c.fg, 0.95));
 }
 
-function mixBlank(parts, caption) {
+function mixBlank(parts, caption, second) {
   // Each cup rests on one soil (`under`) with the soils being laid over it, or taken back off it,
   // behind the piece's edge (`over`): a layer wholly laid becomes what the cup rests on. `blend` is
   // the share of the soil the bed was last given (-1 before the solve), and `relaid` the blends
   // laid over the solved one as the visitor goes on mixing, each { share, at, n }, the n-th of
   // `blends`; `captionAt` is when the caption one of them wrote was cut on.
-  const cups = Array.from({ length: 10 }, (_, i) => ({ under: cupOf(parts, i), over: [], at: -1, n: 0 }));
-  return { parts, partsAt: -1, sets: 0, cups, blend: -1, relaid: [], blends: 0, ruled: [], ruledAt: [], caption,
+  const cups = Array.from({ length: 10 }, (_, i) => ({ under: cupOf(parts, i, second), over: [], at: -1, n: 0 }));
+  return { parts, second, partsAt: -1, sets: 0, cups, blend: -1, relaid: [], blends: 0, ruled: [], ruledAt: [], caption,
     captionAt: -1, t: 0, doneAt: -1 };
 }
 
-// What a cup holds: null before a is set, else bag A for the first `parts` cups and bag B after.
-function cupOf(parts, i) {
-  return parts == null ? null : i < parts ? 'A' : 'B';
+// What a cup holds: A then B, with C filling the remainder when a second count is supplied.
+function cupOf(parts, i, second) {
+  return parts == null ? null : i < parts ? 'A' : second == null || i < parts + second ? 'B' : 'C';
 }
 
 const POUR = 0.9; // seconds a cup takes to change its soil
@@ -758,10 +763,10 @@ function laid(o, rite, s, reduced) {
 // as it had come; one going back that is wanted again comes on again from there; and a soil the
 // cup neither rests on nor is getting is laid over whatever is showing. So a quick second set
 // never makes a cup jump to its last soil before it changes again.
-function pour(s, parts, rite, reduced) {
+function pour(s, parts, rite, reduced, second) {
   s.sets += 1;
   s.cups.forEach((cup, i) => {
-    const want = cupOf(parts, i);
+    const want = cupOf(parts, i, second);
     let over = [];
     for (const o of cup.over) {
       const c = laid(o, rite, s, reduced);
@@ -1026,6 +1031,283 @@ function mixPiece(env, plan) {
       if (s.doneAt < 0) s.doneAt = s.t;
       s.dirty = true;
       c.status('Mixed and watered. ' + LINES[3]);
+    }
+  };
+}
+
+/* ---- three bags: two shares to match ------------------------------------------------------- */
+
+function blendCounts(a, b) {
+  if (![a, b].every((n) => Number.isInteger(n) && n >= 0 && n <= 10) || a + b > 10) return null;
+  return [a, b, 10 - a - b];
+}
+
+function blendShares(plan, counts) {
+  return [0, 1].map((share) => plan.bags.reduce((sum, bag, i) => sum + bag[share] * counts[i], 0) / 10);
+}
+
+function blendPlan(env) {
+  // Sand-rich, clay-rich and silt-rich bags form a non-collinear triangle, even after shuffling.
+  const bags = [
+    [env.int(5, 7) * 10, env.int(1, 2) * 10],
+    [env.int(1, 2) * 10, env.int(5, 7) * 10],
+    [env.int(1, 2) * 10, env.int(1, 2) * 10]
+  ];
+  for (let i = 2; i > 0; i--) {
+    const j = env.int(0, i);
+    [bags[i], bags[j]] = [bags[j], bags[i]];
+  }
+  const a = env.int(1, 7);
+  return { kind: 'blend', bags, parts: [a, env.int(1, 9 - a)] };
+}
+
+function carriedBlend(env) {
+  const p = env.card && env.card.of;
+  if (!p || p.kind !== 'blend' || !Array.isArray(p.bags) || p.bags.length !== 3) return null;
+  if (!p.bags.every((bag) => Array.isArray(bag) && bag.length === 2
+    && bag.every((n) => Number.isInteger(n) && n >= 10 && n <= 80 && n % 10 === 0)
+    && bag[0] + bag[1] <= 90)) return null;
+  if (!Array.isArray(p.parts) || p.parts.length !== 2) return null;
+  const counts = blendCounts(p.parts[0], p.parts[1]);
+  if (!counts || counts.some((n) => n === 0)) return null;
+  const [a, b, c] = p.bags;
+  if ((a[0] - c[0]) * (b[1] - c[1]) === (b[0] - c[0]) * (a[1] - c[1])) return null;
+  return { kind: 'blend', bags: p.bags.map((bag) => bag.slice()), parts: p.parts.slice() };
+}
+
+function blendTitle(plan) {
+  const target = blendShares(plan, blendCounts(plan.parts[0], plan.parts[1]));
+  return 'the three-bag offering: ' + target[0] + '% sand, ' + target[1] + '% clay';
+}
+
+function blendBlank() {
+  const s = mixBlank(0, '', 0);
+  s.reads = marks(0xa5, 0.7);
+  s.reads.list.push({ key: 0, from: 1, to: 1, at: -1, n: 0 });
+  return s;
+}
+
+function drawBlend(g, w, h, env, plan, s, variant) {
+  const v = variant || PLAIN;
+  const c = env.colors;
+  const rite = riteOf(env);
+  const reduced = !!env.reduced;
+  const size = Math.max(9, Math.min(14, Math.round(w * 0.045)));
+  const small = Math.max(8, size - 2);
+  const target = blendShares(plan, blendCounts(plan.parts[0], plan.parts[1]));
+  const counts = blendCounts(s.parts, s.second);
+  const current = counts ? blendShares(plan, counts) : null;
+  const key = counts ? counts[0] * 11 + counts[1] : null;
+  const ready = counts && markedNow(s.reads, rite, s, reduced) === key;
+  const fin = roll(rite, 0xbf, 0);
+  const k = finale(s, fin, reduced);
+  sky(g, w, h, env, h * 0.79, k, fin);
+  const r = Math.min(w, h) * 0.09 * Math.max(0.9, Math.min(1.1, v.scale));
+  plan.bags.forEach((soil, i) => {
+    const x = w * (0.2 + i * 0.3);
+    bag(g, env, x, h * 0.14, r, soil[0], COLUMNS[i], (v.turn - 0.5) * (i - 1) * 0.12, v.density, small);
+    write(g, soil[1] + '% clay', x, h * 0.14 + r * 1.15 + small * 2.2, small, c.fg);
+  });
+  write(g, counts ? 'A ' + counts[0] + ' + B ' + counts[1] + ' + C ' + counts[2]
+    : 'A and B must fit in ten cups', w / 2, h * 0.34, small, c.fg);
+  const cupW = w * 0.76 / 10;
+  const cupH = h * 0.055;
+  const cy = h * 0.39;
+  const tone = (name) => name == null ? c.bg2 : soilTone(env, plan.bags[COLUMNS.indexOf(name)][0]);
+  s.cups.forEach((cup, i) => {
+    const x = w * 0.12 + i * cupW + cupW * 0.08;
+    g.fillStyle = counts ? tone(cup.under) : c.bg2;
+    g.fillRect(x, cy, cupW * 0.84, cupH);
+    if (counts) {
+      for (const o of cup.over) {
+        const got = laid(o, rite, s, reduced);
+        if (got > 0) roll(rite, 0x10, o.n).paint(g, x, cy, cupW * 0.84, cupH, got, tone(o.bag));
+      }
+      if (roll(rite, 0x10, cup.n).flicker(came(s, cup.at, POUR, reduced))) {
+        write(g, cupOf(s.parts, i, s.second), x + cupW * 0.42, cy + cupH / 2, small, c.bg, 'center', '600');
+      }
+    }
+    g.strokeStyle = env.alpha(c.fg, 0.6);
+    g.lineWidth = 1;
+    g.strokeRect(x, cy, cupW * 0.84, cupH);
+  });
+  ['sand', 'clay'].forEach((name, i) => {
+    const y = h * (0.53 + i * 0.13);
+    const bx = w * 0.12;
+    const by = y + size;
+    const bw = w * 0.76;
+    const bh = h * 0.018;
+    write(g, name + ': ' + (ready ? current[i] + '%; ' : '') + 'target ' + target[i] + '%', w / 2, y, size, c.fg);
+    g.fillStyle = c.bg2;
+    g.fillRect(bx, by, bw, bh);
+    sealMarks(g, s.reads, rite, s, reduced, (encoded) => {
+      const trial = blendShares(plan, blendCounts(Math.floor(encoded / 11), encoded % 11));
+      return { x: bx, y: by, w: bw * trial[i] / 100, h: bh };
+    }, c.accent);
+    const tx = bx + bw * target[i] / 100;
+    g.strokeStyle = c.accent2;
+    g.lineWidth = 2;
+    g.beginPath();
+    g.moveTo(tx, by - 3);
+    g.lineTo(tx, by + bh + 3);
+    g.stroke();
+  });
+  const bx = w * 0.12;
+  const by = h * 0.79;
+  const bw = w * 0.76;
+  const bh = h * 0.11;
+  g.fillStyle = c.bg2;
+  g.fillRect(bx, by, bw, bh);
+  if (k > 0) {
+    g.save();
+    g.beginPath();
+    fin.region(g, bx, by, bw, bh, k);
+    g.clip();
+    g.fillStyle = soilTone(env, target[0]);
+    g.fillRect(bx, by, bw, bh);
+    g.strokeStyle = c.bg;
+    g.lineWidth = 2;
+    g.beginPath();
+    g.moveTo(w * 0.5, by);
+    g.lineTo(w * 0.49, by + bh * 0.75);
+    g.moveTo(w * 0.495, by + bh * 0.35);
+    g.lineTo(w * 0.43, by + bh * 0.65);
+    g.moveTo(w * 0.492, by + bh * 0.5);
+    g.lineTo(w * 0.57, by + bh * 0.8);
+    g.stroke();
+    g.restore();
+    g.strokeStyle = c.accent2;
+    g.lineWidth = 2;
+    g.beginPath();
+    g.moveTo(w * 0.5, by);
+    g.lineTo(w * 0.5, by - h * 0.055 * k);
+    g.stroke();
+    g.fillStyle = c.accent2;
+    for (const side of [-1, 1]) {
+      g.beginPath();
+      g.ellipse(w * (0.5 + side * 0.023 * k), by - h * 0.04 * k,
+        w * 0.029 * k, h * 0.009 * k, side * -0.5, 0, TAU);
+      g.fill();
+    }
+  }
+  g.strokeStyle = env.alpha(c.fg, 0.6);
+  g.lineWidth = 1;
+  g.strokeRect(bx, by, bw, bh);
+  daybreak(g, fin, env, w, h, k, 0.07);
+  write(g, k > 0 ? 'planted; keep comparing' : 'match both shares to plant', w / 2, h * 0.955, small, c.fg);
+}
+
+function blendPreview(g, w, h, env, plan) {
+  drawBlend(g, w, h, env, plan, blendBlank(), env.variant);
+}
+
+function blendPiece(env, plan) {
+  const helps = asked(env).helps;
+  const target = blendShares(plan, blendCounts(plan.parts[0], plan.parts[1]));
+  const s = blendBlank();
+  let used = 0;
+  const draw = (c) => drawn(s, c, () => drawBlend(c.g, c.w, c.h, c, plan, s, env.variant));
+  const candidates = [];
+  for (let a = 0; a <= 10; a++) {
+    for (let b = 0; b <= 10 - a; b++) {
+      const counts = blendCounts(a, b);
+      candidates.push({ counts, shares: blendShares(plan, counts) });
+    }
+  }
+  const signed = (n) => (n > 0 ? '+' : '') + n;
+  const exchange = (i) => 'Replace one part of C with ' + COLUMNS[i] + ': sand changes by '
+    + signed((plan.bags[i][0] - plan.bags[2][0]) / 10) + ' percentage points, clay by '
+    + signed((plan.bags[i][1] - plan.bags[2][1]) / 10) + '. The total stays ten.';
+  const bounds = (share, part) => {
+    const counts = candidates.filter((trial) => trial.shares[share] === target[share]).map((trial) => trial.counts[part]);
+    const low = Math.min(...counts);
+    const high = Math.max(...counts);
+    return 'Matching ' + ['sand', 'clay'][share] + ' alone puts ' + COLUMNS[part] + ' at '
+      + (low === high ? low : low + ' to ' + high) + ' parts. The other share must match too.';
+  };
+  const clues = [exchange(0), exchange(1),
+    'Ten parts of C give ' + plan.bags[2][0] + '% sand and ' + plan.bags[2][1]
+      + '% clay. Your replacements must change sand by ' + signed(target[0] - plan.bags[2][0])
+      + ' percentage points and clay by ' + signed(target[1] - plan.bags[2][1]) + '.',
+    bounds(0, 0), bounds(1, 1)];
+  function report(a, b) {
+    const counts = blendCounts(a, b);
+    if (!counts) return Number.isInteger(a) && Number.isInteger(b) && a + b > 10
+      ? 'A and B use ' + (a + b) + ' parts; only ten fit. Reduce one of the counts.'
+      : 'Use whole parts from 0 to 10, with A and B adding to no more than ten.';
+    const shares = blendShares(plan, counts);
+    return counts[0] + ' A, ' + counts[1] + ' B, ' + counts[2] + ' C: '
+      + shares[0] + '% sand and ' + shares[1] + '% clay.';
+  }
+  return {
+    title: blendTitle(plan),
+    brief: 'Blend three soils to match both sand and clay in the bed. '
+      + plan.bags.map((bag, i) => 'Bag ' + COLUMNS[i] + ' is ' + bag[0] + '% sand and ' + bag[1] + '% clay').join('; ')
+      + '; the rest of each bag is silt. Use ten equal parts: choose the parts from A and B, and C fills the rest. For either share, multiply each bag\'s percentage by its parts, add all three, then divide by ten. The samples show your blend; the short marks show the targets. Tap a bag to inspect it. A mixing clue uses one hint.',
+    goal: 'Use ten parts to make exactly ' + target[0] + '% sand and ' + target[1] + '% clay.',
+    aspect: '4 / 5',
+    checkLabel: 'check the blend',
+    steps: [
+      { id: 'parts', ask: 'parts from bag A', kind: 'number', min: 0, max: 10, step: 1, value: 0, unit: 'of 10' },
+      { id: 'second', ask: 'parts from bag B; C fills the rest', kind: 'number', min: 0, max: 10, step: 1, value: 0, unit: 'of 10' },
+      { id: 'hint', ask: 'a measured mixing clue', kind: 'press', count: 1, label: 'show a mixing clue', optional: true }
+    ],
+    solution: { parts: plan.parts[0], second: plan.parts[1] },
+    check(c) {
+      const a = Number(c.value('parts'));
+      const b = Number(c.value('second'));
+      const counts = blendCounts(a, b);
+      if (!counts) return { solved: false, say: report(a, b) };
+      const shares = blendShares(plan, counts);
+      const solved = shares.every((share, i) => share === target[i]);
+      return { solved, say: solved ? 'Both shares match: ' + shares[0] + '% sand and ' + shares[1] + '% clay.'
+        : shares.map((share, i) => ['Sand', 'clay'][i] + ': ' + share + '% ('
+          + (share === target[i] ? 'matches' : share < target[i] ? 'too little' : 'too much') + ')').join('; ') + '.' };
+    },
+    start(c) {
+      c.status('Start with ten parts of C. Replace some with A and B to match both targets.');
+      draw(c);
+    },
+    apply(id, value, c) {
+      if (id === 'hint') {
+        if (used < helps) {
+          c.hint();
+          c.status(clues[used++]);
+        } else c.status('No mixing clues left at this difficulty. Compare both shares as you change the cups.');
+      }
+      if (id === 'parts' || id === 'second') {
+        const next = Number(value);
+        if (s[id] !== next) {
+          s[id] = next;
+          const counts = blendCounts(s.parts, s.second);
+          if (counts) pour(s, s.parts, riteOf(c), !!c.reduced, s.second);
+          choose(s.reads, counts ? counts[0] * 11 + counts[1] : null, riteOf(c), s, !!c.reduced);
+        }
+        c.status(report(s.parts, s.second));
+      }
+      draw(c);
+    },
+    tap(x, y, c) {
+      if (y < 0.3) {
+        const i = Math.max(0, Math.min(2, Math.floor(x * 3)));
+        const bag = plan.bags[i];
+        c.status('Bag ' + COLUMNS[i] + ': ' + bag[0] + '% sand, ' + bag[1] + '% clay and '
+          + (100 - bag[0] - bag[1]) + '% silt.');
+      } else c.status(report(s.parts, s.second)
+        + (c.done ? ' The planted bed keeps the matched blend; the cups are still yours to compare.' : ' Both shares must match the bed.'));
+    },
+    frame(t, dt, c) {
+      s.t += Math.max(0, dt);
+      if (c.done && s.doneAt < 0) {
+        s.doneAt = s.t;
+        s.dirty = true;
+      }
+      return framed(s, c, draw);
+    },
+    end(c) {
+      if (s.doneAt < 0) s.doneAt = s.t;
+      s.dirty = true;
+      c.status('Both shares match. The bed takes root; keep changing the cups to compare other mixtures.');
     }
   };
 }
@@ -1455,6 +1737,7 @@ export default {
       corePreview(g, w, h, env, plan);
       shown.set(env, { g, w, h, wave: 0 });
     } else if (plan.kind === 'mix') mixPreview(g, w, h, env, plan);
+    else if (plan.kind === 'blend') blendPreview(g, w, h, env, plan);
     else routePreview(g, w, h, env, plan);
   },
   // A core card in motion: its water line's wave goes round once (rippled) and rests as it was
@@ -1480,6 +1763,18 @@ export default {
         text: 'A reading of the ground, drawn to scale. Say how deep the water stands, and how many layers a root passes through before the stones.',
         aspect: '4 / 5',
         paint: (g, w, h, cardEnv) => corePreview(g, w, h, cardEnv, plan),
+        of: plan
+      };
+    }
+    if (plan.kind === 'blend') {
+      const target = blendShares(plan, blendCounts(plan.parts[0], plan.parts[1]));
+      return {
+        title: blendTitle(plan),
+        mono: plan.bags.map((bag, i) => 'bag ' + COLUMNS[i] + '  ' + bag[0] + '% sand; ' + bag[1] + '% clay').join('\n')
+          + '\nthe bed  ' + target[0] + '% sand; ' + target[1] + '% clay',
+        text: 'Three bags, ten equal parts. Match both sand and clay; C fills whatever A and B leave.',
+        aspect: '4 / 5',
+        paint: (g, w, h, cardEnv) => blendPreview(g, w, h, cardEnv, plan),
         of: plan
       };
     }
@@ -1512,8 +1807,11 @@ export default {
     if (mix) return mixPiece(env, mix);
     const route = carriedRoute(env);
     if (route) return routePiece(env, route);
+    const blend = carriedBlend(env);
+    if (blend) return blendPiece(env, blend);
     const plan = deal(env);
     return plan.kind === 'core' ? corePiece(env, plan)
-      : plan.kind === 'mix' ? mixPiece(env, plan) : routePiece(env, plan);
+      : plan.kind === 'mix' ? mixPiece(env, plan)
+        : plan.kind === 'blend' ? blendPiece(env, plan) : routePiece(env, plan);
   }
 };
