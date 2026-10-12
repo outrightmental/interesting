@@ -5,7 +5,7 @@
 
    Two puzzles, both deduction, both solvable from what is drawn and nothing heard:
 
-     the echo order    A marked point and four or five stars at clearly different distances from it
+     the echo order    A marked point and four, five or (on a harder seed) six stars at clearly different distances from it
                        (each at least a fifth farther than the last). A pulse leaves the mark and
                        its echo comes back from each star after a time proportional to the star's
                        distance. Put the stars in the order their echoes return. Faint rings round
@@ -27,9 +27,9 @@
    puts the whole plan on its spec as `of` -- the mark and the stars, or the chord's voices and its
    four candidates -- and piece(env) opens on that rather than rolling another. */
 
-const LETTERS = ['A', 'B', 'C', 'D', 'E'];
+const LETTERS = ['A', 'B', 'C', 'D', 'E', 'F'];
 const WORDS = ['no', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine', 'ten', 'eleven', 'twelve', 'thirteen', 'fourteen', 'fifteen', 'sixteen', 'seventeen', 'eighteen'];
-const ORDINAL = ['first', 'second', 'third', 'fourth', 'fifth'];
+const ORDINAL = ['first', 'second', 'third', 'fourth', 'fifth', 'sixth'];
 const PERIODS = [2, 3, 4, 5];
 const PERIOD_POOL = [2, 3, 4, 5, 6, 8];
 const EVERY = { 2: 'every 2nd beat', 3: 'every 3rd beat', 4: 'every 4th beat', 5: 'every 5th beat', 6: 'every 6th beat', 8: 'every 8th beat' };
@@ -362,7 +362,9 @@ function isIdentity(list) {
 }
 
 function echoPlan(env) {
-  const n = env.chance(0.5) ? 5 : 4;
+  // Four or five stars, and for the seeds that roll the harder size, six.
+  const size = env.rnd();
+  const n = size < 0.4 ? 4 : size < 0.78 ? 5 : 6;
   const source = { x: round3(0.3 + env.rnd() * 0.4), y: round3(0.32 + env.rnd() * 0.36) };
   const candidates = [];
   for (const s of (env.stars || [])) {
@@ -404,7 +406,7 @@ function carriedEcho(env) {
   if (!p || p.kind !== 'echo' || !p.source || !Array.isArray(p.stars)) return null;
   const inFrame = (q) => q && typeof q === 'object' && isFinite(Number(q.x)) && isFinite(Number(q.y))
     && Number(q.x) >= 0 && Number(q.x) <= 1 && Number(q.y) >= 0 && Number(q.y) <= 1;
-  if (!inFrame(p.source) || p.stars.length < 4 || p.stars.length > 5 || !p.stars.every(inFrame)) return null;
+  if (!inFrame(p.source) || p.stars.length < 4 || p.stars.length > 6 || !p.stars.every(inFrame)) return null;
   const source = { x: Number(p.source.x), y: Number(p.source.y) };
   const stars = p.stars.map((s) => ({ x: Number(s.x), y: Number(s.y), sky: s.sky ? 1 : 0 }));
   for (let i = 0; i < stars.length; i++) {

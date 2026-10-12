@@ -5,7 +5,8 @@
 
    Two puzzles, one deduction and one experiment:
 
-     when they meet again  Three or four pendulums on one bar, each with its period written under
+     when they meet again  Three or four pendulums on one bar (five, every period from two to six, on
+                           the seeds that roll the harder size), each with its period written under
                            it and drawn as its length, starting together or on separate beats.
                            One whose period is P beats comes back through the
                            centre heading right every P beats. Name the first beat when all of
@@ -27,7 +28,7 @@
 
 const PLAIN = { density: 1, scale: 1, turn: 0 };
 const WORDS = ['no', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine', 'ten'];
-const ORDINAL = ['first', 'second', 'third', 'fourth'];
+const ORDINAL = ['first', 'second', 'third', 'fourth', 'fifth'];
 const TAU = Math.PI * 2;
 // The spring pair's model: each pendulum alone swings once in OWN seconds. With the spring at
 // stiffness k the two normal modes have w1 (together, the spring never stretched) and
@@ -285,7 +286,8 @@ function bob(g, c, pivot, barY, length, theta, radius, tone) {
 /* ---- when they meet again ------------------------------------------------------------------ */
 
 function rackPlan(env) {
-  const n = env.chance(0.5) ? 4 : 3;
+  // Three, four, or for the seeds that roll it the full rack of five: every period from two to six.
+  const n = env.chance(0.45) ? 3 : env.chance(0.6) ? 4 : 5;
   const pool = [2, 3, 4, 5, 6];
   const periods = [];
   while (periods.length < n) periods.push(pool.splice(env.int(0, pool.length - 1), 1)[0]);
@@ -304,7 +306,7 @@ function rackPlan(env) {
 
 function carriedRack(env) {
   const p = env.card && env.card.of;
-  if (!p || p.kind !== 'rack' || !Array.isArray(p.periods) || p.periods.length < 3 || p.periods.length > 4) return null;
+  if (!p || p.kind !== 'rack' || !Array.isArray(p.periods) || p.periods.length < 3 || p.periods.length > 5) return null;
   const periods = p.periods.map(Number);
   if (!periods.every((q) => Number.isInteger(q) && q >= 2 && q <= 6) || new Set(periods).size !== periods.length) return null;
   const number = Number(p.number);
