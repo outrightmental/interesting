@@ -624,7 +624,10 @@ function postcardPiece(env, plan) {
           best = i;
         }
       });
-      if (best < 0 || bd > Math.min(c.w, c.h) * 0.08) return;
+      if (best < 0 || bd > Math.min(c.w, c.h) * 0.08) {
+        c.status('tap a light, in either view, to place it next in your order');
+        return;
+      }
       const rite = riteOf(c);
       if (s.lit !== best) {
         // The halo moves to the light touched: the last one gives its halo back and this one's
@@ -1094,12 +1097,15 @@ function deal(env) {
 export default {
   id: 'wish-constellation',
   needsSky: true,
-  // The card is a still picture: its lights wait for nothing, so it has no animate and the feed
-  // never animates it (it paints it again only for a new size or a new roll).
+  // The card is a still picture: its lights wait for nothing, so animate says it is still and the
+  // feed paints it again only for a new size or a new roll.
   paint(g, w, h, env) {
     const d = deal(env);
     if (d.postcard) postcardPreview(g, w, h, env, d.plan);
     else whichPreview(g, w, h, env, d.plan);
+  },
+  animate() {
+    return false;
   },
   spark(env) {
     const d = deal(env);

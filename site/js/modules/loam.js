@@ -567,8 +567,7 @@ function rippled(rite, t) {
 function corePiece(env, plan) {
   // The water table is read off a drawn scale, so it is a measured answer: the difficulty says
   // how many centimetres out a reading may be. The layer count is a count, so it is exact.
-  const margin = asked(env).margin;
-  const helps = asked(env).helps;
+  const { margin, helps } = asked(env);
   const n = plan.layers.length;
   // The boundaries the hint will measure, top first: every one but the water's, which is the answer.
   const bounds = [];
@@ -1564,8 +1563,8 @@ function routePiece(env, plan) {
         return;
       }
       // The cell tapped before is unsealed while this one seals, on a roll of this tap's own. The
-      // cell already sealed, tapped again, is read again and stays as it is: the stage answers
-      // the press with its own mark.
+      // cell already sealed, tapped again, is read again and stays as it is, and the line
+      // under the scene says what it reads.
       const idx = row * 4 + col;
       choose(s.taps, idx, riteOf(c), s, !!c.reduced);
       c.status('row ' + (row + 1) + ', column ' + COLUMNS[col] + ': '

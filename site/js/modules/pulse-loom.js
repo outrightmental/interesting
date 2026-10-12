@@ -955,7 +955,6 @@ function wheelPiece(env, plan) {
   // The run after the solve: one lap of whole returns, at most 24 pictures, so the camera rests on
   // a picture where a tooth is home again -- the omen read.
   const lap = back * Math.max(1, Math.min(3, Math.floor(24 / back)));
-  const rite = riteOf(env);
   const draw = (c) => drawn(s, c, () => {
     s.spinShown = s.spin;
     drawWheel(c.g, c.w, c.h, c, plan, s, env.variant);
@@ -1025,6 +1024,7 @@ function wheelPiece(env, plan) {
       draw(c);
     },
     frame(t, dt, c) {
+      const rite = riteOf(c);
       const step = Math.max(0, dt);
       s.t += step;
       const last = c.done ? lap : roll;
@@ -1075,25 +1075,36 @@ function wheelPiece(env, plan) {
 
 /* ---- the module ----------------------------------------------------------------------------- */
 
-// Which of the three puzzles a fresh env is dealt: rolled once, from the one seeded stream.
-function dealShape(env) {
-  const roll = env.rnd();
-  return roll < 0.38 ? 'wheel' : roll < 0.72 ? 'cross' : 'stitch';
+// Which of the three puzzles this card is, and its plan, dealt once from the env's seeded stream
+// and kept with that env: the still picture, the spark and the piece it opens as all ask here, so
+// they are one puzzle, and a card painted again for a new size is the same card.
+const dealt = new WeakMap();
+function deal(env) {
+  let plan = dealt.get(env);
+  if (!plan) {
+    const roll = env.rnd();
+    plan = roll < 0.38 ? wheelPlan(env) : roll < 0.72 ? crossPlan(env) : stitchPlan(env);
+    dealt.set(env, plan);
+  }
+  return plan;
 }
 
 export default {
   id: 'pulse-loom',
   needsSky: false,
   paint(g, w, h, env) {
-    const shape = dealShape(env);
-    if (shape === 'wheel') wheelPreview(g, w, h, env, wheelPlan(env));
-    else if (shape === 'stitch') stitchPreview(g, w, h, env, stitchPlan(env));
-    else crossPreview(g, w, h, env, crossPlan(env));
+    const plan = deal(env);
+    if (plan.kind === 'wheel') wheelPreview(g, w, h, env, plan);
+    else if (plan.kind === 'stitch') stitchPreview(g, w, h, env, plan);
+    else crossPreview(g, w, h, env, plan);
+  },
+  // A card of the loom is a still picture: nothing on it moves, and it says so.
+  animate() {
+    return false;
   },
   spark(env) {
-    const shape = dealShape(env);
-    if (shape === 'stitch') {
-      const plan = stitchPlan(env);
+    const plan = deal(env);
+    if (plan.kind === 'stitch') {
       return {
         title: stitchTitle(plan),
         text: 'A loop knotted in strict time, and one beat left bare. Name the silent beat, and count what still holds.',
@@ -1103,8 +1114,7 @@ export default {
         of: plan
       };
     }
-    if (shape === 'wheel') {
-      const plan = wheelPlan(env);
+    if (plan.kind === 'wheel') {
       return {
         title: wheelTitle(plan),
         text: 'An old omen: the wheel only ever turns clockwise. Which way will its pictures seem to go, and when does a tooth look home again?',
@@ -1114,7 +1124,6 @@ export default {
         of: plan
       };
     }
-    const plan = crossPlan(env);
     return {
       title: crossTitle(plan),
       text: 'Two drums strung round one loop. Count the beats they strike together, and name the first.',
@@ -1131,9 +1140,9 @@ export default {
     if (crossing) return crossPiece(env, crossing);
     const mending = carriedStitch(env);
     if (mending) return stitchPiece(env, mending);
-    const shape = dealShape(env);
-    if (shape === 'wheel') return wheelPiece(env, wheelPlan(env));
-    if (shape === 'stitch') return stitchPiece(env, stitchPlan(env));
-    return crossPiece(env, crossPlan(env));
+    const plan = deal(env);
+    if (plan.kind === 'wheel') return wheelPiece(env, plan);
+    if (plan.kind === 'stitch') return stitchPiece(env, plan);
+    return crossPiece(env, plan);
   }
 };
