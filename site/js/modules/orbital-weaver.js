@@ -21,7 +21,9 @@
    The sky colours the loom -- the stars are drawn behind it -- but never decides a puzzle: the
    plan is made from the seed, serialised whole on the card's `of`, and piece(env) opens on that
    rather than rolling another, whatever the sky is by then. One star or a hundred, the weave is
-   the same weave. */
+   the same weave, and with no star at all it is the same weave too: the loom asks for no sky
+   (needsSky: false), so nothing of it is powered down, and whatever stars there are are drawn
+   behind it. */
 
 const PLAIN = { density: 1, scale: 1, turn: 0 };
 const WORDS = ['no', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine', 'ten', 'eleven', 'twelve'];
@@ -31,12 +33,13 @@ const MAX_FOLDS = 12;
 /* How hard the visitor asked for their puzzles. The persona keeps one difficulty for the whole
    site (js/persona.js) and js/stage.js hands it to a piece on env.difficulty, 1 (gentle) to 5
    (fierce); a card's env carries none, so the middle of the dial stands in. A level buys `helps`
-   -- how many things a piece will show when it is asked -- and `margin`, how far out a measured
-   answer may be and still count. Read inside piece() only: the subject is the seed's. */
+   -- how many things a piece will show when it is asked. Both puzzles here are counts, which have
+   no margin to give, so a level moves them on the help alone. Read inside piece() only: the
+   subject is the seed's. */
 function asked(env) {
   const said = env && env.difficulty ? Number(env.difficulty.level) : NaN;
   const level = Number.isFinite(said) ? Math.max(1, Math.min(5, Math.round(said))) : 3;
-  return { level, helps: 6 - level, margin: Math.max(0, 3 - level) };
+  return { level, helps: 6 - level };
 }
 
 function clamp(v, lo, hi) {
@@ -174,6 +177,33 @@ function settledAt(changes) {
   return last;
 }
 
+// A piece's scene as it stands, drawn unless (`always` aside) the canvas already holds that
+// picture: `look(c)` reads what the scene shows now, and `paint(c, now)` draws it.
+function painter(s, look, paint) {
+  return (c, always) => {
+    const now = look(c);
+    const drawn = picture(c, now);
+    if (!always && drawn === s.drawn) return;
+    paint(c, now);
+    s.drawn = drawn;
+  };
+}
+
+// One turn of a piece's help: the next of what it has to show while the difficulty's turns last
+// (`helps`), or why there is no more -- `spent` when the difficulty allows no more, `bare` when
+// everything has been shown. Hands back how many have been shown, so the caller marks the one just
+// shown on the scene; 0 when nothing was.
+function help(c, s, shows, helps, spent, bare) {
+  if (s.shown < Math.min(shows.length, helps)) {
+    c.status(shows[s.shown]);
+    s.shown += 1;
+    c.hint();
+    return s.shown;
+  }
+  c.status(s.shown >= helps ? spent : bare);
+  return 0;
+}
+
 /* ---- shared drawing ------------------------------------------------------------------------- */
 
 function night(g, w, h, env) {
@@ -206,21 +236,11 @@ function sky(g, w, h, env, v) {
   }
 }
 
-// A word on the scene, in a face set only when it is not the one the canvas already holds: setting
-// a canvas's font, even to the face it has, makes the browser bring the page's style up to date
-// first, so a picture whose words share a size sets it once. A canvas spells a face back in its own
-// way (700 as 'bold', a size cut to a few places), so the canvas is asked whether it holds the face
-// as it spelled it when it was first set here: a canvas resized back to its defaults, or restored
-// to a face it saved, is never mistaken. Only a few dozen spellings are kept, so a feed of many
-// cards does not gather them.
-const spelled = new Map();
+// A word on the scene. The face is set only when the canvas does not already hold it: setting a
+// canvas's font makes the browser bring the page's style up to date first.
 function label(g, env, text, x, y, size, align, tone) {
   const face = '500 ' + size + 'px system-ui, sans-serif';
-  if (g.font !== (spelled.get(face) || face)) {
-    g.font = face;
-    if (spelled.size >= 48) spelled.clear();
-    spelled.set(face, g.font);
-  }
+  if (g.font !== face) g.font = face;
   g.textAlign = align || 'left';
   g.textBaseline = 'middle';
   g.fillStyle = tone || env.colors.fg;
@@ -496,14 +516,7 @@ function foldsPiece(env, plan) {
   ];
   const s = Object.assign(foldsStill(), { shown: 0, ticksSet: 0 });
   const look = (c) => foldsLook(plan, s, riteOf(c), !!c.reduced);
-  // The loom as it stands, drawn unless (`always` aside) the canvas already holds that picture.
-  const draw = (c, always) => {
-    const now = look(c);
-    const drawn = picture(c, now);
-    if (!always && drawn === s.drawn) return;
-    drawFolds(c.g, c.w, c.h, c, plan, s, now, env.variant);
-    s.drawn = drawn;
-  };
+  const draw = painter(s, look, (c, now) => drawFolds(c.g, c.w, c.h, c, plan, s, now, env.variant));
   return {
     title: foldsTitle(plan),
     brief: 'A working of the loom. A sigil of ' + WORDS[plan.motif.length] + ' joined points is laid on the midnight loom and turned about the centre a number of times: the folds. On some looms every copy is laid down with its mirror image as well, so the weave shows both hands. The sigil, as laid once, stands in the corner.',
@@ -554,20 +567,13 @@ function foldsPiece(env, plan) {
         c.status(value ? 'mirrored, you say' : 'one hand, you say');
       }
       if (id === 'hint') {
-        if (s.shown < Math.min(shows.length, helps)) {
-          c.status(shows[s.shown]);
-          s.shown += 1;
-          if (s.shown === 1) {
-            s.litAt = s.t;
-            s.lit = true;
-          }
-          if (s.shown === 2 && s.handAt == null) s.handAt = s.t;
-          c.hint();
-        } else if (s.shown >= helps) {
-          c.status('that is all the loom will show at this difficulty; the rest is counting');
-        } else {
-          c.status('the loom has shown what it has; the rest is counting');
+        const given = help(c, s, shows, helps, 'that is all the loom will show at this difficulty; the rest is counting',
+          'the loom has shown what it has; the rest is counting');
+        if (given === 1) {
+          s.litAt = s.t;
+          s.lit = true;
         }
+        if (given === 2) s.handAt = s.t;
       }
       draw(c, true);
     },
@@ -808,14 +814,7 @@ function moirePiece(env, plan) {
   ];
   const s = Object.assign(moireStill(), { shown: 0 });
   const look = (c) => moireLook(plan, s, riteOf(c), !!c.reduced);
-  // The print as it stands, drawn unless (`always` aside) the canvas already holds that picture.
-  const draw = (c, always) => {
-    const now = look(c);
-    const drawn = picture(c, now);
-    if (!always && drawn === s.drawn) return;
-    drawMoire(c.g, c.w, c.h, c, plan, s, now, env.variant);
-    s.drawn = drawn;
-  };
+  const draw = painter(s, look, (c, now) => drawMoire(c.g, c.w, c.h, c, plan, s, now, env.variant));
   return {
     title: moireTitle(plan),
     brief: 'The seal is two screens of upright lines laid over each other: the first has ' + plan.first + ' lines across the width, the second a different count. Where their lines fall together and then apart, broad bands appear across the print, and there are as many bands as the two counts differ by.',
@@ -870,17 +869,10 @@ function moirePiece(env, plan) {
         c.status(value === 'more' ? 'more lines than the first, you say' : 'fewer lines than the first, you say');
       }
       if (id === 'hint') {
-        if (s.shown < Math.min(shows.length, helps)) {
-          c.status(shows[s.shown]);
-          s.shown += 1;
-          if (s.shown === 1 && s.finerAt == null) s.finerAt = s.t;
-          if (s.shown === 2 && s.bandsAt == null) s.bandsAt = s.t;
-          c.hint();
-        } else {
-          c.status(s.shown >= helps
-            ? 'that is all the press will show at this difficulty; count the bands yourself'
-            : 'the press has shown what it has; count the bands and read the difference');
-        }
+        const given = help(c, s, shows, helps, 'that is all the press will show at this difficulty; count the bands yourself',
+          'the press has shown what it has; count the bands and read the difference');
+        if (given === 1) s.finerAt = s.t;
+        if (given === 2) s.bandsAt = s.t;
       }
       draw(c, true);
     },
@@ -924,7 +916,7 @@ function deal(env) {
 
 export default {
   id: 'orbital-weaver',
-  needsSky: true,
+  needsSky: false,
   paint(g, w, h, env) {
     const d = deal(env);
     if (d.moire) moirePreview(g, w, h, env, d.plan);
