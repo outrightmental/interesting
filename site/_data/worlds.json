@@ -9,7 +9,7 @@
   ],
   "worlds": [
     { "file": "quiet-room.html", "name": "the quiet room", "gloss": "put out lamps or arrange keepsakes", "orientation": "banked low", "mood": "tender", "aspect": "1 / 1",
-      "what": "Keep a vigil in a dim room: put out lamps, swap keepsakes into the order their clues describe, or compare changed and turned lamp views. Shelf hints explain why a keepsake belongs." },
+      "what": "Keep a vigil in a dim room: put out lamps, swap four to six keepsakes into the order their clues describe, or compare changed and turned lamp views. Shelf hints explain why a keepsake belongs." },
     { "file": "wish-constellation.html", "name": "the wish constellation", "gloss": "order your stars by a shifting postcard", "orientation": "looking up", "mood": "cosmic", "aspect": "4 / 5",
       "what": "Read your own sky: compare a postcard's shifting lights (up to seven) to order their depths, or turn your pattern until it matches one of four skies." },
     { "file": "gravity-well.html", "name": "the gravity well", "gloss": "cast a probe through a ring", "orientation": "looking up", "mood": "cosmic", "aspect": "16 / 10",
@@ -45,7 +45,7 @@
     { "file": "apocrypha-desk.html", "name": "the apocrypha desk", "gloss": "file impossible specimens by clues", "orientation": "magpie", "mood": "curious", "aspect": "4 / 5",
       "what": "File impossible specimens by their clues — some cabinets stand five drawers tall — spot the one that breaks the drawer's rule, or find the forged catalogue number. Tap the picture to inspect a detail." },
     { "file": "shadow-theatre.html", "name": "the shadow theatre", "gloss": "match enlarged shadows to cutouts", "orientation": "magpie", "mood": "curious", "aspect": "4 / 3",
-      "what": "Find the lamp from a shadow's size, or match four or six enlarged, leaning shadows to their cutouts; some casts also hide turned-over cutouts." },
+      "what": "Find the lamp from a shadow's size, or match four, six or eight enlarged, leaning shadows to their cutouts; some casts also hide turned-over cutouts." },
     { "file": "sky-archive.html", "name": "the archive oracle", "gloss": "turn a letter wheel until stars spell a word", "orientation": "asking elsewhere", "mood": "divinatory", "aspect": "1 / 1",
       "what": "Ask the archive: try turns of a letter wheel until its stars read a word, find two true omens, or trace a star's route and add its light." }
   ],

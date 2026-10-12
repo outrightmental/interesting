@@ -15,9 +15,9 @@
                          shadow would be from where the lamp was put, and whether the movement is
                          right, and no more; comparing the heights, as many times as the difficulty
                          allows, walks the similar triangles one step further each time.
-     match the shadows   Four or six cutouts on the bench and as many shadows on the screen, each
+     match the shadows   Four, six or eight cutouts on the bench and as many shadows on the screen, each
                          scaled by a stated factor and leaned sideways by the lamp, numbered in a
-                         shuffled order. A cast of six stands in two rows; the brief describes
+                         shuffled order. A cast of six or eight stands in two rows; the brief describes
                          every shadow's outline in words as well as the picture showing it. Say
                          which cutout made which shadow. A tap on a shadow inspects it: its outline,
                          its factor and its lean, in words. A wrong check says how many are matched;
@@ -772,8 +772,9 @@ function lampPiece(env, p) {
 /* ---- match the shadows ---------------------------------------------------------------------- */
 
 function matchPlan(env) {
-  const count = env.chance(0.5) ? 6 : 4;
-  const turned = env.chance(0.5);
+  const size = env.int(0, 5);
+  const count = size < 3 ? 4 : size < 5 ? 6 : 8;
+  const turned = count < 8 && env.chance(0.5);
   const items = some(env, turned ? ASYMMETRIC : CUTOUTS.map((cut, i) => i), count);
   const shadows = shuffled(env, items.map((cut, i) => i)).map((cut) => ({
     cut,
@@ -792,7 +793,7 @@ function matchPlan(env) {
 function carriedMatch(env) {
   const p = env.card && env.card.of;
   if (!p || p.kind !== 'match') return null;
-  if (!Array.isArray(p.items) || ![4, 6].includes(p.items.length)) return null;
+  if (!Array.isArray(p.items) || ![4, 6, 8].includes(p.items.length)) return null;
   const count = p.items.length;
   if (!p.items.every((i) => Number.isInteger(i) && i >= 0 && i < CUTOUTS.length) || new Set(p.items).size !== count) return null;
   if (!Array.isArray(p.shadows) || p.shadows.length !== count) return null;
@@ -827,7 +828,7 @@ function shadowOutline(p, n) {
 // screen showed it when it was handed over (handOver, below).
 function matchState(order) {
   // Sized to the cast; a card has no matching to time, and is given room for the largest.
-  const each = (v) => new Array(order ? order.length : 6).fill(v);
+  const each = (v) => new Array(order ? order.length : 8).fill(v);
   return {
     order: order ? order.slice() : null, from: order ? order.slice() : null, movedAt: each(-1),
     reversed: [],
@@ -877,7 +878,7 @@ function bench(g, w, h, c, p, s, variant) {
   const fs = Math.max(9, Math.min(14, m * 0.03));
   // Four cutouts stand in one row of four; six in two rows of three, the screen below them divided
   // the same way, so each shadow sits in the slot of the screen under the slot of the bench.
-  const columns = p.items.length > 4 ? 3 : 4;
+  const columns = p.items.length === 6 ? 3 : 4;
   const rows = Math.ceil(p.items.length / columns);
   const slot = w / columns; // each cutout's and each shadow's share of a row's width
   const benchY = h * (rows === 2 ? 0.26 : 0.32);
@@ -1009,7 +1010,7 @@ function matchPiece(env, p) {
       + (p.flips ? 'Exactly ' + p.flips.length + ' cutouts were also turned over: their shadows reverse left and right. Compare teeth, tails, handles and other side features with the fronts on the bench. Mark those shadows as reversed. ' : 'Each keeps its outline. ')
       + 'Read each row left to right, then down. Shadow outlines: ' + p.shadows.map((sh, i) => (i + 1) + ': ' + shadowOutline(p, i)).join('; ') + '.',
     goal: 'Match shadows 1 to ' + count + ' to their cutouts, using each cutout once' + (p.flips ? ', and mark the ' + p.flips.length + ' reversed shadows.' : '.'),
-    aspect: count === 6 ? '4 / 5' : '4 / 3',
+    aspect: count > 4 ? '4 / 5' : '4 / 3',
     checkLabel: 'check the screen',
     steps: [
       { id: 'order', ask: 'the cutouts, in the order of the shadows they made', kind: 'order', items: p.items.map((cut, at) => ({ label: 'the ' + CUTOUTS[cut].name, value: at })), value: p.start.slice() },
@@ -1073,7 +1074,7 @@ function matchPiece(env, p) {
       draw(c);
     },
     tap(x, y, c) {
-      const columns = count > 4 ? 3 : 4;
+      const columns = count === 6 ? 3 : 4;
       const rows = Math.ceil(count / columns);
       const screenY = rows === 2 ? 0.51 : 0.44;
       const screenH = rows === 2 ? 0.42 : 0.5;
@@ -1172,8 +1173,8 @@ export default {
       title: matchTitle(p),
       text: p.items.length + ' cutouts, ' + p.items.length + ' shadows, each grown and leaned by the lamp. '
         + (p.flips ? p.flips.length + ' cutouts were turned over. Match the cast and find the reversed shadows.' : 'Match their outlines rather than their sizes.')
-        + (p.items.length === 6 ? ' This cast fills two rows.' : ''),
-      aspect: p.items.length === 6 ? '4 / 5' : '4 / 3',
+        + (p.items.length > 4 ? ' This cast fills two rows.' : ''),
+      aspect: p.items.length > 4 ? '4 / 5' : '4 / 3',
       paint: (g, w, h, cardEnv) => preview(g, w, h, cardEnv, cardEnv.reduced ? 1 : 0, p),
       of: p
     };

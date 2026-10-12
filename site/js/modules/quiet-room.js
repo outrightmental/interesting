@@ -10,7 +10,7 @@
                      room, so every puzzle has a solution, and at three by three and four by four
                      the solution is unique. The scene is the control: tap a lamp to press it, and
                      the rail's grid keeps the record.
-     the shelf       An ordering puzzle. Four or five keepsakes go on a shelf left to right, and a
+     the shelf       An ordering puzzle. Four to six keepsakes go on a shelf left to right, and a
                      few clues say how they stand -- left of, next to, at an end, two apart. The
                      clues are drawn from the true order and pruned until exactly one order fits
                      them all. A wrong check says how many stand in the right place and no more.
@@ -56,7 +56,7 @@ const SHORT = {
   'a wooden bead': 'bead'
 };
 
-const ORDINAL = ['first', 'second', 'third', 'fourth', 'fifth'];
+const ORDINAL = ['first', 'second', 'third', 'fourth', 'fifth', 'sixth'];
 const WORDS = ['no', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine', 'ten', 'eleven', 'twelve', 'thirteen', 'fourteen', 'fifteen', 'sixteen'];
 const PLAIN = { density: 1, scale: 1, turn: 0 };
 
@@ -688,7 +688,7 @@ function clueWeight(clue) {
 }
 
 function shelfPlan(env) {
-  const n = env.chance(0.4) ? 5 : 4;
+  const n = env.chance(0.4) ? (env.chance(0.35) ? 6 : 5) : 4;
   const pool = KEEPSAKES.slice();
   const items = [];
   while (items.length < n) items.push(pool.splice(env.int(0, pool.length - 1), 1)[0]);
@@ -697,7 +697,7 @@ function shelfPlan(env) {
   const candidates = trueClues(order);
   let clues = [];
   // Draw clues, weighted, until exactly one order fits.
-  for (let guard = 0; guard < 40 && fits(clues, perms).length !== 1 && candidates.length; guard++) {
+  for (let guard = 0; guard < 80 && fits(clues, perms).length !== 1 && candidates.length; guard++) {
     const total = candidates.reduce((sum, clue) => sum + clueWeight(clue), 0);
     let roll = env.rnd() * total;
     let at = 0;
@@ -713,6 +713,10 @@ function shelfPlan(env) {
     const after = fits(clues.concat([clue]), perms).length;
     if (after < before) clues.push(clue);
   }
+  // A long shelf the draw left open is closed by naming places outright, so one order always fits.
+  for (let a = 0; a < n && fits(clues, perms).length !== 1; a++) {
+    if (!clues.some((c) => c.t === 'slot' && c.a === a)) clues.push({ t: 'slot', a, k: order.indexOf(a) });
+  }
   // Prune: a clue that can go without letting a second order in goes.
   for (let i = clues.length - 1; i >= 0; i--) {
     const without = clues.slice(0, i).concat(clues.slice(i + 1));
@@ -724,13 +728,13 @@ function shelfPlan(env) {
 function carriedShelf(env) {
   const p = env.card && env.card.of;
   if (!p || p.kind !== 'shelf') return null;
-  if (!Array.isArray(p.items) || p.items.length < 4 || p.items.length > 5) return null;
+  if (!Array.isArray(p.items) || p.items.length < 4 || p.items.length > 6) return null;
   const n = p.items.length;
   if (!p.items.every((name) => KEEPSAKES.includes(name)) || new Set(p.items).size !== n) return null;
   const isPerm = (list) => Array.isArray(list) && list.length === n && list.every((v) => Number.isInteger(v) && v >= 0 && v < n) && new Set(list).size === n;
   if (!isPerm(p.order) || !isPerm(p.start)) return null;
   if (p.start.every((v, i) => v === p.order[i])) return null;
-  if (!Array.isArray(p.clues) || !p.clues.length || p.clues.length > 7) return null;
+  if (!Array.isArray(p.clues) || !p.clues.length || p.clues.length > 12) return null;
   const okClue = (c) => c && typeof c === 'object' && ['leftOf', 'nextTo', 'apart', 'end', 'notEnd', 'slot', 'notNext', 'between'].includes(c.t)
     && Number.isInteger(c.a) && c.a >= 0 && c.a < n
     && (['end', 'notEnd', 'slot'].includes(c.t) || (Number.isInteger(c.b) && c.b >= 0 && c.b < n && c.b !== c.a))
