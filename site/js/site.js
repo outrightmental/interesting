@@ -1411,7 +1411,7 @@
       for (g = 0; g < groups.length; g++) longest = Math.max(longest, groups[g].length);
     }
     var step = longest > 1
-      ? Math.max(minStep, Math.min(STAR_STEP, (room - tallest) / (longest - 1))) : STAR_STEP;
+      ? Math.max(STAR_STEP_MIN, Math.min(STAR_STEP, (room - tallest) / (longest - 1))) : STAR_STEP;
     // One pass lays every star and says how deep the lowest lands. The tight pass is for a short
     // screen -- a phone turned on its side: the columns line up rather than interleave, and every
     // column after the first rises to stand beside the logo, well to the right of the mark, so a
@@ -1426,12 +1426,15 @@
           x0 = lefts[c];
           y = tight ? (c ? 0 : top) : top + (c % 2) * step * 0.45; // the columns interleave rather than line up
         }
+        // A wrapped preview borrows room only from its own row, not from every star.
+        var drop = 0;
         for (var i = 0; i < groups[c].length; i++, order++) {
           star(groups[c][i], x0 + STAR_SCATTER[order % STAR_SCATTER.length] * STAR_SPREAD,
-            y + i * step, mid, order);
-          deepest = Math.max(deepest, y + i * step + groups[c][i].height);
+            y + drop, mid, order);
+          deepest = Math.max(deepest, y + drop + groups[c][i].height);
+          drop += Math.max(step, groups[c][i].height + 4);
         }
-        if (columns === 1) y += groups[c].length * step; // the next orbit carries on below
+        if (columns === 1) y += drop; // the next orbit carries on below
       }
       return deepest;
     }
@@ -1548,6 +1551,7 @@
     // A piece from the feed can play on this page without changing its address.
     var page = html.getAttribute('data-page');
     var world = readingWorld();
+    if (nav.here) nav.here.hidden = !!(world && world.world === page && nav.readingGo);
     if (world && world.world && nav.readingGo) {
       var here = page === world.world;
       var doors = allWorlds();
@@ -2205,6 +2209,7 @@
       heart: host.querySelector('.sparknav-spark'),
       sky: host.querySelector('.sparknav-sky'),
       orbits: host.querySelectorAll('.sparknav-orbit'),
+      here: document.getElementById('sparknav-here'),
       reading: document.getElementById('sparknav-reading'),
       readingGo: document.getElementById('sparknav-reading-go'),
       readingLabel: document.getElementById('sparknav-reading-label'),

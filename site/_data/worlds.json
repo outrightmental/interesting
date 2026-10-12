@@ -1,8 +1,8 @@
 {
   "wayIn": [
-    { "file": "index.html", "name": "the threshold", "gloss": "where the rite begins", "icon": "home",
+    { "file": "index.html", "name": "the threshold", "gloss": "a question or a puzzle to begin", "icon": "home",
       "what": "Begin at the threshold: one sideways question, about a door, a stone or a mark, opens a puzzle that suits the reading. Or step into any world below." },
-    { "file": "moods.html", "name": "the mood atlas", "gloss": "where a reading can lead", "icon": "explore",
+    { "file": "moods.html", "name": "the mood atlas", "gloss": "see where an answer can take you", "icon": "explore",
       "what": "See where each reading leads, then follow the world it opens onto, or any world card below." },
     { "file": "sitemap.html", "name": "site map", "gloss": "every page, in one pass", "icon": "map",
       "what": "Scan every page in one pass, with one plain line on what to do first on each." }

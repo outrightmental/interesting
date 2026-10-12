@@ -518,6 +518,10 @@ html[data-nav] .sparknav-sky[hidden] {
   overflow-wrap: anywhere;
 }
 
+.sparknav-node[href] .sparknav-label {
+  @include type.rite;
+}
+
 // The words of a star: the page's name, and under it one whispered line of what the page is for
 // (the gloss _data/worlds.json keeps beside each destination), so an option says what it opens
 // before it is pressed. The line sits muted under the name and is brought up while the chip is
@@ -531,7 +535,7 @@ html[data-nav] .sparknav-sky[hidden] {
 }
 
 .sparknav-gloss {
-  @include type.scale(label-small);
+  @include type.scale(label-medium);
   color: var(--md-sys-color-on-surface-variant);
   letter-spacing: 0.01em;
   white-space: normal;
@@ -560,6 +564,10 @@ html[data-nav] .sparknav-sky[hidden] {
 
 .sparknav-node[aria-current='page'] .sparknav-gloss {
   color: inherit;
+}
+
+.sparknav-node[aria-current='page'] .sparknav-gloss::before {
+  content: 'you are here \00b7  ' / '';
 }
 
 // The page the visitor is already on, marked the way the feed marks its own card -- and sealed:

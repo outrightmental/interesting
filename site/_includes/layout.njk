@@ -62,15 +62,26 @@
 {%- for link in worlds.wayIn %}
         <li class='sparknav-option'>
           <span class='sparknav-ray' aria-hidden='true'></span>
-          <a class='sparknav-node' href='{{ siteRoot }}{{ link.file }}'{% if here == link.file %} aria-current='page'{% endif %}>
+          <a class='sparknav-node' href='{{ siteRoot }}{{ link.file }}'{% if here == link.file %} aria-current='page'{% endif %} aria-labelledby='sparknav-way-label-{{ loop.index0 }}' aria-describedby='sparknav-way-gloss-{{ loop.index0 }}'>
             <svg class='icon' viewBox='0 0 24 24' aria-hidden='true' focusable='false'><path d='{{ icons[link.icon] }}'/></svg>
-            <span class='sparknav-words'><span class='sparknav-label'>{{ link.name }}</span><span class='sparknav-gloss'>{{ link.gloss }}</span></span>
+            <span class='sparknav-words'><span class='sparknav-label' id='sparknav-way-label-{{ loop.index0 }}'>{{ link.name }}</span><span class='sparknav-gloss' id='sparknav-way-gloss-{{ loop.index0 }}'>{{ link.gloss }}</span></span>
           </a>
         </li>
 {%- endfor %}
+{%- if thisWorld %}
+        {# The current world stays in the constellation; when the reading already names it,
+           js/site.js hides this chip so the destination appears only once. #}
+        <li class='sparknav-option' id='sparknav-here' data-mood='{{ thisWorld.mood }}'>
+          <span class='sparknav-ray' aria-hidden='true'></span>
+          <a class='sparknav-node' href='{{ siteRoot }}{{ thisWorld.file }}' aria-labelledby='sparknav-here-label' aria-describedby='sparknav-here-gloss'>
+            <svg class='icon' viewBox='0 0 24 24' aria-hidden='true' focusable='false'><path d='{{ icons.star }}'/></svg>
+            <span class='sparknav-words'><span class='sparknav-label' id='sparknav-here-label'>{{ thisWorld.name }}</span><span class='sparknav-gloss' id='sparknav-here-gloss'>{{ thisWorld.gloss }}</span></span>
+          </a>
+        </li>
+{%- endif %}
         <li class='sparknav-option' id='sparknav-reading' hidden>
           <span class='sparknav-ray' aria-hidden='true'></span>
-          <a class='sparknav-node' id='sparknav-reading-go' href='{{ siteRoot }}moods.html'>
+          <a class='sparknav-node' id='sparknav-reading-go' href='{{ siteRoot }}moods.html' aria-labelledby='sparknav-reading-label' aria-describedby='sparknav-reading-gloss'>
             <svg class='icon' viewBox='0 0 24 24' aria-hidden='true' focusable='false'><path d='{{ icons.star }}'/></svg>
             <span class='sparknav-words'><span class='sparknav-label' id='sparknav-reading-label'>the mood atlas</span><span class='sparknav-gloss' id='sparknav-reading-gloss' hidden></span></span>
           </a>
@@ -84,7 +95,7 @@
            openings on this page offer different doors. #}
         <li class='sparknav-option' id='sparknav-ajar' hidden>
           <span class='sparknav-ray' aria-hidden='true'></span>
-          <a class='sparknav-node' id='sparknav-ajar-go' href='{{ siteRoot }}index.html'>
+          <a class='sparknav-node' id='sparknav-ajar-go' href='{{ siteRoot }}index.html' aria-labelledby='sparknav-ajar-label' aria-describedby='sparknav-ajar-gloss'>
             <svg class='icon' viewBox='0 0 24 24' aria-hidden='true' focusable='false'><path d='{{ icons.door }}'/></svg>
             <span class='sparknav-words'><span class='sparknav-label' id='sparknav-ajar-label'>a door ajar</span><span class='sparknav-gloss' id='sparknav-ajar-gloss'></span></span>
           </a>
@@ -93,31 +104,31 @@
       <ul class='sparknav-orbit sparknav-far' id='sparknav-far'>
         <li class='sparknav-option' id='sparknav-participate' hidden>
           <span class='sparknav-ray' aria-hidden='true'></span>
-          <button type='button' class='sparknav-node' id='sparknav-participate-open'>
+          <button type='button' class='sparknav-node' id='sparknav-participate-open' aria-labelledby='sparknav-participate-label' aria-describedby='sparknav-participate-gloss'>
             <svg class='icon' viewBox='0 0 24 24' aria-hidden='true' focusable='false'><path d='{{ icons.edit }}'/></svg>
-            <span class='sparknav-label'>change this site</span>
+            <span class='sparknav-words'><span class='sparknav-label' id='sparknav-participate-label'>change this site</span><span class='sparknav-gloss' id='sparknav-participate-gloss'>opens an issue form in a new tab</span></span>
           </button>
         </li>
         <li class='sparknav-option' id='sparknav-cookies' hidden>
           <span class='sparknav-ray' aria-hidden='true'></span>
-          <button type='button' class='sparknav-node' id='sparknav-cookies-open' aria-haspopup='dialog'>
+          <button type='button' class='sparknav-node' id='sparknav-cookies-open' aria-haspopup='dialog' aria-labelledby='sparknav-cookies-label' aria-describedby='sparknav-cookies-gloss'>
             <svg class='icon' viewBox='0 0 24 24' aria-hidden='true' focusable='false'><path d='{{ icons.tune }}'/></svg>
-            <span class='sparknav-label'>cookies</span>
+            <span class='sparknav-words'><span class='sparknav-label' id='sparknav-cookies-label'>cookies</span><span class='sparknav-gloss' id='sparknav-cookies-gloss'>choose whether visits can be counted</span></span>
           </button>
         </li>
         <li class='sparknav-option' id='sparknav-state' hidden>
           <span class='sparknav-ray' aria-hidden='true'></span>
-          <button type='button' class='sparknav-node' id='sparknav-state-open' aria-haspopup='dialog'>
+          <button type='button' class='sparknav-node' id='sparknav-state-open' aria-haspopup='dialog' aria-labelledby='sparknav-state-label' aria-describedby='sparknav-state-gloss'>
             <svg class='icon' viewBox='0 0 24 24' aria-hidden='true' focusable='false'><path d='{{ icons.swap }}'/></svg>
-            <span class='sparknav-label' id='sparknav-state-label'>state</span>
+            <span class='sparknav-words'><span class='sparknav-label' id='sparknav-state-label'>state</span><span class='sparknav-gloss' id='sparknav-state-gloss'>copy or restore your saved things</span></span>
           </button>
         </li>
 {%- for link in worlds.finePrint %}
         <li class='sparknav-option'>
           <span class='sparknav-ray' aria-hidden='true'></span>
-          <a class='sparknav-node' href='{{ siteRoot }}{{ link.file }}'{% if here == link.file %} aria-current='page'{% endif %}>
+          <a class='sparknav-node' href='{{ siteRoot }}{{ link.file }}'{% if here == link.file %} aria-current='page'{% endif %} aria-labelledby='sparknav-fine-label-{{ loop.index0 }}' aria-describedby='sparknav-fine-gloss-{{ loop.index0 }}'>
             <svg class='icon' viewBox='0 0 24 24' aria-hidden='true' focusable='false'><path d='{{ icons[link.icon] }}'/></svg>
-            <span class='sparknav-words'><span class='sparknav-label'>{{ link.name }}</span><span class='sparknav-gloss'>{{ link.gloss }}</span></span>
+            <span class='sparknav-words'><span class='sparknav-label' id='sparknav-fine-label-{{ loop.index0 }}'>{{ link.name }}</span><span class='sparknav-gloss' id='sparknav-fine-gloss-{{ loop.index0 }}'>{{ link.gloss }}</span></span>
           </a>
         </li>
 {%- endfor %}
