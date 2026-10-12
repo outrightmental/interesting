@@ -58,7 +58,7 @@
       <span class='sparknav-name'>interesting</span>
     </summary>
     <nav class='sparknav-sky' aria-label='Site'>
-      <ul class='sparknav-orbit sparknav-near' id='sparknav-near'>
+      <ul class='sparknav-orbit sparknav-near' id='sparknav-near' role='list' aria-label='destinations'>
 {%- for link in worlds.wayIn %}
         <li class='sparknav-option'>
           <span class='sparknav-ray' aria-hidden='true'></span>
@@ -86,9 +86,9 @@
             <span class='sparknav-words'><span class='sparknav-label' id='sparknav-reading-label'>the mood atlas</span><span class='sparknav-gloss' id='sparknav-reading-gloss' hidden></span></span>
           </a>
         </li>
-        {# The door left ajar: one world, dealt afresh by js/site.js each time the constellation
-           opens -- a way out nobody chose. Hidden until the script deals it, and its label is
-           always the name of the world it opens, so the chip stays legible at a glance. It wears
+        {# The door left ajar: one world dealt on each opening, related to the current
+           world or reading first and otherwise not re-offered until other worlds have
+           had their turn. Hidden until the script deals it, with the destination's name. It wears
            that world's own palette (data-mood, written by js/site.js), as the reading's option
            wears the palette of the world it opens onto, so each door shows its colours before it
            is opened; the shared world list supplies a short puzzle preview, and successive
@@ -101,7 +101,7 @@
           </a>
         </li>
       </ul>
-      <ul class='sparknav-orbit sparknav-far' id='sparknav-far'>
+      <ul class='sparknav-orbit sparknav-far' id='sparknav-far' role='list' aria-label='site controls and information'>
         <li class='sparknav-option' id='sparknav-participate' hidden>
           <span class='sparknav-ray' aria-hidden='true'></span>
           <button type='button' class='sparknav-node' id='sparknav-participate-open' aria-labelledby='sparknav-participate-label' aria-describedby='sparknav-participate-gloss'>

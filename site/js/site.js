@@ -1299,6 +1299,7 @@
   var STAR_COLUMN = 208; // the least a column may advance, before any chip has been measured
   var STAR_GUTTER = 24; // the clear space between one column of chips and the next
   var STAR_SPREAD = 26; // how far out sideways a star may be pushed by its place in the order
+  var ORBIT_GAP = 14; // separate destinations from the apparatus in one column
   // How far each star is pushed, by its place in the order: an irregular walk rather than a zigzag,
   // so a constellation looks scattered however many stars are in it.
   var STAR_SCATTER = [0, 0.78, 0.26, 1.12, 0.52, 1.3, 0.12, 0.94, 0.66, 1.18];
@@ -1434,7 +1435,7 @@
           deepest = Math.max(deepest, y + drop + groups[c][i].height);
           drop += Math.max(step, groups[c][i].height + 4);
         }
-        if (columns === 1) y += drop; // the next orbit carries on below
+        if (columns === 1) y += drop + (c < groups.length - 1 ? ORBIT_GAP : 0);
       }
       return deepest;
     }
@@ -1475,13 +1476,16 @@
     return worldList;
   }
 
-  /* The door left ajar: a world other than this page or the reading's, with a short clue from
-     the shared list. Don't draw the last door again while this page is open: another press on the
-     logo should offer another place to explore, not the same invitation. */
+  /* The ajar door starts beside this page's world or the reading's, then ranges further.
+     During a visit to this page it does not repeat until the other eligible worlds have
+     had a turn; on refilling the bag it avoids the last door. */
   var ajarDoor = null;
+  var ajarReason = 'another door';
+  var offeredDoors = [];
   var lastAjarDoor = null;
   function dealDoor() {
     ajarDoor = null;
+    ajarReason = 'another door';
     var doors = allWorlds();
     if (!doors) return;
     var page = html.getAttribute('data-page');
@@ -1493,13 +1497,26 @@
       if (read && read.world === door.file) continue;
       pool.push(door);
     }
-    if (pool.length > 1 && lastAjarDoor) {
-      var otherDoors = pool.filter(function (door) { return door.file !== lastAjarDoor; });
-      if (otherDoors.length) pool = otherDoors;
+    if (!pool.length) return;
+    var fresh = pool.filter(function (door) { return offeredDoors.indexOf(door.file) === -1; });
+    if (!fresh.length) {
+      offeredDoors = [];
+      fresh = pool.filter(function (door) { return door.file !== lastAjarDoor; });
+      if (!fresh.length) fresh = pool;
     }
-    if (pool.length) {
-      ajarDoor = pool[Math.floor(Math.random() * pool.length)];
-      lastAjarDoor = ajarDoor.file;
+    var anchor = doors.find(function (door) { return door && door.file === page; });
+    if (!anchor && read) anchor = doors.find(function (door) { return door && door.file === read.world; });
+    if (anchor) {
+      var related = fresh.filter(function (door) { return door.orientation === anchor.orientation; });
+      if (!related.length) related = fresh.filter(function (door) { return door.mood === anchor.mood; });
+      if (related.length) fresh = related;
+    }
+    ajarDoor = fresh[Math.floor(Math.random() * fresh.length)];
+    lastAjarDoor = ajarDoor.file;
+    offeredDoors.push(ajarDoor.file);
+    if (anchor) {
+      ajarReason = ajarDoor.orientation === anchor.orientation || ajarDoor.mood === anchor.mood
+        ? 'more like ' + anchor.name : 'a change of pace';
     }
   }
 
@@ -1585,7 +1602,7 @@
         relabel(nav.ajarLabel, ajarDoor.name);
         if (nav.ajarGloss) {
           var doorPreview = ajarDoor.gloss || ajarDoor.what;
-          relabel(nav.ajarGloss, 'another door' + (doorPreview ? ' · ' + doorPreview : ''));
+          relabel(nav.ajarGloss, ajarReason + (doorPreview ? ' · ' + doorPreview : ''));
         }
         nav.ajar.hidden = false;
       } else {

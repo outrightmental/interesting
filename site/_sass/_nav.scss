@@ -512,6 +512,10 @@ html[data-nav] .sparknav-sky[hidden] {
   color: var(--md-sys-color-primary);
 }
 
+.sparknav-far .sparknav-node .icon {
+  color: var(--md-sys-color-tertiary);
+}
+
 .sparknav-label {
   min-width: 0;
   white-space: normal;
@@ -628,6 +632,10 @@ html[data-nav] .sparknav-sky[hidden] {
   grid-template-columns: minmax(0, 1fr);
   gap: 0.35rem;
   justify-items: start;
+}
+
+html:not([data-nav='live']) .sparknav-far {
+  padding-top: 0.75rem;
 }
 
 // A short staircase in the scrollable cascade, capped so preview lines keep room on a phone or
@@ -747,6 +755,15 @@ html[data-nav='live'] {
       90deg,
       color-mix(in oklab, var(--md-sys-color-primary) 85%, transparent) 0%,
       color-mix(in oklab, var(--md-sys-color-primary) 25%, transparent) 70%,
+      transparent 100%
+    );
+  }
+
+  .sparknav-far .sparknav-ray {
+    background: linear-gradient(
+      90deg,
+      color-mix(in oklab, var(--md-sys-color-tertiary) 85%, transparent) 0%,
+      color-mix(in oklab, var(--md-sys-color-tertiary) 25%, transparent) 70%,
       transparent 100%
     );
   }
