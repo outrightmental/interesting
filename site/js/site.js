@@ -1307,6 +1307,7 @@
 
   var nav = null;
   var navBox = null; // the shared lightbox, raised on every press of the logo
+  var castStagger = 44; // the stride between stars, capped for the whole cast in deal()
 
   /* ---- where the stars go ----------------------------------------------------------------- */
 
@@ -1365,6 +1366,18 @@
     if (!nav || nav.sky.hidden) return;
     // Measure the layout the stars will use, not a cascade left by a shorter viewport.
     if (html.getAttribute('data-nav') !== 'live') html.setAttribute('data-nav', 'live');
+    var viewportW = window.innerWidth || 1024;
+    var viewportH = window.innerHeight || 700;
+    var wide = viewportW >= TWO_COLUMN_WIDTH;
+    var spread = Math.max.apply(null, STAR_SCATTER) * STAR_SPREAD;
+    // Wrap previews inside their orbit before measuring: an unbounded label must not force
+    // two otherwise comfortable columns into a cascade. Leave room for scatter and focus rings.
+    var chipWidth = wide
+      ? Math.floor((viewportW - 2 * (STAR_EDGE + spread) - STAR_GUTTER - 60) / 2)
+      : viewportW;
+    if (nav.host.style && typeof nav.host.style.setProperty === 'function') {
+      nav.host.style.setProperty('--nav-chip-width', Math.max(STAR_STEP_MIN, chipWidth) + 'px');
+    }
     var logoHeight = nav.logo.offsetHeight || STAR_STEP_MIN;
     var mid = Math.max(18, Math.round(logoHeight / 2));
     var groups = [];
@@ -1382,18 +1395,14 @@
     }
     if (!groups.length) return;
     var top = logoHeight + 8;
-    // The viewport, read once: the same two figures decide the columns, the step and the fit.
-    var viewportW = window.innerWidth || 1024;
-    var viewportH = window.innerHeight || 700;
+    // The same viewport figures decide the wrapping, the columns, the step and the fit.
     var room = Math.max(120, viewportH - top - 60);
     var minStep = Math.max(STAR_STEP_MIN, tallest + 4);
-    var wide = viewportW >= TWO_COLUMN_WIDTH;
     // A column per orbit as soon as the screen is wide enough for one -- and also when one column
     // would not fit the viewport, where the columns are the only thing that makes it fit.
     var columns = groups.length > 1 && (wide || room < counted * minStep) ? groups.length : 1;
     // Where each column starts: after the widest chip of the one before it, so a long label
     // ("go to the apocrypha desk") cannot land on top of the column beside it.
-    var spread = Math.max.apply(null, STAR_SCATTER) * STAR_SPREAD;
     var lefts = [STAR_EDGE];
     for (g = 1; g < groups.length; g++) {
       lefts.push(lefts[g - 1]
@@ -1660,10 +1669,10 @@
     return a;
   }
 
-  /* The order the chips develop in, cast afresh on every press: a stride through the set from a
-     rolled start, one way or the other, so the constellation never comes out top to bottom twice
-     running. --roll on each option is its turn, and the stylesheet counts the steps from it; a
-     page with no engine, or a visitor who asked for less motion, keeps the plain order. */
+  /* The chips develop outward along their rays, nearest the logo first, so the opening reads
+     as one branching rather than unrelated arrivals. The cascade keeps its rolled walk through
+     the set. --roll names each turn; --cast-stagger caps the whole set's delay at one short beat,
+     however many controls arrive. Each chip's edge still takes its own freshly rolled stair. */
   function deal() {
     var options = nav.sky.querySelectorAll('.sparknav-option');
     var shown = [];
@@ -1678,6 +1687,20 @@
       stride = fit[Math.floor(Math.random() * fit.length)] || 1;
       if (Math.random() < 0.5) stride = n - stride;
       start = Math.floor(Math.random() * n);
+    }
+    if (html.getAttribute('data-nav') === 'live' && outward) {
+      shown.sort(function (a, b) {
+        var p = outward.get(a);
+        var q = outward.get(b);
+        if (!p || !q) return 0;
+        return Math.hypot(p.x, p.y) - Math.hypot(q.x, q.y);
+      });
+      start = 0;
+      stride = 1;
+    }
+    castStagger = Math.min(riteMs('stagger', 44), riteMs('short', 170) / Math.max(1, n - 1));
+    if (nav.host.style && typeof nav.host.style.setProperty === 'function') {
+      nav.host.style.setProperty('--cast-stagger', castStagger.toFixed(2) + 'ms');
     }
     for (var k = 0; k < n; k++) {
       shown[k].style.setProperty('--roll', String((start + k * stride) % n));
@@ -1724,7 +1747,7 @@
       longest = Math.max(longest, cutLeave(node));
       shareTreads(node, options[i], 'unmake');
     }
-    var last = Math.max(riteMs('medium', 340), longest) + Math.ceil(count / 2) * riteMs('stagger', 44);
+    var last = Math.max(riteMs('medium', 340), longest) + Math.ceil(count / 2) * castStagger;
     // The rings and the sky go last, in treads rolled for this close and as long as the last chip,
     // so no chip is left after the circle it was cast in has gone. cast-ring-out is no keyframes:
     // it is only the name the rings' transitions and the sky's cut read these treads by
@@ -1806,7 +1829,7 @@
       var node = typeof options[i].querySelector === 'function' ? options[i].querySelector('.sparknav-node') : null;
       if (!node) continue;
       aimAtLogo(node, options[i], 'arrive');
-      if (cutOn(node, 'develop', { duration: 'long' })) shareTreads(node, options[i], 'develop');
+      if (cutOn(node, 'develop', { duration: 'medium' })) shareTreads(node, options[i], 'develop');
     }
   }
 
@@ -1947,6 +1970,12 @@
     if (!nav.sky.classList.contains('is-branching') || nav.sky.classList.contains('is-unmaking')) return;
     if (part === nav.dust || part.classList.contains('sparknav-node') || part.classList.contains('sparknav-ray')) {
       part.classList.add('is-landed');
+      // Focus reveals the whole path at once, not just a chip ahead of its delayed ray.
+      if (focused) {
+        var option = part.parentNode;
+        var ray = option && typeof option.querySelector === 'function' ? option.querySelector('.sparknav-ray') : null;
+        if (ray && ray.classList) ray.classList.add('is-landed');
+      }
     }
   }
 

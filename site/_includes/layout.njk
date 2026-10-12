@@ -53,11 +53,12 @@
   {# The one veil the whole site goes behind: window.interestingSite.lightbox() in js/site.js raises it, _sass/_lightbox.scss paints it, and the sparkles logo's constellation, the persona sheet and the "are you sure?" modal all open through it (issue #70). Hidden until a script raises it, so a visitor with none gets no dimming they could not dismiss. #}
   <div class='lightbox-veil' id='lightbox-veil' hidden></div>
   <details class='sparknav' id='sparknav'>
-    <summary class='sparknav-logo' id='sparknav-logo' aria-label='interesting: the site menu'>
+    <summary class='sparknav-logo' id='sparknav-logo' aria-label='interesting: the site menu' aria-describedby='sparknav-keys'>
       <svg class='icon sparknav-spark' viewBox='0 0 24 24' aria-hidden='true' focusable='false'><path d='{{ icons.spark }}'/></svg>
       <span class='sparknav-name'>interesting</span>
     </summary>
     <nav class='sparknav-sky' aria-label='Site'>
+      <p class='visually-hidden' id='sparknav-keys'>After opening, Tab or the arrow keys move between options. Type the first letter of a name to find it. Escape closes the menu.</p>
       <ul class='sparknav-orbit sparknav-near' id='sparknav-near' role='list' aria-label='destinations'>
 {%- for link in worlds.wayIn %}
         <li class='sparknav-option'>

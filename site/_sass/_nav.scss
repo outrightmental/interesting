@@ -69,10 +69,10 @@
 @use 'type';
 @use 'cut';
 
-// A chip's turn in the order the constellation arrives in: its rolled place (--roll, or its place
-// in the markup) times the step between stars, so the chips come out one after another in an
-// order of the press's own.
-$turn: calc(var(--roll, var(--k, 0)) * var(--motion-stagger, 40ms));
+// A chip's turn in the outward wave (--roll, or its place in the markup) times the stride
+// between stars. js/site.js caps the whole wave's delay at one short beat, so more options
+// never mean a longer wait to see where to go.
+$turn: calc(var(--roll, var(--k, 0)) * var(--cast-stagger, var(--motion-stagger, 40ms)));
 
 // The pill's room either side of what it holds, and the gap between the mark (an .icon, 24px)
 // and the site's name: said once, because the name's edge is drawn over the whole pill from them
@@ -380,7 +380,8 @@ html[data-nav] .sparknav-sky[hidden] {
   isolation: isolate;
   display: inline-flex;
   width: max-content;
-  max-width: calc(100vw - 2 * var(--nav-inset) - 48px);
+  // Wrap inside the orbit the script will measure, as well as inside the viewport.
+  max-width: min(var(--nav-chip-width, 100vw), calc(100vw - 2 * var(--nav-inset) - 48px));
   align-items: center;
   justify-content: flex-start;
   gap: 0.5rem;
@@ -665,7 +666,7 @@ html:not([data-nav='live']) .sparknav-node {
 .sparknav-sky.is-branching .sparknav-node {
   mask: cut.slice(var(--arrive-angle, 0deg));
   @include cut.bleed;
-  @include cut.play(in, develop, long, arrive);
+  @include cut.play(in, develop, medium, arrive);
   animation-delay: $turn;
 }
 
@@ -677,7 +678,7 @@ html:not([data-nav='live']) .sparknav-node {
 // pointer found it.
 .sparknav .sparknav-sky.is-branching .sparknav-node.is-stamping {
   animation:
-    cut-in var(--motion-develop, var(--motion-long)) var(--ease-develop, var(--ease-arrive)) both,
+    cut-in var(--motion-develop, var(--motion-medium)) var(--ease-develop, var(--ease-arrive)) both,
     rite-stamp var(--motion-stamp, var(--motion-short)) var(--ease-stamp, var(--ease-flicker)) both;
   animation-delay: $turn, 0ms;
 }
@@ -692,7 +693,7 @@ html:not([data-nav='live']) .sparknav-node {
   mask: cut.slice(var(--leave-angle, 0deg));
   @include cut.bleed;
   @include cut.play(out, unmake, medium, leave);
-  animation-delay: calc(var(--roll, var(--k, 0)) * var(--motion-stagger, 40ms) * 0.5);
+  animation-delay: calc(var(--roll, var(--k, 0)) * var(--cast-stagger, var(--motion-stagger, 40ms)) * 0.5);
   pointer-events: none;
 }
 
@@ -782,12 +783,12 @@ html[data-nav='live'] {
   // slice with it), stepping out along it. A ray is the chip's sibling and cannot read what is
   // written on the chip, so js/site.js writes the chip's arrival treads (--ease-develop,
   // --motion-develop) on the option the two share as well, and the ray steps in them; where nothing
-  // is written it falls back to the same long length and arrival stair as its chip. It does not
+  // is written it falls back to the same medium length and arrival stair as its chip. It does not
   // lift: a ray is fixed at the logo's heart, and only its far end travels.
   .sparknav-sky.is-branching .sparknav-ray {
     mask: cut.slice(90deg);
-    @include cut.play(in, develop, long, arrive);
-    animation-delay: calc(#{$turn} + var(--motion-stagger, 40ms) * 0.5);
+    @include cut.play(in, develop, medium, arrive);
+    animation-delay: calc(#{$turn} + var(--cast-stagger, var(--motion-stagger, 40ms)) * 0.5);
   }
 
   // And cut back into it as its chip goes, half a step apart in the same order, in the chip's
@@ -795,7 +796,7 @@ html[data-nav='live'] {
   .sparknav-sky.is-unmaking .sparknav-ray {
     mask: cut.slice(90deg);
     @include cut.play(out, unmake, medium, leave);
-    animation-delay: calc(var(--roll, var(--k, 0)) * var(--motion-stagger, 40ms) * 0.5);
+    animation-delay: calc(var(--roll, var(--k, 0)) * var(--cast-stagger, var(--motion-stagger, 40ms)) * 0.5);
   }
 
   // The lightbox has already let go of the mark while it is unmade, so the mark holds itself over
