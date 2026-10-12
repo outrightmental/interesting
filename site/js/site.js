@@ -1412,22 +1412,31 @@
     }
     var step = longest > 1
       ? Math.max(minStep, Math.min(STAR_STEP, (room - tallest) / (longest - 1))) : STAR_STEP;
-    var order = 0;
-    var y = top;
-    var deepest = top;
-    for (g = 0; g < groups.length; g++) {
-      var x0 = STAR_EDGE;
-      if (columns > 1) {
-        x0 = lefts[g];
-        y = top + (g % 2) * step * 0.45; // the columns interleave rather than line up
+    // One pass lays every star and says how deep the lowest lands. The tight pass is for a short
+    // screen -- a phone turned on its side: the columns line up rather than interleave, and every
+    // column after the first rises to stand beside the logo, well to the right of the mark, so a
+    // landscape phone keeps its constellation instead of falling back to the cascade.
+    function lay(tight) {
+      var order = 0;
+      var y = top;
+      var deepest = top;
+      for (var c = 0; c < groups.length; c++) {
+        var x0 = STAR_EDGE;
+        if (columns > 1) {
+          x0 = lefts[c];
+          y = tight ? (c ? 0 : top) : top + (c % 2) * step * 0.45; // the columns interleave rather than line up
+        }
+        for (var i = 0; i < groups[c].length; i++, order++) {
+          star(groups[c][i], x0 + STAR_SCATTER[order % STAR_SCATTER.length] * STAR_SPREAD,
+            y + i * step, mid, order);
+          deepest = Math.max(deepest, y + i * step + groups[c][i].height);
+        }
+        if (columns === 1) y += groups[c].length * step; // the next orbit carries on below
       }
-      for (var i = 0; i < groups[g].length; i++, order++) {
-        star(groups[g][i], x0 + STAR_SCATTER[order % STAR_SCATTER.length] * STAR_SPREAD,
-          y + i * step, mid, order);
-        deepest = Math.max(deepest, y + i * step + groups[g][i].height);
-      }
-      if (columns === 1) y += groups[g].length * step; // the next orbit carries on below
+      return deepest;
     }
+    var deepest = lay(false);
+    if (columns > 1 && deepest + mid + 16 > viewportH) deepest = lay(true);
     // And if the lowest star would still be below the fold -- a very short viewport, or a very
     // long list of options -- the cascade is what fits: the stylesheet's other layout, a list
     // under the logo that scrolls, which is also what the markup is without a script at all.
@@ -2133,7 +2142,10 @@
     var back = key === 'ArrowUp' || key === 'ArrowLeft';
     var home = key === 'Home';
     var end = key === 'End';
-    if (!forward && !back && !home && !end) return;
+    if (!forward && !back && !home && !end) {
+      seekByLetter(event);
+      return;
+    }
     var stars = navFocusable();
     if (!stars.length) return;
     var at = stars.indexOf(document.activeElement);
@@ -2141,6 +2153,29 @@
       : at === -1 ? 0 : (at + (forward ? 1 : stars.length - 1)) % stars.length;
     if (typeof event.preventDefault === 'function') event.preventDefault();
     stars[to].focus();
+  }
+
+  // A typed letter goes to the next star whose name begins with it -- m for the mood atlas, p for
+  // privacy -- the way any list answers a letter, read past a leading "go to" and "the", and round
+  // the ends again, so a second press of the same letter finds the next star that shares it.
+  function seekByLetter(event) {
+    var key = event.key;
+    if (typeof key !== 'string' || key.length !== 1 || key === ' '
+        || event.ctrlKey || event.metaKey || event.altKey) return;
+    var letter = key.toLowerCase();
+    var stars = navFocusable();
+    var at = stars.indexOf(document.activeElement);
+    for (var i = 1; i <= stars.length; i++) {
+      var candidate = stars[(at + i + stars.length) % stars.length];
+      var label = typeof candidate.querySelector === 'function' ? candidate.querySelector('.sparknav-label') : null;
+      var words = String((label || candidate).textContent || '').toLowerCase().trim();
+      var bare = words.replace(/^(go to )?(the )?/, '');
+      if (words.charAt(0) === letter || bare.charAt(0) === letter) {
+        if (typeof event.preventDefault === 'function') event.preventDefault();
+        candidate.focus();
+        return;
+      }
+    }
   }
 
   function keepFocusInside(event) {

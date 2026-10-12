@@ -731,12 +731,25 @@ html[data-nav='live'] {
     height: 1px;
     transform-origin: 0 50%;
     transform: rotate(var(--a, 0deg));
+    // At rest a ray is a quiet line; the one a visitor is considering stands at full strength
+    // (below), in treads.
+    opacity: 0.55;
+    transition: opacity var(--motion-short) var(--ease-stair);
     background: linear-gradient(
       90deg,
       color-mix(in oklab, var(--md-sys-color-primary) 85%, transparent) 0%,
       color-mix(in oklab, var(--md-sys-color-primary) 25%, transparent) 70%,
       transparent 100%
     );
+  }
+
+  // The ray of the star a visitor is considering -- under the pointer, reached by a key -- and the
+  // ray of the page they are on stand at full strength: the constellation draws the line from the
+  // mark to where they would go, and to where they already are.
+  .sparknav-option:has(> .sparknav-node.is-waxing) > .sparknav-ray,
+  .sparknav-option:has(> .sparknav-node[aria-current='page']) > .sparknav-ray,
+  &:not([data-cut]) .sparknav-option:has(> .sparknav-node:focus-visible) > .sparknav-ray {
+    opacity: 1;
   }
 
   // Each ray is cut out of the logo half a step behind its chip: a slice across the ray, in the
@@ -943,6 +956,7 @@ html[data-nav] .sparknav-sky.is-branching:not(.is-unmaking) .sparknav-dust.is-la
   .sparknav-node.is-waxing .sparknav-gloss,
   .sparknav-node:hover .sparknav-gloss,
   .sparknav-node:focus-visible .sparknav-gloss,
+  html[data-nav='live'] .sparknav-option > .sparknav-ray,
   html[data-nav='live'] .sparknav[open]::before,
   html[data-nav='live'] .sparknav[open]::after,
   html[data-nav='live'] .sparknav[open]:has(.is-unmaking)::before,
