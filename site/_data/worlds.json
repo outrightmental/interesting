@@ -11,7 +11,7 @@
     { "file": "quiet-room.html", "name": "the quiet room", "gloss": "put out lamps or arrange keepsakes", "orientation": "banked low", "mood": "tender", "aspect": "1 / 1",
       "what": "Keep a vigil in a dim room: put out lamps, swap four to six keepsakes into the order their clues describe, or compare changed and turned lamp views. Shelf hints explain why a keepsake belongs." },
     { "file": "wish-constellation.html", "name": "the wish constellation", "gloss": "order your stars by a shifting postcard", "orientation": "looking up", "mood": "cosmic", "aspect": "4 / 5",
-      "what": "Read your own sky: compare a postcard's shifting lights (up to seven) to order their depths, or turn your pattern until it matches one of four skies." },
+      "what": "Read your own sky: order a postcard's shifting lights by depth, or overlay one of four skies and turn your lights to meet its rings; inspect individual lights to discover where a near miss fails." },
     { "file": "gravity-well.html", "name": "the gravity well", "gloss": "cast a probe through a ring", "orientation": "looking up", "mood": "cosmic", "aspect": "16 / 10",
       "what": "Cast a probe past a well and through a ring, order moons by their orbits, or find when two circling moons next meet and count the laps. Tap the picture to inspect a moon or a flight." },
     { "file": "constellation-diary.html", "name": "the diary", "gloss": "recall your stars in flash order", "orientation": "in the long look", "mood": "brooding", "aspect": "4 / 3",

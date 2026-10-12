@@ -14,8 +14,10 @@
      which sky is yours  Four small skies. One is the visitor's pattern turned clockwise by one,
                          two or three quarter turns, perhaps flipped left for right first; the other
                          three are near misses, the same lights with a few nudged. Say which sky,
-                         how far it turned and whether it was flipped. A wrong check says which of
-                         the three parts hold and no more; a hint marks one decoy.
+                         how far it turned and whether it was flipped. Choosing a sky overlays its
+                         hollow rings on the moving reference; numbered lights can be inspected for
+                         exact coordinates. A wrong check counts coincident lights under the chosen
+                         settings, without identifying correct answers; a hint marks one decoy.
 
    A card and the feature it opens as are one puzzle: the spark puts the whole plan on its spec as
    `of` -- the lights, their depths, the four skies -- and piece(env) opens on that rather than
@@ -803,6 +805,39 @@ function whichLayout(w, h) {
   return { side, left, top, cells };
 }
 
+function skyComparison(plan, turns, mirror, choice) {
+  if (![0, 1, 2, 3].includes(choice)) return null;
+  const points = turned(plan.points, turns, mirror);
+  const rows = points.map((point) => {
+    let target = plan.skies[choice][0];
+    let gap = Math.hypot(point.x - target.x, point.y - target.y);
+    for (const candidate of plan.skies[choice].slice(1)) {
+      const distance = Math.hypot(point.x - candidate.x, point.y - candidate.y);
+      if (distance < gap) {
+        target = candidate;
+        gap = distance;
+      }
+    }
+    return { point, target, gap };
+  });
+  return { rows, matches: rows.filter((row) => row.gap < 0.5).length };
+}
+
+function comparisonWords(plan, s) {
+  const original = plan.points[s.inspect];
+  const point = turnPoint(original, s.turns, s.mirror);
+  const position = (p) => '(' + p.x + ', ' + p.y + ')';
+  const light = 'Light ' + (s.inspect + 1) + ': original ' + position(original)
+    + '; after your turn and flip ' + position(point) + '.';
+  const read = skyComparison(plan, s.turns, s.mirror, s.choice);
+  if (!read) return light + ' Choose sky A-D to compare. Coordinates run right, then down, from 0 to 100.';
+  const row = read.rows[s.inspect];
+  return read.matches + ' of ' + plan.points.length + ' lights coincide with sky ' + SKIES[s.choice]
+    + ' at your settings. ' + light + ' Nearest hollow ring: ' + position(row.target)
+    + (row.gap < 0.5 ? '; this light coincides.' : '; this light does not coincide.')
+    + ' Inspect another light, or change the turn, flip or sky.';
+}
+
 // One sky in a square: its frame, its lights and the lines between them. opts.fill is a surface
 // that has come `opts.fillK` of the way over the box, under the lights; opts.lit a second,
 // brighter one that has come `opts.litK` of the way over that (the sky that turns out to be yours,
@@ -852,7 +887,8 @@ function whichState(t) {
   return {
     t, choice: -1, chosen: [surface(), surface(), surface(), surface()], turns: 1, mirror: false,
     hinted: [], hintAt: [-1, -1, -1, -1], doneAt: -1, live: false, saidAt: -1, saids: 0, saidWas: '',
-    previewFrom: null, previewTo: null, previewAt: -1, previewRoll: 0, previewAfter: false
+    previewFrom: null, previewTo: null, previewAt: -1, previewRoll: 0, previewAfter: false,
+    inspect: 0
   };
 }
 
@@ -910,7 +946,42 @@ function whichScene(g, w, h, c, plan, s, v) {
   const c0 = lay.cells[0];
   const c1 = lay.cells[1];
   g.fillText('four skies', c0.x + (c1.x + c1.side - c0.x) / 2, h * 0.085, c1.x + c1.side - c0.x);
-  skyBox(g, c, reference(plan, rite, s, reduced), lay.left, lay.top, lay.side, v, { rite, border: c.alpha(c.colors.accent, 0.8) });
+  const shown = reference(plan, rite, s, reduced);
+  skyBox(g, c, shown, lay.left, lay.top, lay.side, v, { rite, border: c.alpha(c.colors.accent, 0.8) });
+  if (s.live) {
+    const at = (p) => ({ x: lay.left + p.x / 100 * lay.side, y: lay.top + p.y / 100 * lay.side });
+    if (s.choice >= 0) {
+      const coverage = level(s.chosen[s.choice], rite, 0x200 + s.choice, s, CHOSEN, reduced);
+      for (const point of plan.skies[s.choice]) {
+        const p = at(point);
+        ring(g, c, p.x, p.y, 0.95, size * 0.65, coverage);
+      }
+      const read = skyComparison(plan, s.turns, s.mirror, s.choice);
+      const from = at(shown[s.inspect]);
+      const to = at(read.rows[s.inspect].target);
+      g.strokeStyle = c.colors.accent2;
+      g.lineWidth = 1.5;
+      g.setLineDash([3, 3]);
+      g.beginPath();
+      g.moveTo(from.x, from.y);
+      g.lineTo(from.x + (to.x - from.x) * coverage, from.y + (to.y - from.y) * coverage);
+      g.stroke();
+      g.setLineDash([]);
+    }
+    font(g, size * 0.85, 600);
+    g.textAlign = 'left';
+    g.textBaseline = 'bottom';
+    shown.forEach((point, i) => {
+      const p = at(point);
+      g.fillStyle = i === s.inspect ? c.colors.accent2 : c.colors.fg;
+      g.fillText(String(i + 1), Math.min(lay.left + lay.side - size, p.x + size * 0.45),
+        Math.max(lay.top + size, p.y - size * 0.35));
+    });
+    g.textAlign = 'center';
+    g.textBaseline = 'middle';
+    g.fillStyle = c.colors.fg;
+    g.fillText('filled lights: yours; hollow rings: chosen sky', w / 2, h * 0.96, w * 0.92);
+  }
   // The skies' notes are written after all four are labelled, so the canvas's font is set once for
   // the labels and once for the notes rather than twice for each sky.
   const notes = [];
@@ -983,7 +1054,7 @@ function whichPiece(env, plan) {
   };
   return {
     title: whichTitle(plan),
-    brief: 'Your sigil, turned. One of the four small skies is your ' + WORDS[n] + ' lights, turned clockwise by one, two or three quarter turns -- and perhaps flipped left for right before it was turned. The other three are near misses: the same lights, with a few nudged out of place.',
+    brief: 'Turn and compare your ' + WORDS[n] + ' lights to find the matching sky. Choose A-D to lay its hollow rings over your filled lights, then try clockwise quarter turns and a left-right flip before the turn. Only one sky matches every light; the others have lights nudged out of place. Tap a numbered light or use inspect light for exact coordinates: across, then down, from 0 to 100.',
     goal: 'Say which sky is yours, how many quarter turns it was given, and whether it was flipped.',
     aspect: '4 / 3',
     checkLabel: 'check the skies',
@@ -991,21 +1062,26 @@ function whichPiece(env, plan) {
       { id: 'sky', ask: 'which sky is yours', kind: 'choice', options: range(4).map((k) => ({ label: 'sky ' + SKIES[k], value: k })) },
       { id: 'turns', ask: 'how far it was turned, clockwise', kind: 'number', min: 1, max: 3, step: 1, value: 1, unit: 'quarter turns' },
       { id: 'mirror', ask: 'flipped left for right before the turn', kind: 'toggle', label: 'it was flipped' },
-      { id: 'hint', ask: 'one sky that is not yours', kind: 'press', count: 1, label: 'mark a decoy', optional: true }
+      { id: 'hint', ask: 'one sky that is not yours', kind: 'press', count: 1, label: 'mark a decoy', optional: true },
+      { id: 'inspect', ask: 'inspect light (numbered on your sky; no hint cost)', kind: 'number', min: 1, max: n, step: 1, value: 1, optional: true }
     ],
     solution: { sky: plan.which, turns: plan.turns, mirror: plan.mirror },
     check(c) {
-      const sky = Number(c.value('sky')) === plan.which;
+      const value = c.value('sky');
+      const choice = value == null || value === '' ? -1 : Number(value);
+      const sky = choice === plan.which;
       const turns = Number(c.value('turns')) === plan.turns;
       const mirror = !!c.value('mirror') === plan.mirror;
       if (sky && turns && mirror) return { solved: true, say: 'sky ' + SKIES[plan.which] + ' is yours: ' + turnsWord(plan.turns) + (plan.mirror ? ', flipped first' : '') };
+      const read = skyComparison(plan, Number(c.value('turns')), !!c.value('mirror'), choice);
       return {
         solved: false,
-        say: [sky ? 'the sky holds' : 'that sky is not yours', turns ? 'the turn holds' : 'the turn is off', mirror ? 'the flip holds' : 'the flip is off'].join('; ')
+        say: read ? read.matches + ' of ' + n + ' lights coincide at your settings. Compare the filled lights with the hollow rings; the check has changed nothing.'
+          : 'Choose sky A-D, then compare it with your turned lights.'
       };
     },
     start(c) {
-      c.status('four skies; one is yours, turned');
+      c.status('Choose sky A-D to overlay its rings. Turn or flip your lights to compare; inspect any numbered light without spending a hint.');
       draw(c);
     },
     apply(id, value, c) {
@@ -1020,7 +1096,6 @@ function whichPiece(env, plan) {
           turnTo(s.chosen[k], true, rite, 0x200 + k, s, CHOSEN, c.reduced);
           s.choice = k;
         }
-        c.status('sky ' + SKIES[s.choice] + '; now how far it turned, and whether it was flipped');
       }
       if (id === 'turns') {
         const k = Math.round(Number(value));
@@ -1030,7 +1105,6 @@ function whichPiece(env, plan) {
           s.turns = k;
           preview(c, from);
         }
-        c.status(turnsWord(s.turns) + ' clockwise; compare the moving sky with A-D');
       }
       if (id === 'mirror' && (!!value !== s.mirror || !s.previewTo)) {
         const from = reference(plan, rite, s, !!c.reduced).map((p) => ({ x: p.x, y: p.y }));
@@ -1038,7 +1112,6 @@ function whichPiece(env, plan) {
         s.mirror = !!value;
         preview(c, from);
       }
-      if (id === 'mirror') c.status(s.mirror ? 'flipped first, then turned; compare with A-D' : 'not flipped; compare the turned sky with A-D');
       if (id === 'hint') {
         const next = s.hinted.length < helps
           ? range(4).find((k) => k !== plan.which && !s.hinted.includes(k)) : undefined;
@@ -1053,16 +1126,46 @@ function whichPiece(env, plan) {
           c.status('every decoy is marked; the sky left is yours, and its turn is still to find');
         }
       }
+      if (id === 'inspect') {
+        const index = Number(value) - 1;
+        if (!Number.isInteger(index) || index < 0 || index >= n) {
+          c.status('Choose a light number from 1 to ' + n + '.');
+          return;
+        }
+        s.inspect = index;
+      }
+      if (['sky', 'turns', 'mirror', 'inspect'].includes(id)) {
+        if (!s.previewTo) preview(c, copyPoints(plan.points));
+        c.status(comparisonWords(plan, s));
+      }
       draw(c);
     },
     tap(x, y, c) {
       const lay = whichLayout(c.w, c.h);
       const k = lay.cells.findIndex((cell) => x * c.w >= cell.x && x * c.w <= cell.x + cell.side && y * c.h >= cell.y && y * c.h <= cell.y + cell.side);
-      if (k < 0) {
-        c.status('set the turn or flip to move your sky, then compare its lights with A-D');
+      if (k >= 0) {
+        c.set('sky', k);
         return;
       }
-      c.status('sky ' + SKIES[k] + (s.hinted.includes(k) ? ', a decoy' : '; compare its lights with your turned sky'));
+      const px = x * c.w;
+      const py = y * c.h;
+      if (px >= lay.left && px <= lay.left + lay.side && py >= lay.top && py <= lay.top + lay.side) {
+        const points = reference(plan, riteOf(c), s, !!c.reduced);
+        let best = -1;
+        let distance = Math.max(22, lay.side * 0.08);
+        points.forEach((point, i) => {
+          const gap = Math.hypot(lay.left + point.x / 100 * lay.side - px, lay.top + point.y / 100 * lay.side - py);
+          if (gap <= distance) {
+            best = i;
+            distance = gap;
+          }
+        });
+        if (best >= 0) {
+          c.set('inspect', best + 1);
+          return;
+        }
+      }
+      c.status('Tap sky A-D to compare it, or a numbered filled light to inspect it. The turn and flip controls move your sky.');
     },
     frame(t, dt, c) {
       if (!c.reduced) s.t += dt;
@@ -1071,7 +1174,7 @@ function whichPiece(env, plan) {
       return !settled(s, c);
     },
     end(c) {
-      c.status('sky ' + SKIES[plan.which] + ' is yours, ' + turnsWord(plan.turns) + (plan.mirror ? ', flipped first' : '') + '; watch your sky turn to meet it. the sky reads: ' + SEALS[(plan.number + plan.turns) % SEALS.length]);
+      c.status('sky ' + SKIES[plan.which] + ' is yours, ' + turnsWord(plan.turns) + (plan.mirror ? ', flipped first' : '') + '; your lights turn to meet its rings. Keep comparing: choose a decoy and inspect where it misses. The sky reads: ' + SEALS[(plan.number + plan.turns) % SEALS.length]);
     }
   };
 }
@@ -1124,7 +1227,7 @@ export default {
     return {
       title: whichTitle(plan),
       quote: 'four skies; one is your sigil, turned',
-      text: 'Your ' + WORDS[plan.points.length] + ' lights, turned and maybe flipped, among three near misses. Say which sky, how far it turned and whether it was flipped.',
+      text: 'Your ' + WORDS[plan.points.length] + ' lights among three near misses. Choose a sky to overlay its rings, then turn and flip your lights until every one meets a ring. Inspect a light to measure the difference.',
       aspect: '4 / 3',
       paint: (g, w, h, cardEnv) => whichPreview(g, w, h, cardEnv, plan),
       of: plan
