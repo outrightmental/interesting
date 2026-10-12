@@ -1905,12 +1905,15 @@
      edge held past the far side of its box has nothing left to cut, and the sky's is the size of
      the viewport. Read off the arrival's own end, as the veil's rising is (watchTheVeil), so
      nothing is asked of the page; its own arrival only, so a chip's wax on its ::after is not
-     counted. The mark comes off on every press (clearLanded, in branch), so the next arrival has
-     its edge back, and the unmaking needs nothing: the stylesheet says it only of a constellation
-     that is not being unmade. */
+     counted. Keyboard focus also lands its chip immediately, so a delayed arrival never hides
+     the focus ring or takes the chip away when focus moves on. The mark comes off on every press
+     (clearLanded, in branch), so the next arrival has its edge back, and the unmaking needs
+     nothing: the stylesheet says it only of a constellation that is not being unmade. */
   function noteLanded(ev) {
     var part = ev && ev.target;
-    if (!part || ev.pseudoElement || ev.animationName !== 'cut-in' || !part.classList) return;
+    if (!part || !part.classList) return;
+    var focused = ev.type === 'focusin' && part.classList.contains('sparknav-node');
+    if (!focused && (ev.pseudoElement || ev.animationName !== 'cut-in')) return;
     if (!nav.sky.classList.contains('is-branching') || nav.sky.classList.contains('is-unmaking')) return;
     if (part === nav.dust || part.classList.contains('sparknav-node') || part.classList.contains('sparknav-ray')) {
       part.classList.add('is-landed');
@@ -1926,8 +1929,9 @@
      yet drawn out, the sky's curve still going out -- marked is-unlanded, read off each one's own
      arrival before branch(false) takes the arrivals off. _sass/_nav.scss cuts a marked one away
      at once as the unmaking begins, so only what had landed is unmade. Its own arrival only
-     (getAnimations() without the subtree), so a chip's wax on its ::after is not counted. Every
-     part is read before any is marked: getAnimations() brings style up to date, and a mark set
+     (getAnimations() without the subtree), so a chip's wax on its ::after is not counted. Parts
+     already marked as landed, including those reached by focus, need no further read. The rest
+     are read before any is marked: getAnimations() brings style up to date, and a mark set
      between two reads would make the next read work the whole sky's style out again. */
   function markUnlanded() {
     var parts = [nav.dust];
@@ -1940,7 +1944,8 @@
     for (var p = 0; p < parts.length; p++) {
       var part = parts[p];
       unlanded[p] = false;
-      if (!part || !part.classList || typeof part.getAnimations !== 'function') continue;
+      if (!part || !part.classList || part.classList.contains('is-landed')
+          || typeof part.getAnimations !== 'function') continue;
       var all = part.getAnimations();
       for (var a = 0; a < all.length; a++) {
         if (all[a].animationName === 'cut-in' && all[a].playState !== 'finished') unlanded[p] = true;
@@ -2214,6 +2219,7 @@
     }
     nav.host.addEventListener('toggle', follow);
     nav.sky.addEventListener('animationend', noteLanded);
+    nav.sky.addEventListener('focusin', noteLanded);
 
     // The state interface's host has landed: where the panel stands now is where it stays.
     if (nav.modal && typeof nav.modal.addEventListener === 'function') {
@@ -2247,12 +2253,12 @@
     });
     nav.logo.setAttribute('aria-expanded', nav.host.open ? 'true' : 'false');
 
-    // A destination closes the menu on its way out, so a link to the page the visitor is already
-    // on does not leave the constellation hanging open over it.
+    // A destination closes the menu on its way out. Return focus to the logo as well, so opening
+    // a link in another tab does not leave this page focused on a chip that is disappearing.
     nav.sky.addEventListener('click', function (event) {
       var node = event.target;
       while (node && node !== nav.sky && node.tagName !== 'A') node = node.parentNode;
-      if (node && node.tagName === 'A') close(false);
+      if (node && node.tagName === 'A') close(true);
     });
 
     nav.cookiesOpen.addEventListener('click', function () {

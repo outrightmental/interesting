@@ -911,8 +911,9 @@ html[data-nav] .sparknav-sky.is-unmaking .sparknav-dust.is-unlanded {
 // corner -- its edge stands past the far side of its box with nothing left to cut, and a mask held
 // there would be painted for as long as the constellation stands: the sky's the size of the
 // viewport, the same thing the risen veil under it lets go of (_lightbox.scss). So js/site.js marks
-// each part as its own arrival ends (is-landed) and it stands with no mask. Said only of a
-// constellation that is not being unmade, so the unmaking finds every edge where it was and cuts
+// each part as its own arrival ends (is-landed), or its chip receives focus, and it stands with
+// no mask. A focused chip stays landed when focus moves on. Said only of a constellation that
+// is not being unmade, so the unmaking finds every edge where it was and cuts
 // it back; js/site.js takes the mark off on every press, so the next arrival has its edge again.
 html[data-nav] .sparknav-sky.is-branching:not(.is-unmaking) .sparknav-node.is-landed,
 html[data-nav] .sparknav-sky.is-branching:not(.is-unmaking) .sparknav-ray.is-landed,
