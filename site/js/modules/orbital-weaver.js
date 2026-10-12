@@ -557,8 +557,10 @@ function foldsPiece(env, plan) {
         if (s.shown < Math.min(shows.length, helps)) {
           c.status(shows[s.shown]);
           s.shown += 1;
-          if (s.shown === 1 && !s.lit) s.litAt = s.t;
-          if (s.shown === 1) s.lit = true;
+          if (s.shown === 1) {
+            s.litAt = s.t;
+            s.lit = true;
+          }
           if (s.shown === 2 && s.handAt == null) s.handAt = s.t;
           c.hint();
         } else if (s.shown >= helps) {
@@ -936,8 +938,8 @@ export default {
   },
   spark(env) {
     const d = deal(env);
+    const plan = d.plan;
     if (d.moire) {
-      const plan = d.plan;
       return {
         title: moireTitle(plan),
         text: 'Two screens pressed as one seal: the first of ' + plan.first + ' thin lines, the second laid over it. The broad bands in the print say how far apart the two counts are.',
@@ -947,7 +949,6 @@ export default {
         of: plan
       };
     }
-    const plan = d.plan;
     return {
       title: foldsTitle(plan),
       text: 'One sigil turned about the centre of the midnight loom, perhaps with its mirror image. Count the folds, and say whether the weave is mirrored.',

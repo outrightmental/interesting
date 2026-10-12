@@ -815,7 +815,11 @@ function waterPiece(env, plan) {
         } else if (s.hinted.length >= helps) {
           c.status('that is all the glass will show at this difficulty; the rest is yours');
         } else {
-          c.status('every plant you have judged wrongly has been shown; the rest is yours');
+          // The glass only points at a plant judged wrongly, so when it finds none the line says
+          // that, rather than claiming wrong judgements were shown when there were none.
+          c.status(plan.rules.some((r, i) => s.chosen.includes(i) !== got[i])
+            ? 'every plant you have judged wrongly has been shown; the rest is yours'
+            : 'the glass points at plants judged wrongly, and finds none to point at');
         }
       }
       draw(c);
@@ -1141,7 +1145,8 @@ export default {
     return false;
   },
   spark(env) {
-    if (!env.stars.length) return null;
+    // The sky is read defensively: an env may carry no stars at all.
+    if (!(env.stars || []).length) return null;
     const d = deal(env);
     if (d.water) {
       const plan = d.plan;
