@@ -23,7 +23,7 @@
                      time setting and remains theirs to turn after the check.
 
    A card and the feature it opens as are one puzzle: the spark puts the whole plan on its spec as
-   `of` -- the well, the ring, the solution it was flown from; the radii, the step, the moons --
+   `of` -- the well, the ring, the solution it was flown from; the radii, the step, the moons; the periods and the head start --
    and piece(env) opens on that rather than rolling another. */
 
 const FIRST = ['amber', 'opal', 'iron', 'cinder', 'glass', 'violet', 'salt', 'copper'];
@@ -67,7 +67,8 @@ function r3(x) {
   return Math.round(x * 1000) / 1000;
 }
 
-function between(value, low, high) {
+// Whether a value carried on a card is a finite number from low to high.
+function within(value, low, high) {
   return typeof value === 'number' && Number.isFinite(value) && value >= low && value <= high;
 }
 
@@ -378,10 +379,10 @@ function carriedSling(env) {
   const p = env.card && env.card.of;
   if (!p || p.kind !== 'sling' || !Number.isInteger(p.number) || p.number < 100 || p.number > 999) return null;
   if (typeof p.name !== 'string' || !p.name || p.name.length > 40) return null;
-  if (!between(p.sy, 0.2, 0.8) || !between(p.wx, 0.6, 1.0) || !between(p.wy, 0.3, 0.7) || !between(p.mass, 0.03, 0.09)) return null;
+  if (!within(p.sy, 0.2, 0.8) || !within(p.wx, 0.6, 1.0) || !within(p.wy, 0.3, 0.7) || !within(p.mass, 0.03, 0.09)) return null;
   if (!Number.isInteger(p.angle) || p.angle < AIM.min + NEAR.angle || p.angle > AIM.max - NEAR.angle) return null;
   if (!Number.isInteger(p.speed) || p.speed < PUSH.min + NEAR.speed || p.speed > PUSH.max - NEAR.speed) return null;
-  if (!between(p.rx, 0, FIELD_W) || !between(p.ry, 0, 1)) return null;
+  if (!within(p.rx, 0, FIELD_W) || !within(p.ry, 0, 1)) return null;
   const plan = { kind: 'sling', number: p.number, name: p.name, sy: p.sy, wx: p.wx, wy: p.wy, mass: p.mass, angle: p.angle, speed: p.speed, rx: p.rx, ry: p.ry };
   return slingHolds(plan) ? plan : null;
 }
@@ -732,7 +733,6 @@ function moonsPlan(env) {
   const n = env.int(3, 5);
   const number = 100 + env.int(0, 899);
   const name = 'the ' + env.pick(FIRST) + ' ' + env.pick(SECOND);
-  let last = null;
   for (let attempt = 0; attempt < 40; attempt++) {
     const k = env.int(n === 3 ? 2 : 4, 8);
     const inner = env.int(10, 16);
@@ -747,8 +747,7 @@ function moonsPlan(env) {
     for (let guard = 0; guard < 8 && ascending(listing); guard++) listing = shuffled(env, radii);
     if (ascending(listing)) listing = radii.slice().reverse();
     const angles = Array.from({ length: n }, () => env.int(0, 359));
-    last = { kind: 'moons', number, name, k, radii: listing, names, angles };
-    return last;
+    return { kind: 'moons', number, name, k, radii: listing, names, angles };
   }
   return { kind: 'moons', number, name, k: 4, radii: [32, 12, 20], names: [0, 6, 3], angles: [40, 200, 300] };
 }
@@ -1011,7 +1010,7 @@ function moonsPiece(env, p) {
       { id: 'order', ask: 'the moons, shortest period first', kind: 'order', items: names.map((name, i) => ({ label: 'the ' + name + ' moon', value: i })) },
       { id: 'laps', ask: 'laps of the innermost moon for one lap of the outermost', kind: 'number', min: 1, max: 9, step: 1, value: 1, unit: 'laps' },
       { id: 'hint', ask: 'one moon in period order', kind: 'press', count: 1, label: 'show a clue', optional: true }
-    ].filter(Boolean),
+    ],
     solution: { order: answer.slice(), laps: p.k },
     check(c) {
       const value = c.value('order');
@@ -1052,13 +1051,13 @@ function moonsPiece(env, p) {
         c.status('shortest period first: ' + s.order.map((i) => names[i]).join(', '));
       }
       if (id === 'laps') {
-        const n = Math.round(Number(value));
-        if (n >= 1 && n <= 9 && (s.lapsAt == null || n !== s.laps)) {
+        const count = Math.round(Number(value));
+        if (count >= 1 && count <= 9 && (s.lapsAt == null || count !== s.laps)) {
           // The notches step from the count standing (none, the first time; mid-way, if the last
           // count had not landed) to the one set.
           s.lapsFrom = lapsShown(s, rite, c.reduced);
           footing();
-          s.laps = n;
+          s.laps = count;
           s.lapsAt = s.t;
           s.counts += 1;
         }
@@ -1114,7 +1113,9 @@ function moonsPiece(env, p) {
       return (c.done && !c.reduced && s.spin < LAP) || !settled(s, c);
     },
     end(c) {
-      c.status('the moons are in motion: watch the ' + names[answer[0]] + ' moon lap the ' + names[answer[n - 1]] + ' moon ' + WORDS[p.k] + ' times; tap any moon to inspect it');
+      c.status(c.reduced
+        ? 'in step: the ' + names[answer[0]] + ' moon laps the ' + names[answer[n - 1]] + ' moon ' + WORDS[p.k] + ' times; tap any moon to inspect it'
+        : 'the moons ride one lap of the outermost orbit: watch the ' + names[answer[0]] + ' moon lap the ' + names[answer[n - 1]] + ' moon ' + WORDS[p.k] + ' times; tap any moon to inspect it');
     }
   };
 }
@@ -1294,7 +1295,7 @@ function meetingPiece(env, p) {
   const clues = [
     'Each tick the inner gains ' + (p.outer - p.inner) + '/' + (p.inner * p.outer) + ' of a lap on the outer.',
     'At tick ' + p.inner + ', the inner has made one lap; the outer has not.',
-    'The inner must gain ' + (p.offset || 1) + ' lap on the outer before their next meeting. At tick ' + (first / 2) + ', it has gained half of that.',
+    'The inner must gain ' + (p.offset ? 'half a lap' : 'one whole lap') + ' on the outer before their next meeting.' + (first % 2 ? '' : ' At tick ' + first / 2 + ', it has gained half of that.'),
     'They are still apart at tick ' + (first - 1) + '.',
     'At their first reunion the inner has made ' + laps + ' full laps.'
   ];
@@ -1407,21 +1408,31 @@ function deal(env) {
   return plan;
 }
 
+// A plan's preview and its piece, by its kind: the one place the three puzzles are told apart.
+function preview(g, w, h, env, plan) {
+  if (plan.kind === 'moons') moonsPreview(g, w, h, env, plan);
+  else if (plan.kind === 'meeting') meetingPreview(g, w, h, env, plan);
+  else slingPreview(g, w, h, env, plan);
+}
+
+function pieceOf(env, plan) {
+  if (plan.kind === 'moons') return moonsPiece(env, plan);
+  if (plan.kind === 'meeting') return meetingPiece(env, plan);
+  return slingPiece(env, plan);
+}
+
 export default {
   id: 'gravity-well',
   needsSky: false,
-  animate(g, w, h, env, t) {
-    return false;
+  paint(g, w, h, env) {
+    preview(g, w, h, env, deal(env));
   },
   // The card is a still picture, whichever puzzle it deals: its moons are set going only by the
   // solving of the puzzle they belong to, the probe flies only when released and the meeting turns
   // only to a tick that is set. A card waits for nothing, so animate returns false and the feed
   // paints it again only for a new size or a new roll.
-  paint(g, w, h, env) {
-    const plan = deal(env);
-    if (plan.kind === 'moons') moonsPreview(g, w, h, env, plan);
-    else if (plan.kind === 'meeting') meetingPreview(g, w, h, env, plan);
-    else slingPreview(g, w, h, env, plan);
+  animate() {
+    return false;
   },
   spark(env) {
     const plan = deal(env);
@@ -1458,14 +1469,7 @@ export default {
     };
   },
   piece(env) {
-    const sling = carriedSling(env);
-    if (sling) return slingPiece(env, sling);
-    const moons = carriedMoons(env);
-    if (moons) return moonsPiece(env, moons);
-    const meeting = carriedMeeting(env);
-    if (meeting) return meetingPiece(env, meeting);
-    const plan = deal(env);
-    return plan.kind === 'moons' ? moonsPiece(env, plan)
-      : plan.kind === 'meeting' ? meetingPiece(env, plan) : slingPiece(env, plan);
+    // The card's own puzzle where it carried one; otherwise the one this seed deals.
+    return pieceOf(env, carriedSling(env) || carriedMoons(env) || carriedMeeting(env) || deal(env));
   }
 };

@@ -3,7 +3,7 @@
    opened from says which. See js/feed.js for what a module is and js/stage.js for what a piece
    is.
 
-   Two puzzles, both deduction:
+   Three puzzles, all deduction:
 
      the letter wheel  A note shifted round the alphabet, and sometimes written backwards first.
                        The wheel shows which letter stands for which at the setting the visitor
@@ -297,7 +297,7 @@ function settledAt(changes) {
 
 /* ---- the letter wheel ----------------------------------------------------------------------- */
 
-function plan(env) {
+function wheelPlan(env) {
   const seed = env.seed >>> 0;
   return {
     case: seed.toString(36).toUpperCase().padStart(7, '0'),
@@ -307,7 +307,7 @@ function plan(env) {
   };
 }
 
-function carried(env) {
+function carriedWheel(env) {
   const p = env.card && env.card.of;
   if (!p || p.family || typeof p.case !== 'string' || !/^[0-9A-Z]{7}$/.test(p.case)
       || !Number.isInteger(p.note) || p.note < 0 || p.note >= NOTES.length
@@ -397,6 +397,16 @@ function wheelLook(p, state, rite, reduced) {
   };
 }
 
+// Where the wheel stands on a scene of this size: the scene draws it there and a tap reads it there.
+function wheelPlace(w, h, v) {
+  const roomy = h >= 300 && w >= 420; // a scene with room for a legend and a wider wheel
+  return {
+    roomy,
+    radius: Math.min(w * 0.19, h * (roomy ? 0.2 : 0.17)) * Math.min(1.1, Math.max(0.9, v.scale)),
+    middle: h * (roomy ? 0.52 : 0.5)
+  };
+}
+
 function wheelTitle(p) {
   return 'letter ' + p.case + ': the wheel';
 }
@@ -409,11 +419,9 @@ function wheelScene(g, w, h, c, p, look, variant) {
   const word = keyWordOf(note);
   const span = keySpan(p);
   const m = Math.min(w, h);
-  const roomy = h >= 300 && w >= 420; // a scene with room for a legend and a wider wheel
+  const { roomy, radius, middle } = wheelPlace(w, h, v);
   const size = Math.max(9, Math.min(18, Math.round(m * 0.058)));
   const small = Math.max(8, Math.round(size * 0.8));
-  const radius = Math.min(w * 0.19, h * (roomy ? 0.2 : 0.17)) * Math.min(1.1, Math.max(0.9, v.scale));
-  const middle = h * (roomy ? 0.52 : 0.5);
   const rite = riteOf(c);
   background(g, w, h, c);
 
@@ -607,8 +615,8 @@ function wheelPreview(g, w, h, env, p) {
   wheelScene(g, w, h, env, p, wheelLook(p, blank(), riteOf(env), true), env.variant);
 }
 
-function wheelPiece(env) {
-  const p = carried(env) || plan(env);
+function wheelPiece(env, carriedPlan) {
+  const p = carriedPlan || wheelPlan(env);
   const helps = asked(env);
   const state = blank();
   const note = NOTES[p.note];
@@ -727,11 +735,9 @@ function wheelPiece(env) {
         ...state.hintAt.map((at) => [at, SPAN]), [state.reveal ? state.solvedAt : -1, REVEAL]]);
     },
     tap(x, y, c) {
-      const roomy = c.h >= 300 && c.w >= 420;
-      const v = env.variant || PLAIN;
-      const radius = Math.min(c.w * 0.19, c.h * (roomy ? 0.2 : 0.17)) * Math.min(1.1, Math.max(0.9, v.scale));
+      const { radius, middle } = wheelPlace(c.w, c.h, env.variant || PLAIN);
       const dx = x * c.w - c.w / 2;
-      const dy = y * c.h - c.h * (roomy ? 0.52 : 0.5);
+      const dy = y * c.h - middle;
       const distance = Math.hypot(dx, dy);
       if (distance >= radius * 0.3 && distance <= radius * 1.2) {
         const at = Math.atan2(dy, dx) + Math.PI / 2;
@@ -921,16 +927,19 @@ function grilleLook(p, board, s, rite, reduced) {
   };
 }
 
+// Where the board stands on a scene of this size: the scene draws it there and a tap reads it there.
+function grillePlace(w, h, v) {
+  const side = Math.min(w * 0.82, h * 0.6, Math.min(w * 0.78, h * 0.56) * v.scale);
+  const cx = w * (0.49 + v.turn * 0.02);
+  const cy = h * (0.37 + v.turn * 0.02);
+  return { side, cell: side / SIDE, cx, cy, left: cx - side / 2, top: cy - side / 2 };
+}
+
 function grilleScene(g, w, h, c, p, board, look, variant) {
   const v = variant || PLAIN;
   const col = c.colors;
   const m = Math.min(w, h);
-  const side = Math.min(w * 0.82, h * 0.6, Math.min(w * 0.78, h * 0.56) * v.scale);
-  const cell = side / SIDE;
-  const cx = w * (0.49 + v.turn * 0.02);
-  const cy = h * (0.37 + v.turn * 0.02);
-  const left = cx - side / 2;
-  const top = cy - side / 2;
+  const { side, cell, cx, cy, left, top } = grillePlace(w, h, v);
   const size = Math.max(9, Math.min(22, cell * 0.48));
   const small = Math.max(9, Math.min(16, m * 0.034));
   const rite = riteOf(c);
@@ -1188,11 +1197,9 @@ function grillePiece(env, carriedPlan) {
         [s.reveal ? s.solvedAt : -1, REVEAL]]);
     },
     tap(x, y, c) {
-      const v = env.variant || PLAIN;
-      const side = Math.min(c.w * 0.82, c.h * 0.6, Math.min(c.w * 0.78, c.h * 0.56) * v.scale);
-      const cell = side / SIDE;
-      const col = Math.floor((x * c.w - (c.w * (0.49 + v.turn * 0.02) - side / 2)) / cell);
-      const row = Math.floor((y * c.h - (c.h * (0.37 + v.turn * 0.02) - side / 2)) / cell);
+      const { cell, left, top } = grillePlace(c.w, c.h, env.variant || PLAIN);
+      const col = Math.floor((x * c.w - left) / cell);
+      const row = Math.floor((y * c.h - top) / cell);
       if (row < 0 || row >= SIDE || col < 0 || col >= SIDE) {
         c.status('tap a square to trace its letter through the four views of your key');
         return;
@@ -1297,6 +1304,14 @@ function rodLook(s, rite, reduced) {
   };
 }
 
+// Where the rod stands on a scene of this size, wound on `faces` faces of `across` letters: the
+// scene draws it there and a tap reads it there.
+function rodPlace(w, h, v, across, faces) {
+  const grow = Math.min(1.1, Math.max(0.85, v.scale));
+  const cell = Math.min((w * 0.8 * grow) / across, (h * 0.4 * grow) / faces);
+  return { cell, left: w / 2 - cell * across / 2, top: h * (0.5 + v.turn * 0.02) - cell * faces / 2 };
+}
+
 function rodScene(g, w, h, c, p, look, variant) {
   const v = variant || PLAIN;
   const col = c.colors;
@@ -1323,12 +1338,9 @@ function rodScene(g, w, h, c, p, look, variant) {
   }
 
   // The rod, a row to each face, with its two ends; the strip's letters wound on it.
-  const grow = Math.min(1.1, Math.max(0.85, v.scale));
-  const cell = Math.min((w * 0.8 * grow) / wind.across, (h * 0.4 * grow) / k);
+  const { cell, left, top } = rodPlace(w, h, v, wind.across, k);
   const rodW = cell * wind.across;
   const rodH = cell * k;
-  const left = w / 2 - rodW / 2;
-  const top = h * (0.5 + v.turn * 0.02) - rodH / 2;
   g.fillStyle = c.mix(col.bg, col.bg2, 0.55);
   g.fillRect(left, top, rodW, rodH);
   g.fillStyle = c.alpha(col.accent, 0.12);
@@ -1485,12 +1497,8 @@ function rodPiece(env, carriedPlan) {
         [s.reveal ? s.solvedAt : -1, REVEAL]]);
     },
     tap(x, y, c) {
-      const v = env.variant || PLAIN;
       const wind = rodWind(strip, s.faces);
-      const grow = Math.min(1.1, Math.max(0.85, v.scale));
-      const cell = Math.min(c.w * 0.8 * grow / wind.across, c.h * 0.4 * grow / s.faces);
-      const left = c.w / 2 - cell * wind.across / 2;
-      const top = c.h * (0.5 + v.turn * 0.02) - cell * s.faces / 2;
+      const { cell, left, top } = rodPlace(c.w, c.h, env.variant || PLAIN, wind.across, s.faces);
       const row = Math.floor((y * c.h - top) / cell);
       const column = Math.floor((x * c.w - left) / cell);
       if (row < 0 || row >= s.faces || column < 0 || column >= wind.across) {
@@ -1514,10 +1522,10 @@ export default {
   paint(g, w, h, env) {
     if (dealsGrille(env)) grillePreview(g, w, h, env, grillePlan(env));
     else if (dealsRod(env)) rodPreview(g, w, h, env, rodPlan(env));
-    else wheelPreview(g, w, h, env, plan(env));
+    else wheelPreview(g, w, h, env, wheelPlan(env));
   },
   animate() {
-    // A card of the cabinet is a printed thing, the wheel as much as the grille: a locked note
+    // A card of the cabinet is a printed thing, whichever lock it shows: a locked note
     // waits to be opened and nothing on it moves until it is, so the loop lets it go at once
     // (js/feed.js has the contract animate is held to).
     return false;
@@ -1545,7 +1553,7 @@ export default {
         of: r
       };
     }
-    const p = plan(env);
+    const p = wheelPlan(env);
     return {
       title: wheelTitle(p),
       mono: locked(p),
@@ -1560,7 +1568,8 @@ export default {
     if (grille) return grillePiece(env, grille);
     const rod = carriedRod(env);
     if (rod) return rodPiece(env, rod);
-    if (carried(env)) return wheelPiece(env);
+    const wheel = carriedWheel(env);
+    if (wheel) return wheelPiece(env, wheel);
     if (dealsGrille(env)) return grillePiece(env);
     return dealsRod(env) ? rodPiece(env) : wheelPiece(env);
   }
