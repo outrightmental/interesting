@@ -708,6 +708,69 @@ html[data-shifting] .stage-head {
   animation: pane-read var(--motion-medium) var(--ease-pane-read, var(--ease-flicker)) var(--d, 0ms) both;
 }
 
+// The sliding tray keeps nine equal squares and native targets at least 44px across at phone
+// widths. A slide moves the existing tile in the engine's FLIP treads; neighbours are sealed
+// through the shared control grammar. With less motion, both changes land at once.
+.probe-tiles {
+  position: relative;
+  isolation: isolate;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-rows: repeat(3, minmax(44px, 1fr));
+  gap: 0.5rem;
+  width: min(100%, 19rem);
+  aspect-ratio: 1;
+  min-height: 164px;
+  padding: 0.5rem;
+  border-radius: var(--md-sys-shape-corner-large);
+  background: var(--md-sys-color-surface-container-lowest);
+}
+
+.probe-tile,
+.probe-tile-space {
+  grid-column: var(--tile-col);
+  grid-row: var(--tile-row);
+  min-width: 0;
+  min-height: 44px;
+}
+
+button.probe-tile {
+  z-index: 1;
+  width: 100%;
+  padding: 0.5rem 0.25rem;
+  border-radius: var(--md-sys-shape-corner-small);
+  background: var(--md-sys-color-surface-container-highest);
+  color: var(--md-sys-color-on-surface);
+}
+
+.probe-tile .probe-option-label {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.probe-tile[data-set='true'] {
+  background: var(--md-sys-color-primary-container);
+  color: var(--md-sys-color-on-primary-container);
+}
+
+.probe-tile[data-set='true']::before {
+  opacity: var(--fill-opacity, 0.22);
+}
+
+.probe-tile[data-set='true'] .probe-option-label {
+  color: inherit;
+}
+
+.probe-tile-space {
+  z-index: 0;
+  display: grid;
+  place-items: center;
+  border: 1px dashed var(--md-sys-color-outline);
+  border-radius: var(--md-sys-shape-corner-small);
+  color: var(--md-sys-color-on-surface-variant);
+  @include type.scale(label-small);
+}
+
 // The thread board stays square, so each thread's percentage length and bearing follow its pins
 // at every width. A join pays the line out from one pin; removal reels it back along that same
 // line, reversing from wherever it has reached. Only the transform moves, in treads rolled for

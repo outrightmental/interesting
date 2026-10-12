@@ -397,6 +397,23 @@
       left: { verbal: 2, curious: 1 }, right: { tempestuous: 2, metrical: 1 },
       high: { cosmic: 2, geometric: 1 }, low: { ceremonial: 2, tending: 1 },
       roamed: { curious: 2, restless: 1 }, untouched: { divinatory: 2, tender: 1 }
+    },
+    {
+      probe: 'sliding-tray', name: 'the sliding tray', kind: 'tiles',
+      ask: 'Eight tiles and one empty square. Press a tile beside the space to slide it there. Make any arrangement, then open a puzzle whenever you like; there is no target pattern.',
+      tiles: [
+        { label: 'key', weights: { analytic: 3, curious: 1 } },
+        { label: 'wheel', weights: { geometric: 3, metrical: 2 } },
+        { label: 'shell', weights: { attentive: 3, cosmic: 2, brooding: 1 } },
+        { label: 'bell', weights: { ceremonial: 3, metrical: 1 } },
+        { label: 'leaf', weights: { rooted: 3, tender: 1 } },
+        { label: 'seed', weights: { tending: 3, rooted: 1 } },
+        { label: 'quill', weights: { verbal: 3, brooding: 2 } },
+        { label: 'match', weights: { restless: 3, tempestuous: 2 } }
+      ],
+      top: { cosmic: 2, divinatory: 1 }, bottom: { rooted: 2, tender: 1 },
+      left: { attentive: 2, brooding: 1 }, right: { analytic: 2, restless: 1 },
+      centre: { curious: 2, divinatory: 2, verbal: 1 }
     }
   ];
 
@@ -1295,7 +1312,7 @@
       place: placeProbe, draw: drawProbe, windows: windowsProbe, balance: balanceProbe,
       slider: sliderProbe, sky: skyProbe, keys: keysProbe, knock: knockProbe,
       rubbing: rubbingProbe, cairn: cairnProbe, compass: compassProbe, dye: dyeProbe,
-      censer: censerProbe, thread: threadProbe, lamp: lampProbe
+      censer: censerProbe, thread: threadProbe, lamp: lampProbe, tiles: tilesProbe
     };
     (kinds[probe.kind] || choiceProbe)(probe, body, trace, answer, finish);
     return probe;
@@ -4171,6 +4188,139 @@
       retire(done, finish());
     });
     paint();
+  }
+  // Only the final layout is read: the space's position and the tiles beside it, never the
+  // number, order or speed of slides. The tray remains playable until its host takes it away.
+  function tilesProbe(probe, body, trace, answer, finish) {
+    var order = probe.tiles.map(function (tile, index) { return index; });
+    for (var i = order.length - 1; i > 0; i--) {
+      var j = Math.floor(Math.random() * (i + 1));
+      var swap = order[i];
+      order[i] = order[j];
+      order[j] = swap;
+    }
+    order.splice(4, 0, -1);
+    var initial = order.slice();
+    var flights = [];
+    var board = el('div', 'probe-tiles');
+    board.setAttribute('role', 'group');
+    board.setAttribute('aria-label', 'Sliding tray: eight tiles and one empty square');
+    var space = el('span', 'probe-tile-space', 'space');
+    space.setAttribute('aria-hidden', 'true');
+    var buttons = probe.tiles.map(function (tile, index) {
+      var button = el('button', 'probe-tile');
+      button.type = 'button';
+      button.appendChild(el('span', 'probe-option-label', tile.label));
+      button.addEventListener('click', function () { slide(index); });
+      return button;
+    });
+    var controls = el('div', 'controls');
+    var done = el('button', 'btn-filled', 'open a puzzle');
+    done.type = 'button';
+    var reset = el('button', 'btn-text', 'start over');
+    reset.type = 'button';
+    controls.appendChild(done);
+    controls.appendChild(reset);
+
+    function touching(a, b) {
+      return Math.abs(a % 3 - b % 3) + Math.abs(Math.floor(a / 3) - Math.floor(b / 3)) === 1;
+    }
+    function neighbours() {
+      var gap = order.indexOf(-1);
+      return order.filter(function (index, slot) { return index >= 0 && touching(slot, gap); });
+    }
+    function report(detail) {
+      var gap = order.indexOf(-1);
+      note(trace, (detail ? detail + ' ' : '') + 'Empty square: row ' + (Math.floor(gap / 3) + 1)
+        + ', column ' + (gap % 3 + 1) + '. Beside it: '
+        + neighbours().map(function (index) { return probe.tiles[index].label; }).join(', ') + '.');
+    }
+    function lay() {
+      flights.forEach(function (flight) { flight.cancel(); });
+      flights = [];
+      var focused = document.activeElement;
+      var ready = neighbours();
+      order.forEach(function (index, slot) {
+        var node = index < 0 ? space : buttons[index];
+        node.style.setProperty('--tile-col', String(slot % 3 + 1));
+        node.style.setProperty('--tile-row', String(Math.floor(slot / 3) + 1));
+        if (index >= 0) {
+          var beside = ready.indexOf(index) !== -1;
+          if (beside) node.setAttribute('data-set', 'true');
+          else node.removeAttribute('data-set');
+          node.setAttribute('aria-label', probe.tiles[index].label + ', row ' + (Math.floor(slot / 3) + 1)
+            + ', column ' + (slot % 3 + 1)
+            + (beside ? '; press to slide into the empty square' : '; not beside the empty square'));
+        }
+        board.appendChild(node);
+      });
+      reset.disabled = order.every(function (index, slot) { return index === initial[slot]; });
+      if (buttons.indexOf(focused) !== -1) focused.focus({ preventScroll: true });
+    }
+    function redraw() {
+      var m = engine();
+      // FLIP measures the current picture first; cancelling older flights inside its change
+      // lets a rapid second slide start where the first is drawn, rather than jump to its end.
+      if (m && typeof m.flip === 'function' && !stilled()) {
+        flights = m.flip(board, lay, { items: buttons, dealt: false });
+      } else lay();
+    }
+    function slide(index) {
+      var slot = order.indexOf(index);
+      var gap = order.indexOf(-1);
+      if (!touching(slot, gap)) {
+        report('Only a tile beside the empty square can slide.');
+        return;
+      }
+      order[gap] = index;
+      order[slot] = -1;
+      redraw();
+      report('The ' + probe.tiles[index].label + ' slid into the space.');
+    }
+    board.addEventListener('click', function (ev) {
+      if (ev.target === board || ev.target === space) report('Press a tile beside the empty square to move it.');
+    });
+    board.addEventListener('keydown', function (ev) {
+      var moves = { ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1] };
+      var step = moves[ev.key];
+      if (!step) return;
+      ev.preventDefault();
+      var gap = order.indexOf(-1);
+      var x = gap % 3 + step[0];
+      var y = Math.floor(gap / 3) + step[1];
+      if (x < 0 || x > 2 || y < 0 || y > 2) {
+        report('The empty square is already at that edge.');
+        return;
+      }
+      var index = order[y * 3 + x];
+      slide(index);
+      buttons[index].focus({ preventScroll: true });
+    });
+    reset.addEventListener('click', function () {
+      order = initial.slice();
+      redraw();
+      report('The starting arrangement is back.');
+      buttons[neighbours()[0]].focus({ preventScroll: true });
+    });
+    done.addEventListener('click', function () {
+      Object.keys(answer).forEach(function (id) { delete answer[id]; });
+      var near = neighbours();
+      near.forEach(function (index) { add(answer, probe.tiles[index].weights, 2 / near.length); });
+      var gap = order.indexOf(-1);
+      var row = Math.floor(gap / 3);
+      var column = gap % 3;
+      if (row === 0) add(answer, probe.top, 0.5);
+      if (row === 2) add(answer, probe.bottom, 0.5);
+      if (column === 0) add(answer, probe.left, 0.5);
+      if (column === 2) add(answer, probe.right, 0.5);
+      if (gap === 4) add(answer, probe.centre, 1);
+      finish(0);
+    });
+    lay();
+    body.appendChild(board);
+    body.appendChild(el('p', 'probe-count', 'The lit tiles can slide. Arrow keys move the empty square; Enter or Space slides the focused tile. Start over restores the starting arrangement.'));
+    body.appendChild(controls);
+    report();
   }
   function describe(reading) {
     var o = reading && reading.orientation;
