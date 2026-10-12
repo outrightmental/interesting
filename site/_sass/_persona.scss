@@ -15,10 +15,8 @@
 // persona should be identical". The dialog keeps its own backdrop press, focus trap and Escape,
 // which are the browser's; it owns no paint of its own behind itself.
 //
-// One button and nothing beside it. There used to be a "go to <world>" link next to the portrait,
-// which made a second floating item of this corner on a wide screen and a third piece of
-// navigation on the site; the world a reading opens onto is an option in the logo's constellation
-// instead (issue #64).
+// One button and nothing beside it: the world a reading opens onto is an option in the logo's
+// constellation (issue #64), not a second floating item in this corner.
 //
 // How it moves (README: "Motion axiom", the cut, _cut.scss). Every change here is ONE clean edge
 // -- a slice at an angle or a curve round a point -- stepping across what changes in a few treads
@@ -878,10 +876,6 @@ button.persona-figure[data-set='true']::before {
 .persona-star-words label {
   color: var(--md-sys-color-on-surface-variant);
   @include type.scale(label-large);
-}
-
-.persona-star-words button {
-  justify-self: start;
 }
 
 .persona-star-words .panel-note {

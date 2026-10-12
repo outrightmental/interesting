@@ -524,6 +524,34 @@
     return { n: n, cx: cx, cy: cy, sx: Math.sqrt(sx / n), sy: Math.sqrt(sy / n),
       spread: spread / n, code: code };
   }
+  // How a sky spreads about its middle, measured as the field is drawn (twice as wide as it is
+  // tall): how long and how thin it is (major, minor), how far its stars sit from the middle on
+  // average (mean), and the farthest any star strays from that average (worst). One measure for
+  // figureOf and nearFigure, which differ only in how near counts as near enough.
+  function spreadOf(list, t) {
+    var xx = 0;
+    var yy = 0;
+    var xy = 0;
+    var reach = [];
+    var sum = 0;
+    var i;
+    for (i = 0; i < t.n; i++) {
+      var dx = (list[i].x - t.cx) * 2;
+      var dy = list[i].y - t.cy;
+      xx += dx * dx;
+      yy += dy * dy;
+      xy += dx * dy;
+      var r = Math.sqrt(dx * dx + dy * dy);
+      reach.push(r);
+      sum += r;
+    }
+    var half = (xx + yy) / 2;
+    var root = Math.sqrt(Math.max(0, (xx - yy) * (xx - yy) / 4 + xy * xy));
+    var mean = sum / t.n;
+    var worst = 0;
+    for (i = 0; i < t.n; i++) worst = Math.max(worst, Math.abs(reach[i] - mean));
+    return { major: half + root, minor: half - root, mean: mean, worst: worst };
+  }
   /* Figures: a few arrangements have names of their own, found by moving stars into them -- two
      stars close together, three or more in a straight line, five or more in a ring, four or more
      mirrored left to right. Measured as the field is drawn (twice as wide as it is tall), so a
@@ -537,32 +565,9 @@
       var gy = list[0].y - list[1].y;
       return gx * gx + gy * gy < 100 ? 'the twins' : '';
     }
-    var xx = 0;
-    var yy = 0;
-    var xy = 0;
-    var reach = [];
-    var sum = 0;
-    for (i = 0; i < t.n; i++) {
-      var dx = (list[i].x - t.cx) * 2;
-      var dy = list[i].y - t.cy;
-      xx += dx * dx;
-      yy += dy * dy;
-      xy += dx * dy;
-      var r = Math.sqrt(dx * dx + dy * dy);
-      reach.push(r);
-      sum += r;
-    }
-    var half = (xx + yy) / 2;
-    var root = Math.sqrt(Math.max(0, (xx - yy) * (xx - yy) / 4 + xy * xy));
-    var major = half + root;
-    var minor = half - root;
-    if (major > 100 * t.n && minor < major * 0.004) return t.n === 3 ? 'the belt' : 'the spear';
-    if (t.n >= 5) {
-      var mean = sum / t.n;
-      var worst = 0;
-      for (i = 0; i < t.n; i++) worst = Math.max(worst, Math.abs(reach[i] - mean));
-      if (mean > 12 && worst < mean * 0.14) return 'the halo';
-    }
+    var s = spreadOf(list, t);
+    if (s.major > 100 * t.n && s.minor < s.major * 0.004) return t.n === 3 ? 'the belt' : 'the spear';
+    if (t.n >= 5 && s.mean > 12 && s.worst < s.mean * 0.14) return 'the halo';
     if (t.n >= 4) {
       var off = 0;
       var mirrored = true;
@@ -592,32 +597,9 @@
       var gy = list[0].y - list[1].y;
       return gx * gx + gy * gy < 400 ? 'twins, if these two stars were a little closer' : '';
     }
-    var xx = 0;
-    var yy = 0;
-    var xy = 0;
-    var reach = [];
-    var sum = 0;
-    for (i = 0; i < t.n; i++) {
-      var dx = (list[i].x - t.cx) * 2;
-      var dy = list[i].y - t.cy;
-      xx += dx * dx;
-      yy += dy * dy;
-      xy += dx * dy;
-      var r = Math.sqrt(dx * dx + dy * dy);
-      reach.push(r);
-      sum += r;
-    }
-    var half = (xx + yy) / 2;
-    var skew = Math.sqrt(Math.max(0, (xx - yy) * (xx - yy) / 4 + xy * xy));
-    var major = half + skew;
-    var minor = half - skew;
-    if (major > 100 * t.n && minor < major * 0.03) return 'a straight line, if every star lined up exactly';
-    if (t.n >= 5) {
-      var mean = sum / t.n;
-      var worst = 0;
-      for (i = 0; i < t.n; i++) worst = Math.max(worst, Math.abs(reach[i] - mean));
-      if (mean > 12 && worst < mean * 0.3) return 'a ring, if every star sat the same distance from the middle';
-    }
+    var s = spreadOf(list, t);
+    if (s.major > 100 * t.n && s.minor < s.major * 0.03) return 'a straight line, if every star lined up exactly';
+    if (t.n >= 5 && s.mean > 12 && s.worst < s.mean * 0.3) return 'a ring, if every star sat the same distance from the middle';
     if (t.n >= 4) {
       var off = 0;
       var matched = 0;
@@ -1410,6 +1392,19 @@
   var openedBy = null;
   var sheetWasOpen = false;
   var sheetBox = null;
+  // Whether the sheet holds the shared veil, so the veil is given back once per close however
+  // the sheet is closed (the close button, Escape, a press on the backdrop, the browser's own).
+  var boxUp = false;
+  function raiseBox() {
+    if (!sheetBox || boxUp) return;
+    boxUp = true;
+    sheetBox.up();
+  }
+  function lowerBox() {
+    if (!sheetBox || !boxUp) return;
+    boxUp = false;
+    sheetBox.down();
+  }
   function sheetStatus(text) { if (sheet && sheet.status) say(sheet.status, text); }
   var skyAnswerIndex = 0;
   var skyAnswerWanted = false;
@@ -2298,7 +2293,7 @@
       carried = null;
       sweep();
       dropSheetGhost();
-      if (sheetBox) sheetBox.up();
+      raiseBox();
       // The sheet comes out of the control that opened it: the way and the treads are written
       // before it is shown, so its first frame is already the arrival's (is-arriving), and the
       // class comes off when the arrival is done.
@@ -2344,7 +2339,7 @@
     if (sheet.host.open) {
       if (activeDrag) endDrag(activeDrag.pointerId);
       leaveSheetGhost();
-      if (sheetBox) sheetBox.down();
+      lowerBox();
       if (typeof sheet.host.close === 'function') sheet.host.close();
       else sheet.host.removeAttribute('open');
     }
@@ -2369,7 +2364,7 @@
     resetSkyComparison();
     sheet.host.classList.remove('persona-sheet-fallback');
     endRite(sheet.host, 'arriving');
-    if (sheetBox) sheetBox.down();
+    lowerBox();
     // The portrait comes out from behind the veil and is drawn again (refresh). A first sky placed
     // while the sheet was open is cast into it as it does, once the mark that carries it home has
     // landed, so the two say it one after the other and not on top of each other.
