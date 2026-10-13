@@ -17,7 +17,7 @@
    The words form can swap a chosen thought into that star without moving any stars; focus follows
    the words to their new star, and the carrier is named for screen readers as well as ringed.
    Sky cards follow the words without changing their seed; a puzzle already begun keeps
-   its clues. The sheet's optional puzzle preview borrows the feed's own modules and card
+   its clues. With stars in the sheet, a live puzzle preview borrows the feed's own modules and card
    configurations through interestingFeed.previewSky(), so changing a star reveals a real world's
    response rather than an imitation. Moving a star updates the preview when the move ends.
    A pending preview is invalidated as soon as its stars change, even during a drag.
@@ -26,7 +26,8 @@
    Closing the sheet keeps a move just as releasing the star does. Replacing the sky releases
    any drag before rendering, so a later pointer release cannot restore the previous sky.
    The first preview's picture and words stay available for comparison while that world is being
-   previewed in the open sheet. This is a temporary picture, never another saved or editable sky.
+   previewed in the open sheet; the first change opens that comparison. This is a temporary
+   picture, never another saved or editable sky.
 
    Named-shape buttons toggle hollow targets on the existing sky, never placing stars themselves.
    Each star keeps its target while it moves; targets are reassigned only when membership changes.
@@ -1448,8 +1449,12 @@
     });
     var change = samePlaces ? 'Only the words have changed.'
       : sameWords ? 'Only the positions have changed.' : 'The stars or their words have changed.';
-    say(sheet.beforeChange, change + ' This is the first preview; the current one is above. '
-      + 'They may look alike: not every star affects every puzzle.', !sheet.comparison.open);
+    var firstShowing = sheet.comparison.hidden;
+    if (firstShowing) sheet.comparison.open = true;
+    var summary = sheet.comparison.querySelector('summary');
+    if (summary) summary.textContent = 'compare ' + skyAnswerSample.world.name + ' before and after';
+    say(sheet.beforeChange, change + ' Your first picture and words are here; the current view is above. '
+      + 'If they match, try a different star.', firstShowing || !sheet.comparison.open);
     show(sheet.comparison);
   }
   function drawSkyAnswer() {
@@ -1491,7 +1496,7 @@
       return;
     }
     var answerArriving = show(sheet.answer);
-    if (!skyAnswerWanted) return;
+    skyAnswerWanted = true;
     // A star held in a drag: the preview waiting for the stars it was asked for is no longer the
     // sky's, so it is let go now (its ticket spent) rather than drawn when it comes, and a new one
     // is asked for when the move ends.
@@ -1515,7 +1520,8 @@
       });
       say(sheet.answerWorld, sample.world.name, show(sheet.answerWorld));
       say(sheet.answerTitle, sample.title, show(sheet.answerTitle));
-      sheet.answerNote.textContent = 'Current preview. Move a star or change its words, then compare with the first preview. Press the preview button to try another world. Comparing does not change your stars.';
+      sheet.answerNote.textContent = 'See how ' + sample.world.name
+        + ' reads your stars. Move a star or change its words; your first view stays for comparison. Press the button to preview another world.';
       sheet.preview.style.setProperty('aspect-ratio', sample.aspect);
       say(sheet.answerLine, sample.line);
       sheet.answerLabel.textContent = 'preview another world';
@@ -2484,8 +2490,8 @@
     // Escape, which closes the dialog itself: closed here instead, through the same reads and the same
     // order as the close button, and the browser's own close after it finds the dialog shut.
     host.addEventListener('cancel', closeSheet);
-    // The first preview, opened under the line that opens it, arrives out of that line each time it
-    // is opened: the class goes on as the line is pressed, before the browser opens the box.
+    // After an automatic comparison, a visitor can close and reopen it. Reopening the
+    // first picture through its summary gives that picture its own arrival.
     var compareLine = sheet.comparison && sheet.comparison.querySelector ? sheet.comparison.querySelector('summary') : null;
     var firstPreview = sheet.comparison && sheet.comparison.querySelector ? sheet.comparison.querySelector('.persona-sky-before') : null;
     if (compareLine && firstPreview) compareLine.addEventListener('click', function () {

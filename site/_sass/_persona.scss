@@ -845,7 +845,7 @@ button.persona-figure[data-set='true']::before {
 .persona-sky-preview {
   position: relative;
   display: block;
-  width: min(100%, 20rem);
+  width: min(100%, 16rem);
   aspect-ratio: 1;
   overflow: hidden;
   border-radius: var(--md-sys-shape-corner-medium);
@@ -872,13 +872,14 @@ button.persona-figure[data-set='true']::before {
   @include type.scale(label-large);
 }
 
-// The first preview, opened under the line that opens it: it arrives as one part (is-arriving, put
-// on by js/persona.js as the line is pressed), out of that line -- from just above, travelling
-// down -- each time it is opened.
+// A changed sky opens the comparison with the rest of its box. If the visitor closes and
+// reopens it, the saved picture arrives from above its summary in its own treads.
 .persona-sky-before {
   display: grid;
   gap: 0.5rem;
   padding-block: 0.5rem;
+  padding-inline-start: 0.75rem;
+  border-inline-start: 2px solid var(--md-sys-color-tertiary);
   --arrive-x: 0px;
   --arrive-y: -12px;
   --arrive-angle: 180deg;
