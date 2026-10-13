@@ -11,12 +11,12 @@
                        the centre some number of times -- the folds -- and on some looms every copy
                        is laid down with its mirror image too, so the weave shows both hands. The
                        motif as laid once stands in the corner. Count the folds and say whether the
-                       weave is mirrored. A wrong check says which of the two is off.
+                       weave is mirrored. A wrong check says how many of the two hold.
      the moiré         A screen of thin upright lines, its count written on it, and a second screen
                        with a hidden count laid over it; the overlap is drawn honestly, line by
                        line, and shows as many broad bands as the two counts differ by. Say the
-                       second count and whether it is more or fewer. A wrong check says which of
-                       the two is off.
+                       second count and whether it is more or fewer. A wrong check says how many
+                       of the two hold.
 
    The sky colours the loom -- the stars are drawn behind it -- but never decides a puzzle: the
    plan is made from the seed, serialised whole on the card's `of`, and piece(env) opens on that
@@ -75,7 +75,7 @@ function clamp(v, lo, hi) {
                       -- is cut over at its roll's moment (rite.flicker), once, and stays.
 
    Every change is read against the piece's own clock, s.t, which frame() advances: a change made
-   at `since` has come came() of its way, which is 1 at once for a visitor who asked for less
+   at `since` has come the share came() gives of its way, which is 1 at once for a visitor who asked for less
    motion and for whatever stood there from the start. Each thing that moves has a roll of its
    own (rite.at): the same edge, with its own treads and its own moment -- and each TIME it moves
    it is rolled again (roll(): the thing's seed crossed with how many times it has moved), so a
@@ -158,6 +158,30 @@ function cover(g, rite, x, y, w, h, k) {
 // of the way up the stair it climbs: one way, from wherever it stood.
 function toward(from, to, step) {
   return step >= 1 ? to : from + (to - from) * step;
+}
+
+// The ticks of a count the visitor set, as they show at the clock's moment: stepping from the
+// count that was showing to the one set (counted, above), on the roll of that setting.
+function countLook(rite, s, reduced) {
+  return s.guess ? counted(roll(rite, 0x9e, s.guesses), came(s, s.guessAt, 1.2, reduced), s.guessFrom, s.guess) : 0;
+}
+
+// The visitor sets a count: it moves from the count `shown` now, on a roll of its own. A count
+// set to what it already is moves nothing.
+function setCount(s, shown, guess) {
+  if (guess === s.guess) return;
+  s.guessFrom = shown;
+  s.guess = guess;
+  s.guessAt = s.t;
+  s.guesses += 1;
+}
+
+// Whether the rim shows the visitor's own marks rather than the count on the knob: it does unless
+// the knob has since been set to a count the marks do not make, so the picture never says one
+// number while the knob says another.
+function marksShown(s) {
+  const n = s.ticks.length;
+  return n > 0 && (!s.guess || n === s.guess || n < 2 || n > MAX_FOLDS);
 }
 
 // The picture a frame would draw, as one string: the canvas's size and the scene's look. A frame
@@ -363,12 +387,12 @@ function foldsLook(plan, s, rite, reduced) {
   const got = (since, span) => came(s, since, span, reduced);
   return {
     turned: spun(rite, s, s.turnAt, reduced),
-    lit: s.lit ? rite.at(0x11).stair(got(s.litAt, 1.6)) : 0,
+    lit: s.litAt != null ? rite.at(0x11).stair(got(s.litAt, 1.6)) : 0,
     hand: s.handAt != null ? rite.at(0x1d).stair(got(s.handAt, 1.8)) : 0,
     ticks: s.ticks.map((tick) => roll(rite, 0xa1, tick.n).flicker(got(tick.at, 0.6))),
-    count: s.guess ? counted(roll(rite, 0x9e, s.guesses), got(s.guessAt, 1.2), s.guessFrom, s.guess) : 0,
+    count: countLook(rite, s, reduced),
     mirror: toward(s.mirrorFrom, s.mirror ? 1 : 0, roll(rite, 0x3d, s.mirrors).stair(got(s.mirrorAt, 1.2))),
-    open: s.open ? rite.at(0x0a).flicker(got(s.openAt, 1)) : 0
+    open: s.openAt != null ? rite.at(0x0a).flicker(got(s.openAt, 1)) : 0
   };
 }
 
@@ -424,10 +448,11 @@ function drawFolds(g, w, h, env, plan, s, look, variant) {
   g.arc(geo.cx, geo.cy, geo.R, 0, Math.PI * 2);
   g.stroke();
   // The marks the visitor set on the rim themselves, one per tap, each cut on at its own moment
-  // where it was set and turning with the loom; failing those, the count from the knob, as even
-  // ticks round the rim that step from the count that was showing to the one set in a few treads,
-  // one way, on the roll of that setting.
-  if (s.ticks.length) {
+  // where it was set and turning with the loom; once the knob says another count than the marks
+  // make, or with no marks at all, the count from the knob, as even ticks round the rim that step
+  // from the count that was showing to the one set in a few treads, one way, on the roll of that
+  // setting.
+  if (marksShown(s)) {
     g.strokeStyle = env.alpha(c.accent2, 0.9);
     g.lineWidth = Math.max(1.5, geo.m * 0.005);
     g.beginPath();
@@ -492,7 +517,7 @@ function drawFolds(g, w, h, env, plan, s, look, variant) {
 
 function foldsStill() {
   return {
-    turnAt: null, lit: false, litAt: null, open: false, openAt: null, t: 0, guess: null, guessAt: null, mirror: false, mirrorAt: null,
+    turnAt: null, litAt: null, openAt: null, t: 0, guess: null, guessAt: null, mirror: false, mirrorAt: null,
     // How many times each thing has moved (the roll for its next movement); what was showing when
     // it last moved, which it moves from (the count of ticks, the cover of the mirror twin); when
     // the loom showed the hand of the weave; and the picture last drawn (picture, above).
@@ -533,8 +558,8 @@ function foldsPiece(env, plan) {
       const foldsRight = Number(c.value('folds')) === plan.k;
       const mirrorRight = !!c.value('mirror') === plan.mirrored;
       if (foldsRight && mirrorRight) return { solved: true, say: 'the weave closes: ' + WORDS[plan.k] + ' folds, ' + (plan.mirrored ? 'each with its mirror image' : 'all of one hand') };
-      if (!foldsRight && !mirrorRight) return { solved: false, say: 'the loom does not close: the fold count and the mirror are both off' };
-      return { solved: false, say: foldsRight ? 'the fold count is right; the mirror is off' : 'the mirror is right; the fold count is off' };
+      if (!foldsRight && !mirrorRight) return { solved: false, say: 'the loom does not close: neither the fold count nor the mirror holds' };
+      return { solved: false, say: 'half the weave holds: one of the two answers is right, the other is off' };
     },
     start(c) {
       c.status('the loom is still; tap over each arm to mark it on the rim, and the marks count the folds');
@@ -547,13 +572,7 @@ function foldsPiece(env, plan) {
         const n = Math.round(Number(value));
         if (Number.isFinite(n)) {
           const guess = clamp(n, 2, MAX_FOLDS);
-          if (guess !== s.guess) {
-            // The ticks step from the count that was showing (none, the first time) to this one.
-            s.guessFrom = shown.count;
-            s.guess = guess;
-            s.guessAt = s.t;
-            s.guesses += 1;
-          }
+          setCount(s, shown.count, guess);
           c.status(guess + ' folds, you say');
         }
       }
@@ -569,10 +588,7 @@ function foldsPiece(env, plan) {
       if (id === 'hint') {
         const given = help(c, s, shows, helps, 'that is all the loom will show at this difficulty; the rest is counting',
           'the loom has shown what it has; the rest is counting');
-        if (given === 1) {
-          s.litAt = s.t;
-          s.lit = true;
-        }
+        if (given === 1) s.litAt = s.t;
         if (given === 2) s.handAt = s.t;
       }
       draw(c, true);
@@ -588,7 +604,8 @@ function foldsPiece(env, plan) {
         c.status('tap over an arm, nearer the rim, to mark it');
         return;
       }
-      const rel = Math.atan2(dy, dx) - loomBase(plan, v, look(c).turned);
+      const now = look(c);
+      const rel = Math.atan2(dy, dx) - loomBase(plan, v, now.turned);
       const near = s.ticks.findIndex((tick) => {
         const d = Math.abs((((tick.rel - rel) % (Math.PI * 2)) + Math.PI * 3) % (Math.PI * 2) - Math.PI);
         return d < 0.2;
@@ -596,7 +613,10 @@ function foldsPiece(env, plan) {
       if (near >= 0) s.ticks.splice(near, 1);
       else s.ticks.push({ rel, at: s.t, n: ++s.ticksSet });
       const n = s.ticks.length;
-      if (n >= 2 && n <= MAX_FOLDS) c.set('folds', n);
+      if (n >= 2 && n <= MAX_FOLDS) {
+        setCount(s, now.count, n);
+        c.set('folds', n);
+      }
       c.status(n === 0 ? 'no marks on the rim'
         : n === 1 ? 'one mark on the rim; mark every arm once to count the folds'
           : n > MAX_FOLDS ? 'more marks than any loom has folds; tap a mark to take it off'
@@ -610,13 +630,12 @@ function foldsPiece(env, plan) {
       if (!c.reduced) s.t += dt;
       draw(c);
       return !c.reduced && s.t < settledAt([[s.turnAt, SPIN], [s.litAt, 1.6], [s.handAt, 1.8], [s.guessAt, 1.2],
-        [s.mirrorAt, 1.2], [s.open ? s.openAt : null, 1], ...s.ticks.map((tick) => [tick.at, 0.6])]);
+        [s.mirrorAt, 1.2], [s.openAt, 1], ...s.ticks.map((tick) => [tick.at, 0.6])]);
     },
     // Solved: the answer is cut on, and the loom turns once by one arm's step, so every copy comes
     // to lie where its neighbour lay -- which is what a fold is -- and rests.
     end(c) {
-      s.open = true;
-      s.openAt = s.t;
+      if (s.openAt == null) s.openAt = s.t;
       if (s.turnAt == null) s.turnAt = s.t;
       c.status('the weave turns: ' + WORDS[plan.k] + ' folds' + (plan.mirrored ? ', mirrored' : ''));
       draw(c, true);
@@ -680,11 +699,11 @@ function moireLook(plan, s, rite, reduced) {
   const got = (since, span) => came(s, since, span, reduced);
   return {
     finer: s.finerAt != null ? rite.at(0x7f).stair(got(s.finerAt, 1.6)) : 0,
-    bands: s.open ? rite.at(0x6a).stair(got(s.openAt, 1.8)) : 0,
-    count: s.guess ? counted(roll(rite, 0x9e, s.guesses), got(s.guessAt, 1.2), s.guessFrom, s.guess) : 0,
+    bands: s.openAt != null ? rite.at(0x6a).stair(got(s.openAt, 1.8)) : 0,
+    count: countLook(rite, s, reduced),
     brackets: s.bandsAt != null ? notches(rite.at(0x2b), got(s.bandsAt, 1.2), Math.abs(plan.first - plan.second)) : 0,
     which: roll(rite, 0x5c, s.whiches).flicker(got(s.whichAt, 0.9)) ? s.which : s.whichFrom,
-    open: s.open ? rite.at(0x0a).flicker(got(s.openAt, 1)) : 0
+    open: s.openAt != null ? rite.at(0x0a).flicker(got(s.openAt, 1)) : 0
   };
 }
 
@@ -790,7 +809,7 @@ function drawMoire(g, w, h, env, plan, s, look, variant) {
 
 function moireStill() {
   return {
-    open: false, openAt: null, t: 0, guess: null, guessAt: null, which: null, whichAt: null,
+    openAt: null, t: 0, guess: null, guessAt: null, which: null, whichAt: null,
     // How many times each thing has moved (the roll for its next movement); what was showing when
     // it last moved, which it moves from (the count of ticks, the direction said); when the press
     // showed which screen is finer and how many bands there are; and the picture last drawn
@@ -834,8 +853,8 @@ function moirePiece(env, plan) {
       const countRight = Number(c.value('second')) === plan.second;
       const whichRight = c.value('which') === (more ? 'more' : 'fewer');
       if (countRight && whichRight) return { solved: true, say: 'the seal reads: ' + plan.second + ' lines, ' + WORDS[apart] + (apart === 1 ? ' band' : ' bands') + ' across the print' };
-      if (!countRight && !whichRight) return { solved: false, say: 'the seal does not read: the count and the direction are both off' };
-      return { solved: false, say: countRight ? 'the count is right; the direction is off' : 'the direction is right; the count is off' };
+      if (!countRight && !whichRight) return { solved: false, say: 'the seal does not read: neither the count nor the direction holds' };
+      return { solved: false, say: 'half the seal reads: one of the two answers is right, the other is off' };
     },
     start(c) {
       c.status('count the broad bands across the print');
@@ -848,13 +867,7 @@ function moirePiece(env, plan) {
         const n = Math.round(Number(value));
         if (Number.isFinite(n)) {
           const guess = clamp(n, 4, 30);
-          if (guess !== s.guess) {
-            // The ticks step from the count that was showing (none, the first time) to this one.
-            s.guessFrom = shown.count;
-            s.guess = guess;
-            s.guessAt = s.t;
-            s.guesses += 1;
-          }
+          setCount(s, shown.count, guess);
           c.status(guess + ' lines on the second screen, you say');
         }
       }
@@ -880,12 +893,11 @@ function moirePiece(env, plan) {
     frame(t, dt, c) {
       if (!c.reduced) s.t += dt;
       draw(c);
-      return !c.reduced && s.t < settledAt([[s.finerAt, 1.6], [s.open ? s.openAt : null, 1.8], [s.guessAt, 1.2],
+      return !c.reduced && s.t < settledAt([[s.finerAt, 1.6], [s.openAt, 1.8], [s.guessAt, 1.2],
         [s.bandsAt, 1.2], [s.whichAt, 0.9]]);
     },
     end(c) {
-      s.open = true;
-      s.openAt = s.t;
+      if (s.openAt == null) s.openAt = s.t;
       c.status(WORDS[apart] + (apart === 1 ? ' band' : ' bands') + ' from ' + plan.first + ' lines against ' + plan.second + '; the bands are lit on the print');
       draw(c, true);
     }
