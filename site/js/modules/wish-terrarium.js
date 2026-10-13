@@ -1,6 +1,6 @@
-/* The terrarium: plants under glass, grown from the persona's stars, and two puzzles kept there.
+/* The terrarium: plants under glass, grown from the persona's stars, and two puzzle families.
    As a card it is the puzzle the seed deals, drawn small through the glass (paint, spark); as a
-   piece it is one of the two puzzles below, and the card it was opened from says which. See
+   piece it is a watering or age puzzle below, and the card it was opened from says which. See
    js/feed.js for what a module is and js/stage.js for what a piece is.
 
    Two puzzles, both deduction:
@@ -12,6 +12,11 @@
                       each plant, the lamp, the vent, and a drop beside any plant watered last
                       time. Mark the plants that get water. A wrong check says how many of the
                       right plants are marked and how many marked should stay dry, and no more.
+                      Some cards ask for the second round instead: watered soil rises by one,
+                      unwatered soil falls by one, bounded by 1 and 5, and the first round becomes
+                      the last-time record. Mark the second round and count the first. These
+                      cards always change which plants drink. A hint traces both judgements;
+                      after a solve the glass shows the second round's readings.
      the oldest stem  Four stems, each tagged with how many leaves it grows in a week, each with
                       its leaves drawn and counted. Age is leaves over rate, and the ages are
                       whole weeks, all different. Put the stems oldest to youngest and say how old
@@ -559,16 +564,48 @@ function watered(plan) {
   return out;
 }
 
+function afterWater(plan) {
+  const got = watered(plan);
+  return {
+    kind: 'water', n: plan.n, rules: plan.rules,
+    soil: plan.soil.map((v, i) => clamp(v + (got[i] ? 1 : -1), 1, 5)),
+    last: got.map((v) => v ? 1 : 0), lamp: plan.lamp, vent: plan.vent
+  };
+}
+
+function waterReason(plan, i) {
+  const got = watered(plan);
+  const soil = 'soil reads ' + plan.soil[i];
+  const lamp = 'the lamp is ' + (plan.lamp ? 'on' : 'off');
+  const last = 'it was ' + (plan.last[i] ? '' : 'not ') + 'watered last time';
+  const facts = {
+    soil, lamp, twice: last,
+    left: i > 0 ? 'plant ' + i + (got[i - 1] ? ' gets water' : ' stays dry') : 'there is no plant to its left',
+    vent: 'the vent is ' + (plan.vent ? 'open' : 'shut') + ' and ' + soil,
+    both: lamp + ' and ' + last
+  };
+  return 'plant ' + (i + 1) + ' (' + RULES[plan.rules[i]].tag + '): ' + facts[plan.rules[i]]
+    + ', so ' + (got[i] ? 'water it' : 'leave it dry');
+}
+
 function waterOk(p) {
   const n = Number(p && p.n);
   if (n !== 5 && n !== 6 && n !== 7) return false;
+  if (p.rounds !== undefined && p.rounds !== 2) return false;
   const list = (v, ok) => Array.isArray(v) && v.length === n && v.every(ok);
   if (!list(p.rules, (r, i) => RULE_IDS.includes(r) && !(i === 0 && r === 'left'))) return false;
   if (!list(p.soil, (v) => Number.isInteger(v) && v >= 1 && v <= 5)) return false;
   if (!list(p.last, (v) => v === 0 || v === 1)) return false;
   if ((p.lamp !== 0 && p.lamp !== 1) || (p.vent !== 0 && p.vent !== 1)) return false;
-  const count = watered(p).filter(Boolean).length;
-  return count >= 1 && count < n;
+  const first = watered(p);
+  const count = first.filter(Boolean).length;
+  if (count < 1 || count >= n) return false;
+  if (p.rounds === 2) {
+    const second = watered(afterWater(p));
+    const total = second.filter(Boolean).length;
+    return total >= 1 && total < n && second.some((v, i) => v !== first[i]);
+  }
+  return true;
 }
 
 function waterPlan(env) {
@@ -584,7 +621,13 @@ function waterPlan(env) {
       last.push(env.chance(0.45) ? 1 : 0);
     }
     const plan = { kind: 'water', n, rules, soil, last, lamp: env.chance(0.5) ? 1 : 0, vent: env.chance(0.5) ? 1 : 0 };
-    if (new Set(rules).size >= 3 && waterOk(plan)) return plan;
+    if (new Set(rules).size >= 3 && waterOk(plan)) {
+      if (env.chance(0.45)) {
+        const forecast = { ...plan, rounds: 2 };
+        if (waterOk(forecast)) return forecast;
+      }
+      return plan;
+    }
   }
   return { kind: 'water', n: 5, rules: ['soil', 'lamp', 'left', 'twice', 'vent'], soil: [2, 4, 3, 1, 3], last: [0, 1, 0, 1, 0], lamp: 1, vent: 1 };
 }
@@ -592,10 +635,12 @@ function waterPlan(env) {
 function carriedWater(env) {
   const p = env.card && env.card.of;
   if (!p || p.kind !== 'water' || !waterOk(p)) return null;
-  return { kind: 'water', n: p.n, rules: p.rules.slice(), soil: p.soil.slice(), last: p.last.slice(), lamp: p.lamp, vent: p.vent };
+  return { kind: 'water', n: p.n, rules: p.rules.slice(), soil: p.soil.slice(), last: p.last.slice(), lamp: p.lamp, vent: p.vent,
+    ...(p.rounds === 2 ? { rounds: 2 } : {}) };
 }
 
 function waterTitle(plan) {
+  if (plan.rounds === 2) return 'the second rain: ' + WORDS[plan.n] + ' plants';
   if (plan.n === 7) return 'the crowded bed: seven under glass';
   return 'who gets water: ' + WORDS[plan.n] + ' plants';
 }
@@ -677,17 +722,20 @@ function drawWater(g, w, h, env, plan, s, variant, plates) {
   const { k, small } = metrics(w, h, v);
   const tiny = Math.max(7, Math.min(11, Math.round(geo.cell * 0.16)));
   const doneP = s.doneAt >= 0 ? came(s, s.doneAt, FOG, reduced) : 0;
+  const later = plan.rounds === 2 ? afterWater(plan) : null;
+  const readings = later && s.doneAt >= 0 && rite.flicker(doneP) ? later : plan;
   plate(plates, 'under', g, w, h, env, (pg) => {
     glass(pg, w, h, env, v, !!plan.lamp);
     lampAndVent(pg, w, h, env, plan, k);
   });
   write(g, 'lamp ' + (plan.lamp ? 'on' : 'off'), w * 0.5 + 12 * k, h * 0.075, small, 'left', env.alpha(c.fg, 0.9));
   write(g, 'vent ' + (plan.vent ? 'open' : 'shut'), w * 0.9 - 14 * k, h * 0.075, small, 'right', env.alpha(c.fg, 0.9));
+  if (later) write(g, readings === plan ? 'round 1 readings' : 'round 2 readings', w * 0.05, h * 0.025, small, 'left', c.fg);
   // The plants, each with its number, its meter, its mark and its tag. A marked plant changes by
   // its area: the air over its bed and the wet ground at its foot are cut in behind the piece's
   // edge, and its drops and its glow come with them, all up the stem's own stair from the moment
   // it was marked and back down it from the moment it was unmarked.
-  const got = watered(plan);
+  const got = watered(later || plan);
   const tips = [];
   for (let i = 0; i < n; i++) {
     const x = geo.left + (i + 0.5) * geo.cell;
@@ -708,11 +756,11 @@ function drawWater(g, w, h, env, plan, s, variant, plates) {
     const gap = bw * 0.3;
     const x0 = x - (5 * bw + 4 * gap) / 2;
     for (let j = 0; j < 5; j++) {
-      g.fillStyle = j < plan.soil[i] ? c.accent2 : env.alpha(c.muted, 0.25);
+      g.fillStyle = j < readings.soil[i] ? c.accent2 : env.alpha(c.muted, 0.25);
       g.fillRect(x0 + j * (bw + gap), my - bw / 2, bw, bw);
     }
-    write(g, 'soil ' + plan.soil[i], x, my + bw * 0.5 + tiny * 0.8, tiny, 'center', env.alpha(c.fg, 0.9));
-    if (plan.last[i]) {
+    write(g, 'soil ' + readings.soil[i], x, my + bw * 0.5 + tiny * 0.8, tiny, 'center', env.alpha(c.fg, 0.9));
+    if (readings.last[i]) {
       drop(g, env, x - tiny * 1.6, geo.soilY + h * 0.165, k * 0.9, 0.9);
       write(g, 'last time', x - tiny * 0.9, geo.soilY + h * 0.165, tiny, 'left', env.alpha(c.fg, 0.8));
     }
@@ -742,7 +790,10 @@ function waterPreview(g, w, h, env, plan) {
 function waterPiece(env, plan) {
   const helps = asked(env).helps;
   const n = plan.n;
-  const got = watered(plan);
+  const first = watered(plan);
+  const firstCount = first.filter(Boolean).length;
+  const later = plan.rounds === 2 ? afterWater(plan) : null;
+  const got = later ? watered(later) : first;
   const answer = [];
   for (let i = 0; i < n; i++) if (got[i]) answer.push(i);
   const s = waterState(n);
@@ -772,46 +823,61 @@ function waterPiece(env, plan) {
   }
   return {
     title: waterTitle(plan),
-    brief: capital(WORDS[n]) + ' plants wait under glass at midnight, each tagged with one rule. The lamp is ' + (plan.lamp ? 'on' : 'off') + ' and the vent is ' + (plan.vent ? 'open' : 'shut') + '. Each plant has a soil reading; a drop marks one watered last time. The tags: '
-      + kinds.map((r) => RULES[r].tag + ' (' + RULES[r].rule + ')').join('; ') + '. Judge them left to right.',
-    goal: 'Mark every plant that gets water, and none that stays dry.',
+    brief: (later
+      ? 'Forecast two watering rounds from the initial readings. Mark who drinks in round 2 and count who drinks in round 1. Between rounds, watered soil rises by 1 and unwatered soil falls by 1, never below 1 or above 5. Round 1 replaces the last-time record; lamp and vent do not change. '
+      : capital(WORDS[n]) + ' plants wait under glass at midnight, each tagged with one rule. ')
+      + 'The lamp is ' + (plan.lamp ? 'on' : 'off') + ' and the vent is ' + (plan.vent ? 'open' : 'shut') + '. Each plant has a soil reading; a drop marks one watered last time. The tags: '
+      + kinds.map((r) => RULES[r].tag + ' (' + RULES[r].rule + ')').join('; ') + (later ? '. Judge each round left to right.' : '. Judge them left to right.'),
+    goal: later ? 'Mark exactly the plants that get water in round 2, and give the number watered in round 1.' : 'Mark every plant that gets water, and none that stays dry.',
     aspect: '16 / 10',
-    checkLabel: 'check the plants',
+    checkLabel: later ? 'check both rounds' : 'check the plants',
     steps: [
-      { id: 'water', ask: 'the plants to water: tap them under the glass, or mark them here', kind: 'pick', items: plan.rules.map((r, i) => ({ label: 'plant ' + (i + 1) + ' (' + RULES[r].tag + '); soil ' + plan.soil[i] + (plan.last[i] ? '; watered last time' : '; not watered last time'), value: i })) },
-      { id: 'hint', ask: 'one plant judged', kind: 'press', count: 1, label: 'show me one', optional: true }
+      { id: 'water', ask: later ? 'plants to water in round 2: tap them under the glass, or mark them here; labels give the initial readings' : 'the plants to water: tap them under the glass, or mark them here', kind: 'pick', items: plan.rules.map((r, i) => ({ label: 'plant ' + (i + 1) + ' (' + RULES[r].tag + '); soil ' + plan.soil[i] + (plan.last[i] ? '; watered last time' : '; not watered last time'), value: i })) },
+      ...(later ? [{ id: 'first', ask: 'how many plants drink in round 1', kind: 'number', min: 0, max: n, step: 1, value: 0, unit: 'plants' }] : []),
+      { id: 'hint', ask: later ? 'one plant traced through both rounds' : 'one plant judged', kind: 'press', count: 1, label: later ? 'trace one plant' : 'show me one', optional: true }
     ],
-    solution: { water: answer },
+    solution: { water: answer, ...(later ? { first: firstCount } : {}) },
     check(c) {
       const chosen = chosenNow(c);
       const right = answer.filter((i) => chosen.includes(i)).length;
       const dry = chosen.filter((i) => !got[i]).length;
-      const solved = chosen.length === answer.length && right === answer.length && dry === 0;
+      const firstRight = !later || Number(c.value('first')) === firstCount;
+      const solved = chosen.length === answer.length && right === answer.length && dry === 0 && firstRight;
       let say;
       if (solved) say = 'the round is kept: ' + (answer.length === 1 ? 'one plant drinks' : WORDS[answer.length] + ' plants drink') + ', and the rest stay dry';
       else if (!right) say = 'none of the right plants is marked yet' + (dry ? ', and ' + WORDS[dry] + ' marked that should stay dry' : '');
       else say = WORDS[right] + ' of the right plants marked' + (dry ? ', and ' + WORDS[dry] + ' marked that should stay dry' : '');
+      if (later) {
+        say = solved
+          ? 'both rounds kept: ' + firstCount + ' watered in round 1, ' + answer.length + ' in round 2'
+          : 'round 2: ' + say + '; the round 1 count ' + (firstRight ? 'matches' : 'does not match');
+      }
       return { solved, say };
     },
     start(c) {
-      c.status('tap a plant to mark it for water');
+      c.status(later ? 'the glass shows round 1 readings; your marks are for round 2' : 'tap a plant to mark it for water');
       draw(c);
     },
     apply(id, value, c) {
       if (id === 'water' && Array.isArray(value)) {
         take(value.map(Number).filter((i) => Number.isInteger(i) && i >= 0 && i < n).sort((a, b) => a - b), c);
-        c.status(s.chosen.length ? 'marked: ' + s.chosen.map((i) => 'plant ' + (i + 1)).join(', ') : 'nothing marked');
+        c.status((later ? 'round 2: ' : '') + (s.chosen.length ? 'marked: ' + s.chosen.map((i) => 'plant ' + (i + 1)).join(', ') : 'nothing marked'));
       }
+      if (id === 'first' && later) c.status('you count ' + Number(value) + ' plants watered in round 1');
       if (id === 'hint') {
+        const unseen = plan.rules.map((r, i) => i).filter((i) => !s.hinted.includes(i));
         const next = s.hinted.length < helps
-          ? plan.rules.map((r, i) => i).find((i) => !s.hinted.includes(i) && s.chosen.includes(i) !== got[i])
+          ? unseen.find((i) => s.chosen.includes(i) !== got[i]) ?? (later ? unseen[0] : undefined)
           : undefined;
         if (next !== undefined) {
           s.hinted.push(next);
           s.hintAt[next] = s.t;
           paced.stir(s.t + (c.reduced ? 0 : HINT));
           c.hint();
-          c.status('plant ' + (next + 1) + (got[next] ? ' gets water' : ' stays dry'));
+          c.status(later
+            ? 'Round 1, ' + waterReason(plan, next) + '. Before round 2 its soil reads ' + later.soil[next]
+              + '. Round 2, ' + waterReason(later, next) + '.'
+            : waterReason(plan, next) + '.');
         } else if (s.hinted.length >= helps) {
           c.status('that is all the glass will show at this difficulty; the rest is yours');
         } else {
@@ -834,7 +900,7 @@ function waterPiece(env, plan) {
       const next = s.chosen.includes(col) ? s.chosen.filter((i) => i !== col) : s.chosen.concat([col]).sort((a, b) => a - b);
       take(next, c);
       c.set('water', next.slice());
-      c.status('plant ' + (col + 1) + (next.includes(col) ? ' marked for water' : ' left dry'));
+      c.status('plant ' + (col + 1) + (next.includes(col) ? ' marked for water' : ' left dry') + (later ? ' in round 2' : ''));
       draw(c);
     },
     frame(t, dt, c) {
@@ -847,7 +913,10 @@ function waterPiece(env, plan) {
       return paced.due(s, c);
     },
     end(c) {
-      c.status('watered: ' + answer.map((i) => 'plant ' + (i + 1)).join(', ') + '; the glass fogs over and the rest stay dry');
+      c.status(later
+        ? 'round 1 watered ' + firstCount + ' plants; round 2 waters ' + answer.map((i) => 'plant ' + (i + 1)).join(', ')
+          + '. As the bed blooms, the glass reveals round 2 soil and last-time drops. You can still change your marks.'
+        : 'watered: ' + answer.map((i) => 'plant ' + (i + 1)).join(', ') + '; the glass fogs over and the rest stay dry');
     }
   };
 }
@@ -1152,8 +1221,10 @@ export default {
       const plan = d.plan;
       return {
         title: waterTitle(plan),
-        mono: 'lamp ' + (plan.lamp ? 'on' : 'off') + ' / vent ' + (plan.vent ? 'open' : 'shut') + '\nsoil ' + plan.soil.join(' ') + '\ntags: ' + plan.rules.map((r) => RULES[r].tag).join('; '),
-        text: plan.n === 7
+        mono: (plan.rounds === 2 ? 'round 1 readings\n' : '') + 'lamp ' + (plan.lamp ? 'on' : 'off') + ' / vent ' + (plan.vent ? 'open' : 'shut') + '\nsoil ' + plan.soil.join(' ') + '\ntags: ' + plan.rules.map((r) => RULES[r].tag).join('; '),
+        text: plan.rounds === 2
+          ? 'The second rain does not belong to the same roots. Work out who drinks in round 2 as the soil changes, and count the plants watered in round 1.'
+          : plan.n === 7
           ? 'The crowded bed: seven tenants under one lamp, and every rule leans on its neighbour. Mark the ones that drink.'
           : 'A midnight round under glass. Every plant wears one rule; the readings say which of them drink. Mark them.',
         aspect: '16 / 10',
