@@ -1296,6 +1296,107 @@ button.probe-stone[data-here='true'] {
   }
 }
 
+// The three dice, unrolled: plain buttons whose pips the stylesheet draws from data-face, so the
+// dice need no canvas and no die glyph a font may lack. A press rolls a die one face on -- a
+// quarter turn arriving in the ratchet's even clicks, cut for that turn (--ease-die-turn and its
+// twin, written by the script), with the new face up throughout: the turn is the movement, the
+// face is the state -- and a die once turned rests sealed from the press (data-set, the engine's
+// seal), so the finished picture shows which dice were authored and which were left as they fell.
+.probe-dice {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+}
+
+button.probe-die {
+  width: clamp(64px, 20vw, 88px);
+  aspect-ratio: 1;
+  min-height: 64px;
+  padding: 0.6rem;
+  border-radius: var(--md-sys-shape-corner-medium);
+  background: var(--md-sys-color-surface-container-highest);
+  color: var(--md-sys-color-on-surface);
+}
+
+.probe-die[data-set='true'] {
+  background: var(--md-sys-color-primary-container);
+  color: var(--md-sys-color-on-primary-container);
+}
+
+.probe-die[data-set='true']::before {
+  opacity: var(--fill-opacity, 0.22);
+}
+
+.probe-die-pips {
+  display: grid;
+  width: 100%;
+  height: 100%;
+  grid-template-columns: repeat(3, 1fr);
+  grid-template-rows: repeat(3, 1fr);
+  place-items: center;
+  pointer-events: none;
+}
+
+.probe-die-pip {
+  width: 60%;
+  aspect-ratio: 1;
+  border-radius: 50%;
+  background: currentColor;
+  opacity: 0;
+}
+
+// Which pips a face shows: the grid's cells numbered 1 to 9, reading across.
+.probe-die[data-face='1'] .probe-die-pip:nth-child(5),
+.probe-die[data-face='2'] .probe-die-pip:nth-child(3),
+.probe-die[data-face='2'] .probe-die-pip:nth-child(7),
+.probe-die[data-face='3'] .probe-die-pip:nth-child(3),
+.probe-die[data-face='3'] .probe-die-pip:nth-child(5),
+.probe-die[data-face='3'] .probe-die-pip:nth-child(7),
+.probe-die[data-face='4'] .probe-die-pip:nth-child(1),
+.probe-die[data-face='4'] .probe-die-pip:nth-child(3),
+.probe-die[data-face='4'] .probe-die-pip:nth-child(7),
+.probe-die[data-face='4'] .probe-die-pip:nth-child(9),
+.probe-die[data-face='5'] .probe-die-pip:nth-child(1),
+.probe-die[data-face='5'] .probe-die-pip:nth-child(3),
+.probe-die[data-face='5'] .probe-die-pip:nth-child(5),
+.probe-die[data-face='5'] .probe-die-pip:nth-child(7),
+.probe-die[data-face='5'] .probe-die-pip:nth-child(9),
+.probe-die[data-face='6'] .probe-die-pip:nth-child(1),
+.probe-die[data-face='6'] .probe-die-pip:nth-child(3),
+.probe-die[data-face='6'] .probe-die-pip:nth-child(4),
+.probe-die[data-face='6'] .probe-die-pip:nth-child(6),
+.probe-die[data-face='6'] .probe-die-pip:nth-child(7),
+.probe-die[data-face='6'] .probe-die-pip:nth-child(9) {
+  opacity: 1;
+}
+
+// The turn: the twin tick names restart it on every press (the stamp gives way to it, so one
+// press is one movement). Each twin reads its own rolled stair; the script writes both names on
+// the die for each turn (alias), with the ratchet behind them for a page with no engine.
+.probe-die[data-tick='a'] {
+  animation: die-turn var(--motion-die-turn, var(--motion-medium)) var(--ease-die-turn, var(--ease-ratchet)) both;
+}
+
+.probe-die[data-tick='b'] {
+  animation: die-turn-b var(--motion-die-turn-b, var(--motion-medium)) var(--ease-die-turn-b, var(--ease-ratchet)) both;
+}
+
+// Dealt in behind the slice their question arrives by, as any options are, and standing unmasked
+// once the edge has crossed (data-dealt='arrived', js/threshold.js).
+.probe-dice button.probe-die[data-dealt='true'] {
+  --cut: 100%;
+  @include cut.develop(develop, medium);
+  animation-delay: var(--d, 0ms);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .probe-dice button.probe-die[data-dealt='true'],
+  .probe-die[data-tick] {
+    animation: none;
+    mask: none;
+  }
+}
+
 // ---- the keyframes: each a from and a to, stepped by its stair -------------------------------
 // Each plays at one of the page's lengths (--motion-short, --motion-medium, --motion-long), never a
 // length written on the element: the engine rolls a spell's treads afresh on the element that
@@ -1400,6 +1501,28 @@ button.probe-stone[data-here='true'] {
 
   to {
     rotate: var(--key-turn, 12deg);
+  }
+}
+
+// A die rolling one face on: a quarter turn arriving in the ratchet's clicks, the new face up
+// throughout. A twin, as above.
+@keyframes die-turn {
+  from {
+    rotate: -90deg;
+  }
+
+  to {
+    rotate: 0deg;
+  }
+}
+
+@keyframes die-turn-b {
+  from {
+    rotate: -90deg;
+  }
+
+  to {
+    rotate: 0deg;
   }
 }
 

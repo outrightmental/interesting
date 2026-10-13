@@ -456,6 +456,26 @@
       sideways: { metrical: 2, geometric: 1, ceremonial: 1 },
       drift: { cosmic: 2, tempestuous: 1, curious: 1 },
       lingered: { tender: 2, brooding: 1, attentive: 1 }
+    },
+    {
+      probe: 'unrolled-dice', name: 'three dice, unrolled', kind: 'dice',
+      ask: 'Three dice lie on the table as they fell, and nobody saw the throw. Turn any die to the face it should have shown, or let them lie.',
+      label: 'read them as they lie',
+      faces: [
+        { tender: 2, brooding: 1 },
+        { rooted: 2, tending: 1 },
+        { ceremonial: 2, divinatory: 1 },
+        { analytic: 2, geometric: 1 },
+        { restless: 2, curious: 1 },
+        { tempestuous: 2, cosmic: 1 }
+      ],
+      untouched: { divinatory: 3, attentive: 1, cosmic: 1 },
+      matched: { ceremonial: 3, metrical: 2, geometric: 1 },
+      run: { analytic: 3, geometric: 2, metrical: 1 },
+      low: { tender: 2, brooding: 2, rooted: 1 },
+      high: { restless: 2, tempestuous: 2, cosmic: 1 },
+      fussed: { curious: 2, verbal: 2, restless: 1 },
+      decisive: { attentive: 2, analytic: 1, verbal: 1 }
     }
   ];
 
@@ -1367,7 +1387,7 @@
       slider: sliderProbe, sky: skyProbe, keys: keysProbe, knock: knockProbe,
       rubbing: rubbingProbe, cairn: cairnProbe, compass: compassProbe, dye: dyeProbe,
       censer: censerProbe, thread: threadProbe, lamp: lampProbe, tiles: tilesProbe,
-      paper: paperProbe, stones: stonesProbe
+      paper: paperProbe, stones: stonesProbe, dice: diceProbe
     };
     (kinds[probe.kind] || choiceProbe)(probe, body, trace, answer, finish, onDispose);
     return probe;
@@ -4730,6 +4750,84 @@
       retire(again, sealing);
     });
     refresh();
+  }
+  // Three dice lie as they fell, and nobody saw the throw, so the visitor may author the omen or
+  // let it stand. Each press rolls a die one face on -- a quarter turn arriving in the ratchet's
+  // even clicks, cut for that turn alone (die-turn and its twin, _mood.scss), with the new face up
+  // throughout -- and a die once turned rests sealed from the press, so the finished picture shows
+  // which dice were authored. Reading them is the visitor's press, never the table's. The faces
+  // left up are most of the answer; whether they were left as they fell, matched, run in order, or
+  // worried round and round is the rest. No face is wrong, nothing is hidden (a turn only ever
+  // moves one step on, and every face shows), and the pips are drawn by the stylesheet from
+  // data-face, so the dice are plain buttons and need no canvas.
+  function diceProbe(probe, body, trace, answer, finish) {
+    var names = ['one', 'two', 'three', 'four', 'five', 'six'];
+    var order = ['first', 'second', 'third'];
+    var faces = [0, 0, 0].map(function () { return 1 + Math.floor(Math.random() * 6); });
+    var turns = 0;
+    var done = false;
+    var row = el('div', 'probe-dice');
+    row.setAttribute('role', 'group');
+    row.setAttribute('aria-label', 'three dice, lying as they fell; press a die to turn it one face on');
+    function faceLine() {
+      return faces.map(function (face) { return names[face - 1]; }).join(', ');
+    }
+    function describeDie(i) {
+      return order[i] + ' die, showing ' + names[faces[i] - 1] + '; press to turn it to ' + names[faces[i] % 6];
+    }
+    var dice = faces.map(function (face, i) {
+      var die = el('button', 'probe-die');
+      die.type = 'button';
+      die.setAttribute('data-face', String(face));
+      die.setAttribute('aria-label', describeDie(i));
+      var pips = el('span', 'probe-die-pips');
+      pips.setAttribute('aria-hidden', 'true');
+      for (var p = 0; p < 9; p++) pips.appendChild(el('span', 'probe-die-pip'));
+      die.appendChild(pips);
+      die.addEventListener('click', function () {
+        if (done) return;
+        faces[i] = faces[i] % 6 + 1;
+        turns += 1;
+        die.setAttribute('data-face', String(faces[i]));
+        die.setAttribute('aria-label', describeDie(i));
+        die.setAttribute('data-set', 'true');
+        // One roll for both twin names, so whichever tick plays, it steps this turn's stair.
+        cutFor(die, 'die-turn', { family: 'ratchet', duration: 'medium', alias: 'die-turn-b' });
+        tick(die);
+        note(trace, 'the ' + order[i] + ' die turns to ' + names[faces[i] - 1]);
+        gauge(trace, faces.join(' · '));
+      });
+      row.appendChild(die);
+      return die;
+    });
+    body.appendChild(row);
+    dealOut(dice);
+    var controls = el('div', 'controls');
+    var read = el('button', 'btn-filled', probe.label);
+    read.type = 'button';
+    controls.appendChild(read);
+    body.appendChild(controls);
+    body.appendChild(el('p', 'probe-count', 'nobody is watching: turn any die as often as you like, or read them exactly as they fell'));
+    read.addEventListener('click', function () {
+      if (done) return;
+      done = true;
+      faces.forEach(function (face) { add(answer, probe.faces[face - 1], 1); });
+      var sum = faces[0] + faces[1] + faces[2];
+      var sorted = faces.slice().sort(function (a, b) { return a - b; });
+      if (!turns) add(answer, probe.untouched, 1);
+      else if (turns >= 10) add(answer, probe.fussed, 1);
+      else add(answer, probe.decisive, 1);
+      if (sorted[0] === sorted[2]) add(answer, probe.matched, 1);
+      else if (sorted[1] === sorted[0] + 1 && sorted[2] === sorted[1] + 1) add(answer, probe.run, 1);
+      if (sum <= 6) add(answer, probe.low, 1);
+      else if (sum >= 15) add(answer, probe.high, 1);
+      note(trace, 'read as they lie: ' + faceLine());
+      // Sealed first; the dice and the button grey once the seal has grown.
+      var sealing = finish();
+      dice.forEach(function (die) { retire(die, sealing); });
+      retire(read, sealing);
+    });
+    gauge(trace, faces.join(' · '));
   }
   function describe(reading) {
     var o = reading && reading.orientation;
