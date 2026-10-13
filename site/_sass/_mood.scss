@@ -1184,6 +1184,118 @@ button.probe-shadow-room::after {
   transition-delay: var(--spent-after, 0ms);
 }
 
+// The stepping stones: a stream between two banks, and sixteen stones across it in four rows, the
+// nearest row at the bottom (js/threshold.js places each by --stone-row and --stone-col, so the tab
+// order runs from this bank to the far one). A stone is told by its word and its shape -- flat and
+// square-cornered, mossy and soft, marked, round where the water runs over it, pale -- never by a
+// colour of its own, so every stone keeps the contrast of the control it is. A stone within reach
+// wears a hairline of the primary, the stone stood on a ring of the tertiary, and a stone stepped
+// on is set: sealed from the press by the engine, as every set control is (_controls.scss), so the
+// path reads as a trail across the water. The water rests in two shades split by one slice at the
+// register's angle. The stones are dealt in like any options, and nothing here moves on its own.
+.probe-stream {
+  display: grid;
+  gap: 0.4rem;
+  width: min(100%, 22rem);
+  padding: 0.6rem;
+  border-radius: var(--md-sys-shape-corner-large);
+  background: var(--md-sys-color-surface-container-lowest);
+}
+
+.probe-bank {
+  margin: 0;
+  padding: 0.35rem 0.75rem;
+  border-radius: var(--md-sys-shape-corner-small);
+  background: var(--md-sys-color-surface-container-high);
+  color: var(--md-sys-color-on-surface-variant);
+  text-align: center;
+  @include type.scale(label-medium);
+}
+
+.probe-stones {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(44px, 1fr));
+  grid-template-rows: repeat(4, minmax(48px, auto));
+  gap: 0.45rem;
+  padding: 0.5rem;
+  border-radius: var(--md-sys-shape-corner-medium);
+  background: linear-gradient(
+    var(--cut-angle, 112deg),
+    color-mix(in oklab, var(--md-sys-color-primary) 16%, var(--md-sys-color-surface-container-lowest)) 50%,
+    color-mix(in oklab, var(--md-sys-color-primary) 9%, var(--md-sys-color-surface-container-lowest)) 50%
+  );
+}
+
+button.probe-stone {
+  grid-column: var(--stone-col);
+  grid-row: var(--stone-row);
+  flex-direction: column;
+  gap: 0;
+  min-width: 0;
+  min-height: 48px;
+  padding: 0.25rem;
+  border-radius: var(--md-sys-shape-corner-large);
+  background: var(--md-sys-color-surface-container-highest);
+  color: var(--md-sys-color-on-surface);
+}
+
+button.probe-stone[data-kind='flat'] {
+  border-radius: var(--md-sys-shape-corner-small);
+}
+
+button.probe-stone[data-kind='moss'] {
+  border-radius: var(--md-sys-shape-corner-extra-large);
+}
+
+button.probe-stone[data-kind='mark'] {
+  border-radius: var(--md-sys-shape-corner-medium);
+}
+
+button.probe-stone[data-kind='wet'] {
+  border-radius: var(--md-sys-shape-corner-full);
+}
+
+.probe-stone-word {
+  @include type.scale(label-small);
+}
+
+.probe-stone-step {
+  min-height: 1rem;
+  @include type.scale(label-medium);
+}
+
+button.probe-stone[data-reach='true'] {
+  box-shadow: inset 0 0 0 1px var(--md-sys-color-primary);
+}
+
+button.probe-stone[data-set='true'] {
+  background: var(--md-sys-color-primary-container);
+  color: var(--md-sys-color-on-primary-container);
+}
+
+button.probe-stone[data-set='true']::before {
+  opacity: var(--fill-opacity, 0.22);
+}
+
+button.probe-stone[data-here='true'] {
+  box-shadow: inset 0 0 0 3px var(--md-sys-color-tertiary);
+}
+
+// Dealt in behind the slice their question arrives by, as any options are, and standing unmasked
+// once the edge has crossed (data-dealt='arrived', js/threshold.js).
+.probe-stones button.probe-stone[data-dealt='true'] {
+  --cut: 100%;
+  @include cut.develop(develop, medium);
+  animation-delay: var(--d, 0ms);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .probe-stones button.probe-stone[data-dealt='true'] {
+    animation: none;
+    mask: none;
+  }
+}
+
 // ---- the keyframes: each a from and a to, stepped by its stair -------------------------------
 // Each plays at one of the page's lengths (--motion-short, --motion-medium, --motion-long), never a
 // length written on the element: the engine rolls a spell's treads afresh on the element that

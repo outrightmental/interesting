@@ -438,6 +438,24 @@
       whole: { tender: 3, rooted: 2, brooding: 1 },
       spare: { attentive: 2, analytic: 1 },
       intricate: { curious: 2, ceremonial: 2, verbal: 1 }
+    },
+    {
+      probe: 'stepping-stones', name: 'the stepping stones', kind: 'stones',
+      ask: 'A stream, and stones across it. Cross to the far bank one stone at a time; any stone beside the one you stand on will hold you.',
+      rows: 4, cols: 4,
+      stones: [
+        { word: 'flat', label: 'a flat stone', weights: { rooted: 2, analytic: 2, metrical: 1 } },
+        { word: 'moss', label: 'a mossy stone', weights: { tending: 2, tender: 2, rooted: 1 } },
+        { word: 'mark', label: 'a stone with a sign cut in it', weights: { ceremonial: 2, divinatory: 2, verbal: 1 } },
+        { word: 'wet', label: 'a stone the water runs over', weights: { tempestuous: 2, restless: 2, attentive: 1 } },
+        { word: 'pale', label: 'a pale stone seamed with quartz', weights: { cosmic: 2, curious: 2, geometric: 1 } }
+      ],
+      direct: { restless: 2, analytic: 2, geometric: 1 },
+      wandering: { curious: 3, tending: 1, verbal: 1 },
+      doubled: { brooding: 2, attentive: 2, divinatory: 1 },
+      sideways: { metrical: 2, geometric: 1, ceremonial: 1 },
+      drift: { cosmic: 2, tempestuous: 1, curious: 1 },
+      lingered: { tender: 2, brooding: 1, attentive: 1 }
     }
   ];
 
@@ -1349,7 +1367,7 @@
       slider: sliderProbe, sky: skyProbe, keys: keysProbe, knock: knockProbe,
       rubbing: rubbingProbe, cairn: cairnProbe, compass: compassProbe, dye: dyeProbe,
       censer: censerProbe, thread: threadProbe, lamp: lampProbe, tiles: tilesProbe,
-      paper: paperProbe
+      paper: paperProbe, stones: stonesProbe
     };
     (kinds[probe.kind] || choiceProbe)(probe, body, trace, answer, finish, onDispose);
     return probe;
@@ -4546,6 +4564,172 @@
     });
     paint();
     report();
+  }
+  // A stream to cross, and the path is the answer: where the visitor stepped, in what order, and
+  // which stones they trusted their weight to. Sixteen stones stand in four rows, the nearest row at
+  // the bottom, each one flat, mossy, marked, wet or pale -- said in its name and drawn in its shape
+  // -- dealt fresh for every crossing. Any stone beside the one they stand on holds them, diagonals
+  // too, and going back or sideways is allowed, so a crossing can be straight, sideways, doubled
+  // back or a long wander; stepping ashore from the far row is the visitor's press, never the
+  // stream's. Each stone stepped on is set and sealed from the press (the engine's seal,
+  // _controls.scss), so the path reads as a trail of sealed stones across the water, each numbered
+  // with the step that last stood on it. A press on a stone out of reach, or on the water, says why
+  // nothing moved. Only the finished path is read; start over leaves nothing of the old one.
+  function stonesProbe(probe, body, trace, answer, finish) {
+    var rows = probe.rows || 4;
+    var cols = probe.cols || 4;
+    var count = rows * cols;
+    var deck = [];
+    for (var i = 0; i < count; i++) deck.push(probe.stones[i % probe.stones.length]);
+    for (var j = deck.length - 1; j > 0; j--) {
+      var k = Math.floor(Math.random() * (j + 1));
+      var swap = deck[j];
+      deck[j] = deck[k];
+      deck[k] = swap;
+    }
+    var path = [];
+    var here = -1;
+    var back = 0;
+    var side = 0;
+    var landed = -1; // how many steps it took to first reach the far row
+    var done = false;
+    var stream = el('div', 'probe-stream');
+    var farBank = el('p', 'probe-bank', 'the far bank');
+    farBank.setAttribute('aria-hidden', 'true');
+    stream.appendChild(farBank);
+    var grid = el('div', 'probe-stones');
+    grid.setAttribute('role', 'group');
+    grid.setAttribute('aria-label', 'Stepping stones in ' + rows + ' rows, the row nearest you first. Arrow keys move between stones; Enter or Space steps onto one.');
+    var buttons = deck.map(function (stone, index) {
+      var button = el('button', 'probe-stone');
+      button.type = 'button';
+      button.setAttribute('data-kind', stone.word);
+      button.style.setProperty('--stone-row', String(rows - Math.floor(index / cols)));
+      button.style.setProperty('--stone-col', String(index % cols + 1));
+      var word = el('span', 'probe-stone-word', stone.word);
+      word.setAttribute('aria-hidden', 'true');
+      button.appendChild(word);
+      var mark = el('span', 'probe-stone-step');
+      mark.setAttribute('aria-hidden', 'true');
+      button.appendChild(mark);
+      button.addEventListener('click', function () { step(index); });
+      grid.appendChild(button);
+      return button;
+    });
+    stream.appendChild(grid);
+    var nearBank = el('p', 'probe-bank', 'this bank');
+    nearBank.setAttribute('aria-hidden', 'true');
+    stream.appendChild(nearBank);
+    body.appendChild(stream);
+    dealOut(buttons);
+    body.appendChild(el('p', 'probe-count', 'Start on any stone in the bottom row. Step ashore once you stand in the top row; there is no wrong way across.'));
+    var controls = el('div', 'controls');
+    var ashore = el('button', 'btn-filled', 'step ashore');
+    ashore.type = 'button';
+    ashore.disabled = true;
+    var again = el('button', 'btn-text', 'start over');
+    again.type = 'button';
+    again.disabled = true;
+    controls.appendChild(ashore);
+    controls.appendChild(again);
+    body.appendChild(controls);
+
+    function rowOf(index) { return Math.floor(index / cols); }
+    function colOf(index) { return index % cols; }
+    function reachable(index) {
+      if (here < 0) return rowOf(index) === 0;
+      if (index === here) return false;
+      return Math.abs(rowOf(index) - rowOf(here)) <= 1 && Math.abs(colOf(index) - colOf(here)) <= 1;
+    }
+    function lastStep(index) {
+      for (var s = path.length - 1; s >= 0; s--) if (path[s] === index) return s + 1;
+      return 0;
+    }
+    function refresh() {
+      buttons.forEach(function (button, index) {
+        var at = lastStep(index);
+        var standing = index === here;
+        var within = !done && reachable(index);
+        button.setAttribute('aria-label', deck[index].label + ', row ' + (rowOf(index) + 1) + ' from this bank, column '
+          + (colOf(index) + 1) + (standing ? '; you stand here' : within ? '; within reach, press to step' : '; out of reach')
+          + (at && !standing ? '; stepped on' : ''));
+        if (standing) button.setAttribute('data-here', 'true'); else button.removeAttribute('data-here');
+        if (within) button.setAttribute('data-reach', 'true'); else button.removeAttribute('data-reach');
+        if (at) button.setAttribute('data-set', 'true'); else button.removeAttribute('data-set');
+        button.lastChild.textContent = at ? String(at) : '';
+      });
+      if (!done) {
+        ashore.disabled = !(here >= 0 && rowOf(here) === rows - 1);
+        again.disabled = !path.length;
+      }
+    }
+    function step(index) {
+      if (done) return;
+      if (!reachable(index)) {
+        note(trace, index === here ? 'You stand on that stone already; step to one beside it.'
+          : here < 0 ? 'Begin from this bank: step onto a stone in the bottom row.'
+          : 'Out of reach: step onto a stone beside the one you stand on.');
+        return;
+      }
+      if (here >= 0) {
+        if (rowOf(index) < rowOf(here)) back += 1;
+        else if (rowOf(index) === rowOf(here)) side += 1;
+      }
+      path.push(index);
+      here = index;
+      if (landed < 0 && rowOf(index) === rows - 1) landed = path.length;
+      refresh();
+      gauge(trace, tally(Math.min(path.length, 30)));
+      var said = 'Step ' + path.length + ': ' + deck[index].label + '.';
+      note(trace, rowOf(index) === rows - 1 ? said + ' The far bank is right here: step ashore, or keep walking.' : said);
+    }
+    grid.addEventListener('keydown', function (ev) {
+      var index = buttons.indexOf(document.activeElement);
+      if (index < 0) return;
+      var moves = { ArrowUp: [1, 0], ArrowDown: [-1, 0], ArrowLeft: [0, -1], ArrowRight: [0, 1] };
+      var move = moves[ev.key];
+      if (!move) return;
+      ev.preventDefault();
+      var r = Math.max(0, Math.min(rows - 1, rowOf(index) + move[0]));
+      var c = Math.max(0, Math.min(cols - 1, colOf(index) + move[1]));
+      buttons[r * cols + c].focus();
+    });
+    stream.addEventListener('click', function (ev) {
+      if (done || (ev.target !== stream && ev.target !== grid && ev.target !== farBank && ev.target !== nearBank)) return;
+      note(trace, here < 0 ? 'That is water. Step onto a stone in the bottom row to begin.'
+        : 'That is water. Step onto a stone beside the one you stand on.');
+    });
+    again.addEventListener('click', function () {
+      if (done || !path.length) return;
+      path = [];
+      here = -1;
+      back = 0;
+      side = 0;
+      landed = -1;
+      refresh();
+      gauge(trace, '');
+      note(trace, 'Back on this bank. Step onto any stone in the bottom row.');
+      buttons[0].focus();
+    });
+    ashore.addEventListener('click', function () {
+      if (done || here < 0 || rowOf(here) !== rows - 1) return;
+      done = true;
+      var n = path.length;
+      path.forEach(function (index) { add(answer, deck[index].weights, 2 / n); });
+      if (n === rows) add(answer, probe.direct, 1);
+      else if (n > rows + 3) add(answer, probe.wandering, 1);
+      if (back) add(answer, probe.doubled, 1);
+      if (side >= 2) add(answer, probe.sideways, 1);
+      if (Math.abs(colOf(here) - colOf(path[0])) >= 2) add(answer, probe.drift, 1);
+      if (landed > 0 && n - landed >= 2) add(answer, probe.lingered, 1);
+      refresh();
+      // Sealed from the last press; the two controls grey once the seal has grown. The trail of
+      // sealed stones stays where it was walked, the picture of the answer.
+      var sealing = finish();
+      retire(ashore, sealing);
+      retire(again, sealing);
+    });
+    refresh();
   }
   function describe(reading) {
     var o = reading && reading.orientation;
