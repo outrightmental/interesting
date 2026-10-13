@@ -1452,26 +1452,45 @@
     }
     var deepest = lay(false);
     if (columns > 1 && deepest + mid + 16 > viewportH) deepest = lay(true);
+    // Spend spare row space before giving up the constellation. Each wrapped chip still keeps
+    // its measured height and a gap, and every target remains at least 44px tall.
+    if (deepest + mid + 16 > viewportH && step > STAR_STEP_MIN) {
+      step = STAR_STEP_MIN;
+      deepest = lay(columns > 1);
+    }
     // And if the lowest star would still be below the fold -- a very short viewport, or a very
     // long list of options -- the cascade is what fits: the stylesheet's other layout, a list
     // under the logo that scrolls, which is also what the markup is without a script at all.
     var fits = deepest + mid + 16 <= viewportH;
-    // The description occupies unused sky, never a chip's space. If it cannot stand beside
-    // the constellation, the same disclosure lays it between its groups and scrolls.
+    // The full description borrows spare sky, beside the options first and below them second.
+    // It never decides their layout: exploring a different destination must not move the chips
+    // out from under a pointer or turn a focused constellation into a scrolling list. Where
+    // neither position fits, the chips keep their short descriptions; every link still carries
+    // its full purpose for screen readers. The cascade retains the full visual preview too.
     if (nav.preview && !nav.preview.hidden) {
       var right = 0;
       for (g = 0; g < groups.length; g++) {
         right = Math.max(right, (columns > 1 ? lefts[g] : STAR_EDGE) + spread + widths[g]);
       }
       var previewX = Math.ceil(right + STAR_GUTTER);
+      var previewY = top;
       var previewWidth = Math.min(PREVIEW_WIDTH, viewportW - previewX - 2 * mid - 16);
+      var beside = previewWidth >= PREVIEW_MIN;
+      if (!beside) {
+        previewX = STAR_EDGE;
+        previewY = deepest + ORBIT_GAP;
+        previewWidth = Math.min(PREVIEW_WIDTH, viewportW - previewX - 2 * mid - 16);
+      }
       nav.host.style.setProperty('--nav-preview-x', previewX + 'px');
-      nav.host.style.setProperty('--nav-preview-y', top + 'px');
+      nav.host.style.setProperty('--nav-preview-y', previewY + 'px');
       nav.host.style.setProperty('--nav-preview-width', Math.max(PREVIEW_MIN, previewWidth) + 'px');
-      nav.preview.style.setProperty('--arrive-angle', angleOf(previewX - mid, top - mid));
-      nav.preview.style.setProperty('--leave-angle', angleOf(mid - previewX, mid - top));
-      fits = fits && previewWidth >= PREVIEW_MIN
-        && top + nav.preview.offsetHeight + mid + 16 <= viewportH;
+      nav.preview.style.setProperty('--arrive-angle', angleOf(previewX - mid, previewY - mid));
+      nav.preview.style.setProperty('--leave-angle', angleOf(mid - previewX, mid - previewY));
+      // Restore the preview before measuring, including one tucked away on a narrower screen.
+      nav.preview.setAttribute('data-placement', beside ? 'beside' : 'below');
+      var previewFits = previewWidth >= PREVIEW_MIN
+        && previewY + nav.preview.offsetHeight + mid + 16 <= viewportH;
+      if (fits && !previewFits) nav.preview.setAttribute('data-placement', 'compact');
     }
     html.setAttribute('data-nav', fits ? 'live' : 'cascade');
   }

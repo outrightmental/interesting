@@ -613,7 +613,9 @@ html[data-nav] .sparknav-sky[hidden] {
 }
 
 // One destination's full purpose, not another destination control. It borrows that page's
-// palette and serif; the description stays sans. On a phone it follows the destinations.
+// palette and serif; the description stays sans. The constellation fits it into spare sky beside
+// or below the options, without changing their layout. Compact constellations keep the short
+// descriptions on their chips; the scrolling cascade still shows this full description.
 .sparknav-preview {
   display: grid;
   order: 1;
@@ -636,6 +638,10 @@ html[data-nav] .sparknav-sky[hidden] {
 .sparknav-preview-text {
   margin: 0;
   @include type.scale(body-medium);
+}
+
+html[data-nav='live'] .sparknav-preview[data-placement='compact'] {
+  display: none;
 }
 
 .sparknav-sky > .sparknav-far {

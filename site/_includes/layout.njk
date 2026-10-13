@@ -139,8 +139,10 @@
         </li>
 {%- endfor %}
       </ul>
-      {# One visible description, borrowed from the destination's own entry. Each link describes
-         itself independently for screen readers, so this visual twin is not announced twice. #}
+      {# One visible description, borrowed from the destination's own entry. It occupies spare
+         sky beside or below the constellation when it fits; otherwise the chips' short descriptions
+         keep the options readable. The scrolling cascade retains this full preview. Each link
+         describes itself independently for screen readers, so this visual twin is not announced twice. #}
       <div class='sparknav-preview' id='sparknav-preview' aria-hidden='true' hidden>
         <p class='sparknav-preview-name' id='sparknav-preview-name'></p>
         <p class='sparknav-preview-text' id='sparknav-preview-text'></p>
