@@ -1798,8 +1798,10 @@
      last chip goes. Without the engine, or for a visitor who asked for less motion, `then()` runs
      at once. */
   var unmaking = 0; // the clock on the unmaking under way, or 0
+  var unmakeTurn = 0; // invalidates delayed closes and state handoffs
 
   function endUnmake() {
+    unmakeTurn += 1;
     if (!unmaking) return;
     if (typeof window.clearTimeout === 'function') window.clearTimeout(unmaking);
     unmaking = 0;
@@ -1818,7 +1820,6 @@
     var options = nav.sky.querySelectorAll('.sparknav-option');
     for (var i = 0; i < options.length; i++) if (!options[i].hidden) count += 1;
     if (!count || !canUnmake(nav.sky)) return 0;
-    endUnmake();
     var longest = 0;
     for (i = 0; i < options.length; i++) {
       if (options[i].hidden) continue;
@@ -1853,25 +1854,27 @@
   }
 
   // `length` is the leaving rollLeaving() rolled, where the caller rolled it first; else it is
-  // rolled here.
+  // rolled here. Cancel the previous leave even when this one happens without motion.
   function unmakeSky(then, length) {
+    endUnmake();
     var last = length == null ? rollLeaving() : length;
     if (!last) {
       then();
       return;
     }
+    var turn = unmakeTurn;
     nav.sky.classList.add('is-unmaking');
     // Out of reach while it goes: a chip being unmade is not in the tab order or the tree a
     // reader walks, as it is already out from under the pointer.
     if (typeof nav.sky.setAttribute === 'function') nav.sky.setAttribute('inert', '');
-    // The <details> closes only when the last chip, the last ray and the rings have gone, and a
-    // little after.
+    // Finish the close or handoff after the last chip, ray and ring have gone.
     unmaking = window.setTimeout(function () {
-      unmaking = 0;
-      nav.sky.classList.remove('is-unmaking');
-      if (typeof nav.sky.removeAttribute === 'function') nav.sky.removeAttribute('inert');
-      then();
+      if (turn !== unmakeTurn) return;
+      endUnmake();
+      if (nav.host.open) then();
+      else branch(false);
     }, last + 80);
+    restoreNavFocus();
   }
 
   /* A chip's own way, said by the shell rather than rolled: a star branches out of the logo and
@@ -2004,9 +2007,9 @@
   }
 
   function branch(on, leave) {
+    endUnmake(); // cancel any delayed close or state handoff before changing the branch
     nav.logo.setAttribute('aria-expanded', on ? 'true' : 'false');
     if (on) {
-      endUnmake(); // pressed again before the last close had finished: cast afresh
       nav.peeked = null;
       dealDoor(); // the ajar door is drawn afresh for every opening
       shape();
@@ -2033,7 +2036,6 @@
       stateModal(false);
       navBox.down(leave, leave > 0 ? leavingTreads() : '');
       nav.sky.classList.remove('is-branching');
-      if (!nav.host.open) endUnmake(); // closed by the browser itself: nothing left to unmake
     }
   }
 
@@ -2434,10 +2436,14 @@
     // press below has answered the opening already, and by the time the event says "opened" the
     // visitor may have closed it again (a second press, Escape) -- the <details> still open while
     // its chips are unmade, the constellation already closed. While it is being unmade, an open
-    // <details> is the shell's own doing and its timer closes it, so the event has nothing to say;
-    // otherwise it says something only where the <details> and the logo disagree.
+    // <details> is the shell's own doing, so its toggle waits for the pending close or handoff.
+    // A disclosure actually closed elsewhere cancels that work before the lightbox follows.
+    // Otherwise only a disagreement between the <details> and the logo needs an answer.
     function follow() {
-      if (unmaking) return;
+      if (unmaking) {
+        if (nav.host.open) return;
+        endUnmake();
+      }
       if (nav.host.open === (nav.logo.getAttribute('aria-expanded') === 'true')) return;
       branch(nav.host.open);
     }
