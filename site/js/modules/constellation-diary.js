@@ -14,8 +14,8 @@
      the false lines  A deduction. The sky is drawn with its meridian and its horizon, the stars
                       lettered, and the logbook under it has five to seven lines about them -- which
                       is highest, how many lie west of the meridian, whether one is west of
-                      another. Every line can be checked against the sky, and exactly two are
-                      false. Find them. A wrong check says whether one of the two is right.
+                      another. Every line can be checked against the sky, and exactly two --
+                      three, on a harder seed -- are false. Find them. A wrong check says whether one of the two is right.
      the second watch A comparison. One star moved, but some watches also shifted the telescope.
                       A fixed reference marks that common shift: subtract it before naming
                       the genuine mover, its direction and distance. Coordinates keep every
@@ -865,11 +865,13 @@ function linesPlan(env) {
     const count = env.chance(0.3) ? 7 : env.int(5, 6);
     const chosen = handful(env, truths, count);
     if (chosen.length < count) continue;
-    const lies = shuffled(env, range(count)).slice(0, 2).sort((a, b) => a - b);
+    // Two false lines, and on a harder seed of a longer log, three.
+    const lieCount = count >= 6 && env.chance(0.35) ? 3 : 2;
+    const lies = shuffled(env, range(count)).slice(0, lieCount).sort((a, b) => a - b);
     const claims = chosen.map((cl, i) => (lies.includes(i) ? negated(env, cl, n) : cl));
     if (claims.some((cl) => !cl)) continue;
     const truth = claims.map((cl) => holds(cl, points, meridian));
-    if (truth.filter((t) => !t).length !== 2 || lies.some((i) => truth[i])) continue;
+    if (truth.filter((t) => !t).length !== lieCount || lies.some((i) => truth[i])) continue;
     last = { kind: 'lines', number, points, meridian, claims, lies };
     return last;
   }
@@ -904,12 +906,12 @@ function carriedLines(env) {
   const claims = p.claims.map((cl) => ({ t: cl.t, a: cl.a, b: cl.b, k: cl.k, side: cl.side, dir: cl.dir, same: cl.same }));
   const truth = claims.map((cl) => holds(cl, p.points, p.meridian));
   const lies = range(claims.length).filter((i) => !truth[i]);
-  if (lies.length !== 2 || !Array.isArray(p.lies) || p.lies.length !== 2 || !lies.every((i, k) => p.lies[k] === i)) return null;
+  if ((lies.length !== 2 && lies.length !== 3) || !Array.isArray(p.lies) || p.lies.length !== lies.length || !lies.every((i, k) => p.lies[k] === i)) return null;
   return { kind: 'lines', number: p.number, points: copyPoints(p.points), meridian: p.meridian, claims, lies };
 }
 
 function linesTitle(plan) {
-  return 'entry ' + plan.number + ': two false lines';
+  return 'entry ' + plan.number + ': ' + WORDS[plan.lies.length] + ' false lines';
 }
 
 // The log as it opens: no line marked or vouched for, nothing struck out, and every mark that
@@ -994,7 +996,7 @@ function linesScene(g, w, h, c, plan, s, v, plates) {
     const y = fr.split + step * (i + 2) - size * 0.3;
     box(g, band.own, fr.m + size * 0.2, y - size * 0.95, w - fr.m * 1.6 - size * 0.2, size * 1.25, band.k, c.alpha(gold, 0.1));
   });
-  const lines = [OPENER + ' entry ' + plan.number + ', two lines false'].concat(plan.claims.map((cl, i) => (i + 1) + '. ' + claimText(cl)));
+  const lines = [OPENER + ' entry ' + plan.number + ', ' + WORDS[plan.lies.length] + ' lines false'].concat(plan.claims.map((cl, i) => (i + 1) + '. ' + claimText(cl)));
   rows(g, fr, step, lines, (i) => (i === 0 ? c.alpha(gold, 0.95)
     : done && plan.lies.includes(i - 1) && bands[i - 1].own.flicker(doneP) ? c.alpha(gold, 0.9)
       : c.alpha(c.colors.fg, bands[i - 1].k >= 1 && picked.includes(i - 1) ? 1 : 0.85)));
@@ -1030,6 +1032,7 @@ function linesPreview(g, w, h, env, plan) {
 function linesPiece(env, plan) {
   const n = plan.points.length;
   const count = plan.claims.length;
+  const L = plan.lies.length;
   const v = dials(env);
   const helps = asked(env).helps;
   const s = linesState(count);
@@ -1055,12 +1058,12 @@ function linesPiece(env, plan) {
   }
   return {
     title: linesTitle(plan),
-    brief: 'A ledger to correct. The sky is drawn with its meridian and its horizon, west on the left, and the logbook under it says ' + WORDS[count] + ' things about the ' + WORDS[n] + ' stars. Every line can be checked against the drawing. Exactly two are false.',
-    goal: 'Find the two false lines.',
+    brief: 'A ledger to correct. The sky is drawn with its meridian and its horizon, west on the left, and the logbook under it says ' + WORDS[count] + ' things about the ' + WORDS[n] + ' stars. Every line can be checked against the drawing. Exactly ' + WORDS[L] + ' are false.',
+    goal: 'Find the ' + WORDS[L] + ' false lines.',
     aspect: '4 / 3',
     checkLabel: 'check the log',
     steps: [
-      { id: 'lines', ask: 'the two false lines: choose them here, or tap them on the page', kind: 'pick', count: 2, items: plan.claims.map((cl, i) => ({ label: (i + 1) + '. ' + claimText(cl), value: i })) },
+      { id: 'lines', ask: 'the ' + WORDS[L] + ' false lines: choose them here, or tap them on the page', kind: 'pick', count: L, items: plan.claims.map((cl, i) => ({ label: (i + 1) + '. ' + claimText(cl), value: i })) },
       { id: 'hint', ask: 'one line that holds', kind: 'press', count: 1, label: 'vouch for one', optional: true }
     ],
     solution: { lines: plan.lies.slice() },
@@ -1068,10 +1071,12 @@ function linesPiece(env, plan) {
       const value = c.value('lines');
       const picked = Array.isArray(value) ? value.map(Number) : [];
       const right = picked.filter((i) => plan.lies.includes(i)).length;
-      const solved = picked.length === 2 && new Set(picked).size === 2 && right === 2;
+      const solved = picked.length === L && new Set(picked).size === L && right === L;
       return {
         solved,
-        say: solved ? 'both false lines found; the log is corrected' : right === 1 ? 'one of the two is right' : 'neither of those is a false line'
+        say: solved ? 'all ' + WORDS[L] + ' false lines found; the log is corrected'
+          : right === 0 ? 'none of those is a false line'
+            : WORDS[right] + ' of the ' + WORDS[L] + (right === 1 ? ' is' : ' are') + ' right'
       };
     },
     start(c) {
@@ -1096,7 +1101,7 @@ function linesPiece(env, plan) {
         } else if (s.vouched.length >= helps) {
           c.status('that is all the diary will vouch for at this difficulty; read the rest against the sky');
         } else {
-          c.status('every true line has been vouched for; the two left are the false ones');
+          c.status('every true line has been vouched for; the ones left are the false ones');
         }
       }
       draw(c);
@@ -1112,14 +1117,15 @@ function linesPiece(env, plan) {
       }
       const picked = s.picked.filter((k) => k !== i);
       if (picked.length === s.picked.length) {
-        if (picked.length >= 2) picked.shift();
+        if (picked.length >= L) picked.shift();
         picked.push(i);
       }
       mark(picked.sort((a, b) => a - b), c);
-      // The rail takes the pick once it is a pair, as the pick knob itself would.
-      if (s.picked.length === 2) c.set('lines', s.picked.slice());
-      c.status(s.picked.length === 2 ? 'marked false: line ' + (s.picked[0] + 1) + ' and line ' + (s.picked[1] + 1) + '; check the log'
-        : s.picked.length === 1 ? 'marked false: line ' + (s.picked[0] + 1) + '; one more' : 'no line marked');
+      // The rail takes the pick once it is full, as the pick knob itself would.
+      if (s.picked.length === L) c.set('lines', s.picked.slice());
+      const named = s.picked.map((k) => 'line ' + (k + 1)).join(', ');
+      c.status(s.picked.length === L ? 'marked false: ' + named + '; check the log'
+        : s.picked.length ? 'marked false: ' + named + '; ' + WORDS[L - s.picked.length] + ' more' : 'no line marked');
       draw(c);
     },
     frame(t, dt, c) {
@@ -1130,7 +1136,7 @@ function linesPiece(env, plan) {
     end(c) {
       s.doneAt = s.t;
       paced.stir(s.t + (c.reduced ? 0 : CORRECTED));
-      c.status('struck out: line ' + (plan.lies[0] + 1) + ' and line ' + (plan.lies[1] + 1) + '. the rest of the entry stands');
+      c.status('struck out: ' + plan.lies.map((i) => 'line ' + (i + 1)).join(', ') + '. the rest of the entry stands');
     }
   };
 }
@@ -1564,7 +1570,7 @@ export default {
     return {
       title: linesTitle(plan),
       quote: claimText(plan.claims[0]) + '.',
-      text: 'The logbook says ' + WORDS[plan.claims.length] + ' things about the sky, and two of them are false. Read each line against the stars.',
+      text: 'The logbook says ' + WORDS[plan.claims.length] + ' things about the sky, and ' + WORDS[plan.lies.length] + ' of them are false. Read each line against the stars.',
       aspect: '4 / 3',
       paint: (g, w, h, cardEnv) => linesPreview(g, w, h, cardEnv, plan),
       of: plan

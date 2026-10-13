@@ -12,7 +12,7 @@
                        the mark make the distances judgeable; nothing is numbered. A wrong check
                        says how many stand in the right place and no more; a hint, at a price,
                        says where one star comes back.
-     the midnight chord  Four voices drawn from periods of 2, 3, 4, 5, 6 and 8 beats, each sounding
+     the midnight chord  Four voices (five, on a harder seed) drawn from periods of 2, 3, 4, 5, 6 and 8 beats, each sounding
                        on beat 0 and every period after, over a strip of twelve beats. Some of them
                        are sounding. Stacked blocks show the totals per beat; hollow circles beside
                        them show the totals the visitor's chosen voices would make, so a deduction
@@ -817,12 +817,15 @@ function uniqueChord(voices, periods = PERIODS) {
 }
 
 function chordPlan(env) {
+  // Four candidate voices, and on the seeds that roll the harder size, five.
+  const many = env.chance(0.3);
+  const size = many ? 5 : 4;
   const choices = PERIOD_POOL.slice();
   const periods = [];
-  while (periods.length < 4) periods.push(choices.splice(env.int(0, choices.length - 1), 1)[0]);
+  while (periods.length < size) periods.push(choices.splice(env.int(0, choices.length - 1), 1)[0]);
   periods.sort((a, b) => a - b);
   for (let attempt = 0; attempt < 20; attempt++) {
-    const count = env.int(1, 3);
+    const count = many ? env.int(2, 4) : env.int(1, 3);
     const pool = periods.slice();
     const voices = [];
     while (voices.length < count) voices.push(pool.splice(env.int(0, pool.length - 1), 1)[0]);
@@ -834,13 +837,13 @@ function chordPlan(env) {
 
 function carriedChord(env) {
   const p = env.card && env.card.of;
-  if (!p || p.kind !== 'chord' || !Array.isArray(p.voices) || p.voices.length < 1 || p.voices.length > 3) return null;
+  if (!p || p.kind !== 'chord' || !Array.isArray(p.voices) || p.voices.length < 1 || p.voices.length > 4) return null;
   if (p.periods != null && !Array.isArray(p.periods)) return null;
   const periods = p.periods == null ? PERIODS.slice() : p.periods.map(Number);
-  if (periods.length !== 4 || new Set(periods).size !== 4 || !periods.every((v) => PERIOD_POOL.includes(v))) return null;
+  if ((periods.length !== 4 && periods.length !== 5) || new Set(periods).size !== periods.length || !periods.every((v) => PERIOD_POOL.includes(v))) return null;
   periods.sort((a, b) => a - b);
   const voices = p.voices.map(Number);
-  if (!voices.every((v) => periods.includes(v)) || new Set(voices).size !== voices.length) return null;
+  if (!voices.every((v) => periods.includes(v)) || new Set(voices).size !== voices.length || voices.length >= periods.length) return null;
   voices.sort((a, b) => a - b);
   if (!uniqueChord(voices, periods)) return null;
   return { kind: 'chord', voices, periods };
@@ -851,18 +854,19 @@ function chordTitle(plan) {
   return 'the midnight chord: ' + WORDS[strikes] + ' strikes';
 }
 
-function chordGeometry(w, h) {
+// `n` is how many candidate voices the rows below the strip hold: four or five share the same room.
+function chordGeometry(w, h, n) {
   const left = w * 0.3;
   const right = w * 0.95;
-  return { left, right, col: (right - left) / BEATS, stripTop: h * 0.1, stripBottom: h * 0.5, rowTop: h * 0.6, rowGap: h * 0.095 };
+  return { left, right, col: (right - left) / BEATS, stripTop: h * 0.1, stripBottom: h * 0.5, rowTop: h * 0.6, rowGap: h * 0.38 / (n || 4) };
 }
 
 // The scene: the strip of totals as stacked blocks, then the four voices' own beats.
 function drawChord(g, w, h, c, plan, s, variant, t) {
   const v = variant || PLAIN;
   const col = c.colors;
-  const geo = chordGeometry(w, h);
   const periods = plan.periods || PERIODS;
+  const geo = chordGeometry(w, h, periods.length);
   const bars = sumsOf(plan.voices);
   const size = Math.max(9, Math.round(Math.min(w, h) * 0.04));
   const small = Math.max(8, Math.round(size * 0.85));
@@ -1037,7 +1041,7 @@ function chordPiece(env, plan) {
   const reveal = periods.slice().sort((a, b) => a - b);
   return {
     title: chordTitle(plan),
-    brief: 'Find which voices make the chord. The four candidates strike on beat 0 and then ' + named(periods) + '. Filled blocks show the clue; hollow circles show the totals of your selection. Totals for beats 0 to 11: ' + sumsOf(voices).join(', ') + '. The next shared beat may lie beyond the strip.',
+    brief: 'Find which voices make the chord. The ' + WORDS[periods.length] + ' candidates strike on beat 0 and then ' + named(periods) + '. Filled blocks show the clue; hollow circles show the totals of your selection. Totals for beats 0 to 11: ' + sumsOf(voices).join(', ') + '. The next shared beat may lie beyond the strip.',
     goal: 'Say which voices are sounding, and on which beat after beat 0 they next all strike together.',
     aspect: '4 / 3',
     checkLabel: 'check the chord',
@@ -1074,7 +1078,7 @@ function chordPiece(env, plan) {
       return { solved: false, say: parts.join('; ') };
     },
     start(c) {
-      c.status('twelve beats, four possible voices; compare your selection with the filled blocks');
+      c.status('twelve beats, ' + WORDS[periods.length] + ' possible voices; compare your selection with the filled blocks');
       draw(c);
     },
     apply(id, value, c) {
@@ -1174,10 +1178,11 @@ export default {
       };
     }
     const plan = d.plan;
+    const cand = plan.periods || PERIODS;
     return {
       title: chordTitle(plan),
       mono: 'beat   ' + sumsOf(plan.voices).map((n, i) => String(i).padStart(2, ' ')).join('') + '\ntotal  ' + sumsOf(plan.voices).map((n) => String(n).padStart(2, ' ')).join(''),
-      text: 'Four voices on periods of ' + (plan.periods || PERIODS).join(', ') + ' beats; some are sounding. Compare your chosen voices with the totals, then find their next shared beat.',
+      text: WORDS[cand.length][0].toUpperCase() + WORDS[cand.length].slice(1) + ' voices on periods of ' + cand.join(', ') + ' beats; some are sounding. Compare your chosen voices with the totals, then find their next shared beat.',
       aspect: '4 / 3',
       paint: (g, w, h, cardEnv) => chordPreview(g, w, h, cardEnv, plan),
       of: plan
