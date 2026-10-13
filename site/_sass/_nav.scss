@@ -612,6 +612,36 @@ html[data-nav] .sparknav-sky[hidden] {
   @include cut.play(out, unseal, medium, leave);
 }
 
+// One destination's full purpose, not another destination control. It borrows that page's
+// palette and serif; the description stays sans. On a phone it follows the destinations.
+.sparknav-preview {
+  display: grid;
+  order: 1;
+  gap: 0.6rem;
+  width: 100%;
+  min-width: 0;
+  margin-block: 0.25rem;
+  padding: 1rem;
+  border-radius: var(--md-sys-shape-corner-large);
+  background: var(--md-sys-color-surface-container);
+  color: var(--md-sys-color-on-surface);
+  overflow-wrap: anywhere;
+}
+
+.sparknav-preview-name {
+  @include type.scale(title-large);
+  @include type.rite;
+}
+
+.sparknav-preview-text {
+  margin: 0;
+  @include type.scale(body-medium);
+}
+
+.sparknav-sky > .sparknav-far {
+  order: 2;
+}
+
 .sparknav-ray {
   display: none;
 }
@@ -658,6 +688,11 @@ html:not([data-nav='live']) .sparknav-sky {
 
   html:not([data-nav='live']) .sparknav-far {
     padding-top: 0;
+  }
+
+  html:not([data-nav='live']) .sparknav-preview {
+    grid-column: 1 / -1;
+    order: 3;
   }
 }
 
@@ -720,6 +755,18 @@ html:not([data-nav='live']) .sparknav-node {
   pointer-events: none;
 }
 
+.sparknav-sky.is-branching .sparknav-preview {
+  mask: cut.slice(var(--arrive-angle, 0deg));
+  @include cut.bleed;
+  @include cut.play(in, develop, medium, arrive);
+}
+
+.sparknav-sky.is-unmaking .sparknav-preview {
+  mask: cut.slice(var(--leave-angle, 0deg));
+  @include cut.bleed;
+  @include cut.play(out, unmake, medium, leave);
+}
+
 // The scatter: the script has placed every star, so each option is absolute, each chip sits where
 // --x and --y put it, and each ray is the line of length --len at angle --a from the logo's heart.
 html[data-nav='live'] {
@@ -759,6 +806,15 @@ html[data-nav='live'] {
     z-index: 3; // above every ray, whatever the order the options happen to be in
     top: var(--y, 0);
     left: var(--x, 0);
+  }
+
+  .sparknav-preview {
+    position: absolute;
+    z-index: 3;
+    top: var(--nav-preview-y, 56px);
+    left: var(--nav-preview-x, 0px);
+    width: var(--nav-preview-width, 22rem);
+    margin: 0;
   }
 
   .sparknav-ray {
@@ -963,6 +1019,7 @@ html[data-nav='live'] .sparknav-sky.is-unmaking .sparknav-dust {
 // taken away again.
 html[data-nav] .sparknav-sky.is-unmaking .sparknav-node.is-unlanded,
 html[data-nav] .sparknav-sky.is-unmaking .sparknav-ray.is-unlanded,
+html[data-nav] .sparknav-sky.is-unmaking .sparknav-preview.is-unlanded,
 html[data-nav] .sparknav-sky.is-unmaking .sparknav-dust.is-unlanded {
   animation: none;
   visibility: hidden;
@@ -979,6 +1036,7 @@ html[data-nav] .sparknav-sky.is-unmaking .sparknav-dust.is-unlanded {
 // it back; js/site.js takes the mark off on every press, so the next arrival has its edge again.
 html[data-nav] .sparknav-sky.is-branching:not(.is-unmaking) .sparknav-node.is-landed,
 html[data-nav] .sparknav-sky.is-branching:not(.is-unmaking) .sparknav-ray.is-landed,
+html[data-nav] .sparknav-sky.is-branching:not(.is-unmaking) .sparknav-preview.is-landed,
 html[data-nav] .sparknav-sky.is-branching:not(.is-unmaking) .sparknav-dust.is-landed {
   mask: none;
 }
@@ -1030,8 +1088,10 @@ html[data-nav] .sparknav-sky.is-branching:not(.is-unmaking) .sparknav-dust.is-la
   .sparknav-node.is-sealing::before,
   .sparknav-node.is-unsealing::before,
   .sparknav-sky.is-branching .sparknav-node,
+  .sparknav-sky.is-branching .sparknav-preview,
   .sparknav .sparknav-sky.is-branching .sparknav-node.is-stamping,
   .sparknav-sky.is-unmaking .sparknav-node,
+  .sparknav-sky.is-unmaking .sparknav-preview,
   html[data-nav='live'] .sparknav-sky.is-branching .sparknav-ray,
   html[data-nav='live'] .sparknav-sky.is-unmaking .sparknav-ray,
   html[data-nav='live'] .sparknav-dust,

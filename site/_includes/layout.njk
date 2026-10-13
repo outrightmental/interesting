@@ -63,10 +63,11 @@
 {%- for link in worlds.wayIn %}
         <li class='sparknav-option'>
           <span class='sparknav-ray' aria-hidden='true'></span>
-          <a class='sparknav-node' href='{{ siteRoot }}{{ link.file }}'{% if here == link.file %} aria-current='page'{% endif %} aria-labelledby='sparknav-way-label-{{ loop.index0 }}' aria-describedby='sparknav-way-gloss-{{ loop.index0 }}'>
+          <a class='sparknav-node' href='{{ siteRoot }}{{ link.file }}'{% if here == link.file %} aria-current='page'{% endif %} aria-labelledby='sparknav-way-label-{{ loop.index0 }}' aria-describedby='sparknav-way-purpose-{{ loop.index0 }}'>
             <svg class='icon' viewBox='0 0 24 24' aria-hidden='true' focusable='false'><path d='{{ icons[link.icon] }}'/></svg>
             <span class='sparknav-words'><span class='sparknav-label' id='sparknav-way-label-{{ loop.index0 }}'>{{ link.name }}</span><span class='sparknav-gloss' id='sparknav-way-gloss-{{ loop.index0 }}'>{{ link.gloss }}</span></span>
           </a>
+          <span class='visually-hidden sparknav-purpose' id='sparknav-way-purpose-{{ loop.index0 }}'>{{ link.what }}</span>
         </li>
 {%- endfor %}
 {%- if thisWorld %}
@@ -74,18 +75,20 @@
            js/site.js hides this chip so the destination appears only once. #}
         <li class='sparknav-option' id='sparknav-here' data-mood='{{ thisWorld.mood }}'>
           <span class='sparknav-ray' aria-hidden='true'></span>
-          <a class='sparknav-node' href='{{ siteRoot }}{{ thisWorld.file }}' aria-labelledby='sparknav-here-label' aria-describedby='sparknav-here-gloss'>
+          <a class='sparknav-node' href='{{ siteRoot }}{{ thisWorld.file }}' aria-labelledby='sparknav-here-label' aria-describedby='sparknav-here-purpose'>
             <svg class='icon' viewBox='0 0 24 24' aria-hidden='true' focusable='false'><path d='{{ icons.star }}'/></svg>
             <span class='sparknav-words'><span class='sparknav-label' id='sparknav-here-label'>{{ thisWorld.name }}</span><span class='sparknav-gloss' id='sparknav-here-gloss'>{{ thisWorld.gloss }}</span></span>
           </a>
+          <span class='visually-hidden sparknav-purpose' id='sparknav-here-purpose'>{{ thisWorld.what }}</span>
         </li>
 {%- endif %}
         <li class='sparknav-option' id='sparknav-reading' hidden>
           <span class='sparknav-ray' aria-hidden='true'></span>
-          <a class='sparknav-node' id='sparknav-reading-go' href='{{ siteRoot }}moods.html' aria-labelledby='sparknav-reading-label' aria-describedby='sparknav-reading-gloss'>
+          <a class='sparknav-node' id='sparknav-reading-go' href='{{ siteRoot }}moods.html' aria-labelledby='sparknav-reading-label' aria-describedby='sparknav-reading-gloss sparknav-reading-purpose'>
             <svg class='icon' viewBox='0 0 24 24' aria-hidden='true' focusable='false'><path d='{{ icons.star }}'/></svg>
             <span class='sparknav-words'><span class='sparknav-label' id='sparknav-reading-label'>the mood atlas</span><span class='sparknav-gloss' id='sparknav-reading-gloss' hidden></span></span>
           </a>
+          <span class='visually-hidden sparknav-purpose' id='sparknav-reading-purpose'></span>
         </li>
         {# The door left ajar: one world dealt on each opening, related to the current
            world or reading first and otherwise not re-offered until other worlds have
@@ -96,10 +99,11 @@
            openings on this page offer different doors. #}
         <li class='sparknav-option' id='sparknav-ajar' hidden>
           <span class='sparknav-ray' aria-hidden='true'></span>
-          <a class='sparknav-node' id='sparknav-ajar-go' href='{{ siteRoot }}index.html' aria-labelledby='sparknav-ajar-label' aria-describedby='sparknav-ajar-gloss'>
+          <a class='sparknav-node' id='sparknav-ajar-go' href='{{ siteRoot }}index.html' aria-labelledby='sparknav-ajar-label' aria-describedby='sparknav-ajar-gloss sparknav-ajar-purpose'>
             <svg class='icon' viewBox='0 0 24 24' aria-hidden='true' focusable='false'><path d='{{ icons.door }}'/></svg>
             <span class='sparknav-words'><span class='sparknav-label' id='sparknav-ajar-label'>a door ajar</span><span class='sparknav-gloss' id='sparknav-ajar-gloss'></span></span>
           </a>
+          <span class='visually-hidden sparknav-purpose' id='sparknav-ajar-purpose'></span>
         </li>
       </ul>
       <ul class='sparknav-orbit sparknav-far' id='sparknav-far' role='list' aria-label='site controls and information'>
@@ -127,13 +131,20 @@
 {%- for link in worlds.finePrint %}
         <li class='sparknav-option'>
           <span class='sparknav-ray' aria-hidden='true'></span>
-          <a class='sparknav-node' href='{{ siteRoot }}{{ link.file }}'{% if here == link.file %} aria-current='page'{% endif %} aria-labelledby='sparknav-fine-label-{{ loop.index0 }}' aria-describedby='sparknav-fine-gloss-{{ loop.index0 }}'>
+          <a class='sparknav-node' href='{{ siteRoot }}{{ link.file }}'{% if here == link.file %} aria-current='page'{% endif %} aria-labelledby='sparknav-fine-label-{{ loop.index0 }}' aria-describedby='sparknav-fine-purpose-{{ loop.index0 }}'>
             <svg class='icon' viewBox='0 0 24 24' aria-hidden='true' focusable='false'><path d='{{ icons[link.icon] }}'/></svg>
             <span class='sparknav-words'><span class='sparknav-label' id='sparknav-fine-label-{{ loop.index0 }}'>{{ link.name }}</span><span class='sparknav-gloss' id='sparknav-fine-gloss-{{ loop.index0 }}'>{{ link.gloss }}</span></span>
           </a>
+          <span class='visually-hidden sparknav-purpose' id='sparknav-fine-purpose-{{ loop.index0 }}'>{{ link.what }}</span>
         </li>
 {%- endfor %}
       </ul>
+      {# One visible description, borrowed from the destination's own entry. Each link describes
+         itself independently for screen readers, so this visual twin is not announced twice. #}
+      <div class='sparknav-preview' id='sparknav-preview' aria-hidden='true' hidden>
+        <p class='sparknav-preview-name' id='sparknav-preview-name'></p>
+        <p class='sparknav-preview-text' id='sparknav-preview-text'></p>
+      </div>
     </nav>
     <div class='sparknav-modal' id='sparknav-modal' hidden></div>
   </details>

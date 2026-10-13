@@ -1304,6 +1304,8 @@
   // so a constellation looks scattered however many stars are in it.
   var STAR_SCATTER = [0, 0.78, 0.26, 1.12, 0.52, 1.3, 0.12, 0.94, 0.66, 1.18];
   var TWO_COLUMN_WIDTH = 600; // the narrowest viewport that gets a column per orbit
+  var PREVIEW_WIDTH = 352;
+  var PREVIEW_MIN = 256;
 
   var nav = null;
   var navBox = null; // the shared lightbox, raised on every press of the logo
@@ -1454,6 +1456,23 @@
     // long list of options -- the cascade is what fits: the stylesheet's other layout, a list
     // under the logo that scrolls, which is also what the markup is without a script at all.
     var fits = deepest + mid + 16 <= viewportH;
+    // The description occupies unused sky, never a chip's space. If it cannot stand beside
+    // the constellation, the same disclosure lays it between its groups and scrolls.
+    if (nav.preview && !nav.preview.hidden) {
+      var right = 0;
+      for (g = 0; g < groups.length; g++) {
+        right = Math.max(right, (columns > 1 ? lefts[g] : STAR_EDGE) + spread + widths[g]);
+      }
+      var previewX = Math.ceil(right + STAR_GUTTER);
+      var previewWidth = Math.min(PREVIEW_WIDTH, viewportW - previewX - 2 * mid - 16);
+      nav.host.style.setProperty('--nav-preview-x', previewX + 'px');
+      nav.host.style.setProperty('--nav-preview-y', top + 'px');
+      nav.host.style.setProperty('--nav-preview-width', Math.max(PREVIEW_MIN, previewWidth) + 'px');
+      nav.preview.style.setProperty('--arrive-angle', angleOf(previewX - mid, top - mid));
+      nav.preview.style.setProperty('--leave-angle', angleOf(mid - previewX, mid - top));
+      fits = fits && previewWidth >= PREVIEW_MIN
+        && top + nav.preview.offsetHeight + mid + 16 <= viewportH;
+    }
     html.setAttribute('data-nav', fits ? 'live' : 'cascade');
   }
 
@@ -1572,6 +1591,39 @@
     else if (typeof option.removeAttribute === 'function') option.removeAttribute('data-mood');
   }
 
+  // The ajar door gets the first look; hovering or focusing another destination lends this
+  // same surface its name, palette and full purpose. No extra press or second link is involved.
+  function peekDestination(node, quiet) {
+    if (!nav || !nav.preview || !nav.previewName || !nav.previewText
+        || !node || node.tagName !== 'A' || !node.parentNode) return false;
+    var purpose = node.parentNode.querySelector('.sparknav-purpose');
+    var label = node.querySelector('.sparknav-label');
+    if (!purpose || !purpose.textContent || !label) return false;
+    var name = String(label.textContent || '').replace(/^go to /, '').trim();
+    var text = purpose.textContent;
+    nav.peeked = node;
+    if (!nav.preview.hidden && nav.previewName.textContent === name
+        && nav.previewText.textContent === text) return false;
+    wear(nav.preview, node.parentNode.getAttribute('data-mood'));
+    nav.preview.hidden = false;
+    var gesture = { seed: Math.floor(Math.random() * 0x7fffffff), length: riteMs('medium', 340) };
+    say(nav.previewName, name, quiet, gesture);
+    say(nav.previewText, text, quiet, gesture);
+    return true;
+  }
+
+  function peekFromEvent(event) {
+    if (!nav.host.open || nav.sky.hidden || event.pointerType === 'touch') return;
+    var node = event.target;
+    while (node && node !== nav.sky) {
+      if (node.classList && node.classList.contains('sparknav-node')) {
+        if (peekDestination(node, false)) place();
+        return;
+      }
+      node = node.parentNode;
+    }
+  }
+
   function shape() {
     if (!nav) return;
     // A piece from the feed can play on this page without changing its address.
@@ -1593,6 +1645,9 @@
         relabel(nav.readingGloss, 'from your reading' + (preview ? ' · ' + preview : ''));
         nav.readingGloss.hidden = false;
       }
+      if (nav.readingPurpose) {
+        nav.readingPurpose.textContent = worldEntry ? worldEntry.what || worldEntry.gloss || '' : '';
+      }
       if (here) nav.readingGo.setAttribute('aria-current', 'page');
       else nav.readingGo.removeAttribute('aria-current');
       nav.reading.hidden = false;
@@ -1613,6 +1668,7 @@
           var doorPreview = ajarDoor.gloss || ajarDoor.what;
           relabel(nav.ajarGloss, ajarReason + (doorPreview ? ' · ' + doorPreview : ''));
         }
+        if (nav.ajarPurpose) nav.ajarPurpose.textContent = ajarDoor.what || ajarDoor.gloss || '';
         nav.ajar.hidden = false;
       } else {
         nav.ajar.hidden = true;
@@ -1633,6 +1689,12 @@
       var kept = store && typeof store.keys === 'function' ? store.keys().length : 0;
       relabel(nav.stateLabel, kept ? 'state · ' + kept + ' kept' : 'state');
     }
+    var previewLink = nav.peeked && visibleInNav(nav.peeked) ? nav.peeked
+      : nav.ajar && !nav.ajar.hidden ? nav.ajarGo
+      : nav.reading && !nav.reading.hidden ? nav.readingGo
+      : nav.here && !nav.here.hidden ? nav.here.querySelector('.sparknav-node')
+      : nav.sky.querySelector('a[href]');
+    peekDestination(previewLink, !nav.host.open || !nav.sky.classList.contains('is-branching'));
     place();
     restoreNavFocus();
   }
@@ -1747,6 +1809,7 @@
       longest = Math.max(longest, cutLeave(node));
       shareTreads(node, options[i], 'unmake');
     }
+    if (nav.preview && !nav.preview.hidden) longest = Math.max(longest, cutLeave(nav.preview));
     var last = Math.max(riteMs('medium', 340), longest) + Math.ceil(count / 2) * castStagger;
     // The rings and the sky go last, in treads rolled for this close and as long as the last chip,
     // so no chip is left after the circle it was cast in has gone. cast-ring-out is no keyframes:
@@ -1831,6 +1894,7 @@
       aimAtLogo(node, options[i], 'arrive');
       if (cutOn(node, 'develop', { duration: 'medium' })) shareTreads(node, options[i], 'develop');
     }
+    if (nav.preview && !nav.preview.hidden) cutOn(nav.preview, 'develop', { duration: 'medium' });
   }
 
   /* ---- the visitor's own sky, behind the options -------------------------------------------- */
@@ -1924,6 +1988,7 @@
     nav.logo.setAttribute('aria-expanded', on ? 'true' : 'false');
     if (on) {
       endUnmake(); // pressed again before the last close had finished: cast afresh
+      nav.peeked = null;
       dealDoor(); // the ajar door is drawn afresh for every opening
       shape();
       deal();
@@ -1968,7 +2033,8 @@
     var focused = ev.type === 'focusin' && part.classList.contains('sparknav-node');
     if (!focused && (ev.pseudoElement || ev.animationName !== 'cut-in')) return;
     if (!nav.sky.classList.contains('is-branching') || nav.sky.classList.contains('is-unmaking')) return;
-    if (part === nav.dust || part.classList.contains('sparknav-node') || part.classList.contains('sparknav-ray')) {
+    if (part === nav.dust || part === nav.preview
+        || part.classList.contains('sparknav-node') || part.classList.contains('sparknav-ray')) {
       part.classList.add('is-landed');
       // Focus reveals the whole path at once, not just a chip ahead of its delayed ray.
       if (focused) {
@@ -1993,7 +2059,7 @@
      are read before any is marked: getAnimations() brings style up to date, and a mark set
      between two reads would make the next read work the whole sky's style out again. */
   function markUnlanded() {
-    var parts = [nav.dust];
+    var parts = [nav.dust, nav.preview];
     var options = nav.sky.querySelectorAll('.sparknav-option');
     for (var i = 0; i < options.length; i++) {
       if (typeof options[i].querySelector !== 'function') continue;
@@ -2307,10 +2373,16 @@
       readingGo: document.getElementById('sparknav-reading-go'),
       readingLabel: document.getElementById('sparknav-reading-label'),
       readingGloss: document.getElementById('sparknav-reading-gloss'),
+      readingPurpose: document.getElementById('sparknav-reading-purpose'),
       ajar: document.getElementById('sparknav-ajar'),
       ajarGo: document.getElementById('sparknav-ajar-go'),
       ajarLabel: document.getElementById('sparknav-ajar-label'),
       ajarGloss: document.getElementById('sparknav-ajar-gloss'),
+      ajarPurpose: document.getElementById('sparknav-ajar-purpose'),
+      preview: document.getElementById('sparknav-preview'),
+      previewName: document.getElementById('sparknav-preview-name'),
+      previewText: document.getElementById('sparknav-preview-text'),
+      peeked: null,
       participate: document.getElementById('sparknav-participate'),
       participateOpen: document.getElementById('sparknav-participate-open'),
       cookies: document.getElementById('sparknav-cookies'),
@@ -2353,6 +2425,8 @@
     nav.host.addEventListener('toggle', follow);
     nav.sky.addEventListener('animationend', noteLanded);
     nav.sky.addEventListener('focusin', noteLanded);
+    nav.sky.addEventListener('focusin', peekFromEvent);
+    nav.sky.addEventListener('pointerover', peekFromEvent);
 
     // The state interface's host has landed: where the panel stands now is where it stays.
     if (nav.modal && typeof nav.modal.addEventListener === 'function') {
