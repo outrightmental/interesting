@@ -678,18 +678,35 @@
   }
   function read() { return store ? store.read(SKY, []) : { status: 'unavailable', value: [] }; }
   function stars() { return clean(read().value); }
-  var listeners = [];
-  function onSky(fn) {
+  // One subscription shape for both settings: push on, hand back a one-shot release.
+  function subscribe(list, fn) {
     if (typeof fn !== 'function') return function () {};
-    listeners.push(fn);
+    list.push(fn);
     var subscribed = true;
     return function () {
       if (!subscribed) return;
       subscribed = false;
-      var at = listeners.indexOf(fn);
-      if (at !== -1) listeners.splice(at, 1);
+      var at = list.indexOf(fn);
+      if (at !== -1) list.splice(at, 1);
     };
   }
+  // Each subscriber gets its own snapshot; one faulty reader never silences the rest, and the
+  // first failure is handed back to be rethrown once every reader has heard.
+  function tellEach(list, snapshot) {
+    var failures = [];
+    list.slice().forEach(function (fn) {
+      try { fn.apply(null, snapshot()); }
+      catch (error) { failures.push(error); }
+    });
+    return failures;
+  }
+  function broadcast(name, detail) {
+    if (typeof window.CustomEvent === 'function' && typeof window.dispatchEvent === 'function') {
+      window.dispatchEvent(new window.CustomEvent(name, { detail: detail }));
+    }
+  }
+  var listeners = [];
+  function onSky(fn) { return subscribe(listeners, fn); }
   function sameStars(a, b) {
     return a.length === b.length && a.every(function (star, i) {
       return star.x === b[i].x && star.y === b[i].y && star.text === b[i].text;
@@ -698,17 +715,8 @@
   function announce(list, how, kept) {
     recordFigure(list);
     refresh();
-    var failures = [];
-    // Readers receive independent snapshots; one faulty reader must not silence the others.
-    listeners.slice().forEach(function (fn) {
-      try { fn(list.map(cleanStar), how, kept); }
-      catch (error) { failures.push(error); }
-    });
-    if (typeof window.CustomEvent === 'function' && typeof window.dispatchEvent === 'function') {
-      window.dispatchEvent(new window.CustomEvent('persona:sky', {
-        detail: { stars: list.map(cleanStar), how: how, kept: kept }
-      }));
-    }
+    var failures = tellEach(listeners, function () { return [list.map(cleanStar), how, kept]; });
+    broadcast('persona:sky', { stars: list.map(cleanStar), how: how, kept: kept });
     if (failures.length) throw failures[0];
   }
   function setStars(next, how) {
@@ -764,17 +772,7 @@
       says: LEVEL_SAYS[saved.level - 1], set: saved.set };
   }
   var tuned = [];
-  function onDifficulty(fn) {
-    if (typeof fn !== 'function') return function () {};
-    tuned.push(fn);
-    var subscribed = true;
-    return function () {
-      if (!subscribed) return;
-      subscribed = false;
-      var at = tuned.indexOf(fn);
-      if (at !== -1) tuned.splice(at, 1);
-    };
-  }
+  function onDifficulty(fn) { return subscribe(tuned, fn); }
   function setDifficulty(level) {
     var want = levelOf(level);
     if (!want) throw new RangeError('Difficulty must be a whole level from 1 to ' + LEVELS.length + '.');
@@ -789,23 +787,18 @@
     }
     refresh();
     if (before.level === now.level) return kept;
-    var subscribers = tuned.slice();
-    var failures = [];
-    for (var i = 0; i < subscribers.length; i++) {
-      try { subscribers[i](Object.assign({}, now), kept); }
-      catch (error) { failures.push(error); }
-    }
-    if (typeof window.CustomEvent === 'function' && typeof window.dispatchEvent === 'function') {
-      window.dispatchEvent(new window.CustomEvent('persona:difficulty', {
-        detail: { difficulty: now, kept: kept }
-      }));
-    }
+    var failures = tellEach(tuned, function () { return [Object.assign({}, now), kept]; });
+    broadcast('persona:difficulty', { difficulty: now, kept: kept });
     if (failures.length) throw failures[0];
     return kept;
   }
+  // The one sentence that says what the dial means, wherever it is said: the tuner's status line
+  // and the API's describeDifficulty read the same words.
+  function levelLine(at) {
+    return 'Puzzles are set to ' + LEVELS[at - 1] + ': ' + LEVEL_SAYS[at - 1] + '.';
+  }
   function describeDifficulty() {
-    var d = difficulty();
-    return 'Puzzles are set to ' + d.name + ': ' + d.says + '.';
+    return levelLine(difficulty().level);
   }
   function element(tag, className, text) {
     var node = document.createElement(tag);
@@ -871,7 +864,7 @@
     // The status line gets the real words at once (it is aria-live) and is revealed around them.
     function tell(level, kept) {
       var at = levelOf(level) || DEFAULT_LEVEL;
-      say(status, 'Puzzles are set to ' + LEVELS[at - 1] + ': ' + LEVEL_SAYS[at - 1] + '.'
+      say(status, levelLine(at)
         + (kept === false ? ' Kept for this page only: this browser stores nothing between visits.' : ''));
     }
     paint(difficulty().level);
@@ -1079,11 +1072,12 @@
     var label = list.length || isRead ? 'open persona' : 'set up persona';
     var thought = portraitThought(list);
     // The label is revealed only while it can be seen: beside the empty, beckoning avatar, or
-    // printed beside the portrait under the pointer (is-waxing, js/motion.js).
+    // printed beside the portrait under the pointer (is-waxing, js/motion.js). The layout always
+    // writes the label span; writing the button itself would wipe the portrait inside it, so the
+    // words only ever go to that span (say() passes a missing one by).
     var shown = (!list.length && !isRead) || askingInCard
       || !!(card.open.classList && card.open.classList.contains('is-waxing'));
-    if (card.label) say(card.label, thought || label, !shown);
-    else card.open.textContent = thought || label;
+    say(card.label, thought || label, !shown);
     if (thought) card.open.setAttribute('aria-label', label + ': ' + thought);
     else card.open.removeAttribute('aria-label');
     if (card.portrait && !behind) {
@@ -2195,7 +2189,10 @@
     // The chosen star stays chosen when the sky is drawn again around it (a star placed or taken
     // out elsewhere in it), so a press on the sky places a star and does nothing else besides.
     var chosen = !dealAll && selected >= 0 ? old[selected] : null;
-    activeDrag = null;
+    // Every caller releases or guards a live drag before the field is dealt again, but if one
+    // ever reached here, releasing it also lets go of the pointer capture and the lifted size --
+    // nulling it alone would leave the star held large under a capture nothing ends.
+    releaseDrag();
     var saved = read();
     var fresh = [];
     var order = [];
