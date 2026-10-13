@@ -418,6 +418,26 @@
       top: { cosmic: 2, divinatory: 1 }, bottom: { rooted: 2, tender: 1 },
       left: { attentive: 2, brooding: 1 }, right: { analytic: 2, restless: 1 },
       centre: { curious: 2, divinatory: 2, verbal: 1 }
+    },
+    {
+      probe: 'paper-seal', name: 'the cut-paper seal', kind: 'paper',
+      ask: 'Make a paper seal: open or close cuts and change how often they repeat, then open a puzzle whenever you like.',
+      cuts: [
+        { label: 'centre cut', radius: 0, turn: 0, size: 0.12, weights: { divinatory: 3, cosmic: 2, brooding: 1 } },
+        { label: 'inner cut', radius: 0.28, turn: 0.5, size: 0.085, weights: { tender: 3, attentive: 2, rooted: 1 } },
+        { label: 'crease cut', radius: 0.58, turn: 0, size: 0.09, weights: { analytic: 3, geometric: 2, metrical: 1 } },
+        { label: 'middle cut', radius: 0.58, turn: 0.5, size: 0.115, weights: { verbal: 3, curious: 2, attentive: 1 } },
+        { label: 'near-rim cut', radius: 0.84, turn: 0.25, size: 0.075, weights: { tending: 3, rooted: 2, ceremonial: 1 } },
+        { label: 'edge cut', radius: 1, turn: 0.5, size: 0.14, weights: { restless: 3, tempestuous: 2, cosmic: 1 } }
+      ],
+      repeats: [
+        { count: 3, weights: { rooted: 2, tending: 1, tender: 1 } },
+        { count: 4, weights: { analytic: 2, geometric: 1, verbal: 1 } },
+        { count: 6, weights: { ceremonial: 2, metrical: 1, cosmic: 1 } }
+      ],
+      whole: { tender: 3, rooted: 2, brooding: 1 },
+      spare: { attentive: 2, analytic: 1 },
+      intricate: { curious: 2, ceremonial: 2, verbal: 1 }
     }
   ];
 
@@ -1328,7 +1348,8 @@
       place: placeProbe, draw: drawProbe, windows: windowsProbe, balance: balanceProbe,
       slider: sliderProbe, sky: skyProbe, keys: keysProbe, knock: knockProbe,
       rubbing: rubbingProbe, cairn: cairnProbe, compass: compassProbe, dye: dyeProbe,
-      censer: censerProbe, thread: threadProbe, lamp: lampProbe, tiles: tilesProbe
+      censer: censerProbe, thread: threadProbe, lamp: lampProbe, tiles: tilesProbe,
+      paper: paperProbe
     };
     (kinds[probe.kind] || choiceProbe)(probe, body, trace, answer, finish, onDispose);
     return probe;
@@ -4345,6 +4366,185 @@
     body.appendChild(board);
     body.appendChild(el('p', 'probe-count', 'The lit tiles can slide. Arrow keys move the empty square; Enter or Space slides the focused tile. Start over restores the starting arrangement.'));
     body.appendChild(controls);
+    report();
+  }
+  // Only the final cuts and their repetition are read. Closing a cut leaves no history, and
+  // the paper stays editable until the stage takes it up. The preview is a static print;
+  // the shared buttons supply the rites, with no clock or animation to dispose of here.
+  function paperProbe(probe, body, trace, answer, finish) {
+    var opened = probe.cuts.map(function () { return false; });
+    var repetition = probe.repeats[probe.repeats.length - 1];
+    var wrap = el('div', 'probe-paper');
+    var picture = el('canvas', 'probe-paper-preview');
+    picture.width = 600;
+    picture.height = 600;
+    picture.setAttribute('aria-hidden', 'true');
+    var g = picture.getContext('2d');
+    picture.hidden = !g;
+    wrap.setAttribute('data-picture', g ? 'true' : 'false');
+    wrap.appendChild(picture);
+
+    var settings = el('div', 'probe-paper-settings');
+    var row = el('div', 'probe-paper-repeat');
+    var repeats = el('select');
+    repeats.id = 'probe-paper-repeat-' + probe.probe;
+    var label = el('label', null, 'repeat the pattern');
+    label.setAttribute('for', repeats.id);
+    row.appendChild(label);
+    probe.repeats.forEach(function (spec) {
+      var option = el('option', null, spec.count + ' times');
+      option.value = String(spec.count);
+      repeats.appendChild(option);
+    });
+    repeats.value = String(repetition.count);
+    row.appendChild(repeats);
+    settings.appendChild(row);
+
+    var group = el('div', 'probe-paper-cuts');
+    group.setAttribute('role', 'group');
+    group.setAttribute('aria-label', 'Cuts in the paper. Press a cut to open or close it.');
+    var buttons = probe.cuts.map(function (cut, index) {
+      var button = el('button', 'probe-paper-cut', cut.label);
+      button.type = 'button';
+      button.setAttribute('aria-pressed', 'false');
+      button.addEventListener('click', function () { switchCut(index); });
+      group.appendChild(button);
+      return button;
+    });
+    settings.appendChild(group);
+    settings.appendChild(el('p', 'probe-count', 'Tap the paper to switch the nearest cut, or use the cut buttons. An edge cut changes the outline; an inner cut opens holes.'));
+    wrap.appendChild(settings);
+    body.appendChild(wrap);
+    var controls = el('div', 'controls');
+    var done = el('button', 'btn-filled', 'open a puzzle');
+    done.type = 'button';
+    controls.appendChild(done);
+    body.appendChild(controls);
+
+    var style = window.getComputedStyle(body);
+    var ink = rgbOf(style.getPropertyValue('--bg'), '#070a14');
+    var paper = rgbOf(style.getPropertyValue('--accent2'), '#ffe7ab');
+    var fold = { kind: 'slice', angle: angleOf(style) };
+    var radius = picture.width * 0.38;
+    var cx = picture.width / 2;
+    var cy = picture.height / 2;
+
+    // Mirrored pairs repeat around the paper. A cut on a crease is drawn once per section;
+    // the centre is drawn once for the whole sheet, rather than once per overlapping layer.
+    function impressions() {
+      var points = [];
+      probe.cuts.forEach(function (cut, index) {
+        if (!cut.radius) {
+          points.push({ x: cx, y: cy, index: index, size: cut.size * radius, guide: true });
+          return;
+        }
+        var turns = cut.turn === 0 || cut.turn === 0.5 ? [cut.turn] : [cut.turn, 1 - cut.turn];
+        for (var section = 0; section < repetition.count; section++) {
+          turns.forEach(function (turn, side) {
+            var angle = -Math.PI / 2 + (section + turn) * Math.PI * 2 / repetition.count;
+            points.push({ x: cx + Math.cos(angle) * cut.radius * radius,
+              y: cy + Math.sin(angle) * cut.radius * radius,
+              index: index, size: cut.size * radius, guide: section === 0 && side === 0 });
+          });
+        }
+      });
+      return points;
+    }
+    function paint() {
+      if (!g) return;
+      g.clearRect(0, 0, picture.width, picture.height);
+      g.fillStyle = rgba(paper, 1);
+      g.beginPath();
+      g.arc(cx, cy, radius, 0, Math.PI * 2);
+      g.fill();
+      g.save();
+      g.clip();
+      paintCut(g, cx - radius, cy - radius, radius * 2, radius * 2, 0.5, fold, rgba(ink, 0.1));
+      g.restore();
+      var points = impressions();
+      g.save();
+      g.globalCompositeOperation = 'destination-out';
+      g.fillStyle = rgba(ink, 1);
+      points.forEach(function (point) {
+        if (!opened[point.index]) return;
+        g.beginPath();
+        g.arc(point.x, point.y, point.size, 0, Math.PI * 2);
+        g.fill();
+      });
+      g.restore();
+      // Quiet outlines show the available cuts on one section without covering the print.
+      g.save();
+      g.beginPath();
+      g.arc(cx, cy, radius, 0, Math.PI * 2);
+      g.clip();
+      g.strokeStyle = rgba(ink, 1);
+      g.lineWidth = 2;
+      points.forEach(function (point) {
+        if (!point.guide || opened[point.index]) return;
+        g.beginPath();
+        g.arc(point.x, point.y, point.size, 0, Math.PI * 2);
+        g.stroke();
+      });
+      g.restore();
+    }
+    function report(detail) {
+      var names = probe.cuts.filter(function (cut, index) { return opened[index]; })
+        .map(function (cut) { return cut.label; });
+      note(trace, (g ? '' : 'The picture cannot be drawn here; the cut buttons still choose the pattern. ')
+        + (detail ? detail + ' ' : '')
+        + (names.length ? 'Open cuts: ' + names.join(', ') + '. Pattern repeated ' + repetition.count + ' times.'
+          : 'The paper is uncut. You can leave it whole or try a cut.'));
+    }
+    function switchCut(index) {
+      opened[index] = !opened[index];
+      buttons[index].setAttribute('aria-pressed', opened[index] ? 'true' : 'false');
+      paint();
+      report(probe.cuts[index].label + (opened[index] ? ' opened.' : ' closed.'));
+    }
+    repeats.addEventListener('change', function () {
+      var chosen = probe.repeats.find(function (spec) { return String(spec.count) === repeats.value; });
+      if (!chosen) {
+        repeats.value = String(repetition.count);
+        report('Choose one of the repeat counts.');
+        return;
+      }
+      repetition = chosen;
+      paint();
+      report(opened.some(function (cut) { return cut; }) ? '' : 'Repetition set to ' + repetition.count + '.');
+    });
+    picture.addEventListener('click', function (ev) {
+      var box = picture.getBoundingClientRect();
+      if (!box.width || !box.height) { report('Use a cut button to change the paper.'); return; }
+      var x = (ev.clientX - box.left) / box.width * picture.width;
+      var y = (ev.clientY - box.top) / box.height * picture.height;
+      if (Math.hypot(x - cx, y - cy) > radius) {
+        report('Press inside the paper, or use a cut button.');
+        return;
+      }
+      var points = impressions();
+      var nearest = points[0];
+      var distance = Infinity;
+      points.forEach(function (point) {
+        var gap = Math.hypot(x - point.x, y - point.y);
+        if (gap < distance) { distance = gap; nearest = point; }
+      });
+      switchCut(nearest.index);
+    });
+    done.addEventListener('click', function () {
+      Object.keys(answer).forEach(function (id) { delete answer[id]; });
+      var n = opened.filter(function (cut) { return cut; }).length;
+      if (!n) add(answer, probe.whole, 1);
+      else {
+        probe.cuts.forEach(function (cut, index) {
+          if (opened[index]) add(answer, cut.weights, 2 / n);
+        });
+        add(answer, repetition.weights, 0.5);
+        if (n <= 2) add(answer, probe.spare, 0.5);
+        else if (n >= 5) add(answer, probe.intricate, 0.5);
+      }
+      finish(0);
+    });
+    paint();
     report();
   }
   function describe(reading) {

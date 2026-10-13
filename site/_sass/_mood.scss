@@ -771,6 +771,65 @@ button.probe-tile {
   @include type.scale(label-small);
 }
 
+// The cut-paper seal is a static print beside native controls. Its cuts stay reversible;
+// only the shared controls move, and their reduced-motion rules apply unchanged.
+.probe-paper {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  align-items: start;
+  gap: 0.75rem;
+  max-width: 38rem;
+}
+
+.probe-paper-preview {
+  display: block;
+  width: min(100%, 19rem);
+  height: auto;
+  justify-self: center;
+  border-radius: var(--md-sys-shape-corner-large);
+  background: var(--md-sys-color-surface-container-lowest);
+  cursor: crosshair;
+  touch-action: manipulation;
+}
+
+.probe-paper-settings {
+  display: grid;
+  gap: 0.75rem;
+  min-width: 0;
+}
+
+.probe-paper-repeat {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.probe-paper-repeat label {
+  color: var(--md-sys-color-on-surface);
+  @include type.scale(label-large);
+}
+
+.probe-paper-cuts {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.5rem;
+}
+
+.probe-paper-cut {
+  min-width: 0;
+  min-height: 44px;
+  padding: 0.5rem;
+  border-radius: var(--md-sys-shape-corner-small);
+  overflow-wrap: anywhere;
+}
+
+@media (min-width: 600px) {
+  .probe-paper[data-picture='true'] {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
 // The thread board stays square, so each thread's percentage length and bearing follow its pins
 // at every width. A join pays the line out from one pin; removal reels it back along that same
 // line, reversing from wherever it has reached. Only the transform moves, in treads rolled for
