@@ -11,7 +11,8 @@
                         both on one grid; no lane sits within five per cent of the edge, so the
                         arithmetic settles it. Call each lane: stops, or crosses. A wrong check
                         says how many lanes are called right and no more; solved, the chains are
-                        tipped, and each lane's count of what fell stands over its call.
+                        tipped, each lane's count of what fell stands over its call, and a tap on
+                        a tipped lane stands its chain up and tips it once more.
      the balance point  A weightless plank over a ruler from 0 to 20, with three or four blocks of
                         written mass standing on it at whole numbers. Find where one pivot
                         balances it (the blocks are chosen so the answer is a whole number) and
@@ -37,6 +38,20 @@ const TIPS = [
   { label: 'tips to the right', value: 'right' },
   { label: 'stays level', value: 'level' }
 ];
+// What the floor says once a piece is sealed: one line, chosen by the plan, in the site's own
+// voice, so one floor always reads the same and another reads another.
+const FLOOR_SEALS = [
+  'what fell was asked to fall',
+  'heavy things keep honest books',
+  'the floor settles like a house at midnight',
+  'nothing moved until the numbers agreed',
+  'level is a verdict, not a mood',
+  'the push was only ever arithmetic',
+  'every block remembers where it stood'
+];
+function floorSeal(n) {
+  return FLOOR_SEALS[Math.abs(Math.round(n)) % FLOOR_SEALS.length];
+}
 
 /* How hard the visitor asked for their puzzles. The persona keeps one difficulty for the whole
    site (js/persona.js) and js/stage.js hands it to a piece on env.difficulty, 1 (gentle) to 5
@@ -426,7 +441,6 @@ function drawLanes(g, w, h, env, plan, s, variant) {
   ground(g, w, h, env);
   // The light over a tipped floor: cut in by the edge from the moment of the tip. A visitor who
   // asked for less motion sees the chains already down.
-  const tipped = s.time >= 0 && reduced ? Infinity : s.time;
   if (s.time >= 0) daybreak(g, rite, env, w, h, reduced ? 1 : clamp01(s.time / 1.6), 0.08);
   fitted(g, 'a falling domino crosses a gap narrower than four fifths of its height', w / 2, h * 0.05, small, w - small * 1.2, env.alpha(c.muted, 0.85));
   const every = v.density < 0.9 ? 2 : 1;
@@ -445,6 +459,8 @@ function drawLanes(g, w, h, env, plan, s, variant) {
   const callSize = Math.max(6, size * shrink);
   const callSmall = Math.max(6, small * shrink);
   plan.lanes.forEach((lane, k) => {
+    // This lane's own clock: the global tip, less any later re-tip of this lane alone.
+    const laneTime = s.time < 0 ? -1 : reduced ? Infinity : Math.max(0, s.time - (s.tipLane ? s.tipLane[k] : 0));
     const lay = laneLayout(lane);
     const bandTop = geo.top + k * geo.band;
     const floorY = bandTop + geo.band * 0.74;
@@ -501,7 +517,7 @@ function drawLanes(g, w, h, env, plan, s, variant) {
     // The dominoes, last to first, so the earlier ones lie over the later when they fall.
     const bw = u;
     for (let i = lane.n - 1; i >= 0; i--) {
-      const angle = s.time >= 0 ? fallAngle(lane, i, tipped, rite, k) : 0;
+      const angle = laneTime >= 0 ? fallAngle(lane, i, laneTime, rite, k) : 0;
       const x = x0 + (lay.xs[i] + 1) * u;
       const bh = lane.h * u;
       const cx = x - bw / 2 * Math.cos(angle) + bh / 2 * Math.sin(angle);
@@ -560,7 +576,7 @@ function drawLanes(g, w, h, env, plan, s, variant) {
     // the moment the thing after is cut on, so the one replaces the other in a single cut. Once the
     // chains have had their time the count of what fell is cut on over the call's badge at its own
     // moment, and the call stays under it, so what was said and what came of it read together.
-    const counted = s.time >= 0 && (reduced || s.time > 2.2) ? (reduced ? 1 : clamp01((s.time - 2.2) / 0.7)) : 0;
+    const counted = laneTime >= 0 && (reduced || laneTime > 2.2) ? (reduced ? 1 : clamp01((laneTime - 2.2) / 0.7)) : 0;
     const countOn = counted > 0 && roll(rite, 0x400 + k).flicker(counted);
     const badgeH = callSize * 1.5;
     const badgeAt = s.badgeAt ? s.badgeAt[k] : -1;
@@ -581,7 +597,7 @@ function drawLanes(g, w, h, env, plan, s, variant) {
       // Over the badge: at five grid units above the floor, or higher still where the badge's top
       // stands above that, so the count never sits on the badge.
       const countY = Math.min(floorY - u * 5, floorY - u * 2 - badgeH / 2 - callSmall * 0.7);
-      label(g, fellWords(lane, fallen(lane, tipped, rite, k)), callX, countY, callSmall, c.accent2);
+      label(g, fellWords(lane, fallen(lane, laneTime, rite, k)), callX, countY, callSmall, c.accent2);
     }
     if (word >= 0) {
       label(g, word ? 'crosses' : 'stops', callX, floorY - u * 2, callSize, c.accent2);
@@ -613,7 +629,7 @@ function lanesPiece(env, plan) {
   const count = truth.length;
   const each = (value) => new Array(count).fill(value);
   const s = {
-    calls: each(0), touched: false, hinted: [], time: -1, t: 0, tippedAt: -1,
+    calls: each(0), touched: false, hinted: [], time: -1, t: 0, tippedAt: -1, tipLane: each(0),
     calledAt: each(-1), changes: each(0), said: each(0), point: each(null),
     under: Array.from({ length: count }, () => []), wordWas: each(-1), badgeAt: each(-1), badgePoint: each(null),
     hintAt: {}, v: 0, drawn: null, drawnAt: -1
@@ -628,7 +644,10 @@ function lanesPiece(env, plan) {
   // a hint's answer in 0.8, and a tip in 3 -- the last domino down by 2.3, the count by 2.9.
   function until() {
     let last = over(s.tippedAt, 3);
-    for (let k = 0; k < count; k++) last = Math.max(last, over(s.calledAt[k], 0.9), over(s.hintAt[k], 0.8));
+    for (let k = 0; k < count; k++) {
+      last = Math.max(last, over(s.calledAt[k], 0.9), over(s.hintAt[k], 0.8));
+      if (s.tippedAt >= 0) last = Math.max(last, over(s.tippedAt + s.tipLane[k], 3));
+    }
     return last;
   }
   function right() {
@@ -711,7 +730,16 @@ function lanesPiece(env, plan) {
       const geo = lanesGeometry(c.w, c.h, plan, env.variant || PLAIN);
       const k = Math.floor((y * c.h - geo.top) / geo.band);
       if (k < 0 || k >= count) {
-        c.status('Tap one of the ' + WORDS[count] + ' numbered lanes to change its call.');
+        c.status(s.time >= 0 ? 'Tap a lane to stand its chain up and tip it again.'
+          : 'Tap one of the ' + WORDS[count] + ' numbered lanes to change its call.');
+        return;
+      }
+      if (s.time >= 0) {
+        // The floor is tipped: a tap stands that lane's chain up and tips it once more.
+        s.tipLane[k] = s.time;
+        s.v += 1;
+        c.status('lane ' + (k + 1) + ' stands and falls again: it ' + (truth[k] ? 'crosses the gap' : 'stops at the gap'));
+        draw(c);
         return;
       }
       const next = s.calls.slice();
@@ -736,7 +764,7 @@ function lanesPiece(env, plan) {
       s.tippedAt = s.t;
       s.v += 1;
       const across = truth.filter(Boolean).length;
-      c.status('tipped. ' + (across === 1 ? 'one lane goes over' : WORDS[across] + ' lanes go over') + ' and ' + (count - across === 1 ? 'one stops' : WORDS[count - across] + ' stop') + ' at the gap. nothing here was fragile.');
+      c.status('tipped. ' + (across === 1 ? 'one lane goes over' : WORDS[across] + ' lanes go over') + ' and ' + (count - across === 1 ? 'one stops' : WORDS[count - across] + ' stop') + ' at the gap. nothing here was fragile: tap any lane to stand its chain up and tip it again. the floor reads: ' + floorSeal(plan.lanes.reduce((sum, l) => sum + l.h * 3 + l.g, 0)));
     }
   };
 }
@@ -1303,9 +1331,10 @@ function plankPiece(env, plan) {
       tilt(c, Math.sign(pull) * 0.14);
       if (s.doneAt < 0) s.doneAt = s.t;
       s.v += 1;
+      const seal = ' The floor reads: ' + floorSeal(moving ? plan.pivot * 3 + answer.weight * 5 + answer.position : centre * 5 + plan.blocks.length);
       c.status(moving
-        ? 'Exact balance uses mass ' + answer.weight + ' at mark ' + answer.position + '. Change either setting and check again to see which side pulls harder.'
-        : 'Exact balance is at ' + centre + '. The clamp is off; move the pivot and check again to see it tip.');
+        ? 'Exact balance uses mass ' + answer.weight + ' at mark ' + answer.position + '. Change either setting and check again to see which side pulls harder.' + seal
+        : 'Exact balance is at ' + centre + '. The clamp is off; move the pivot and check again to see it tip.' + seal);
     }
   };
 }

@@ -9,8 +9,11 @@
      the postcard        Two views of the same lights, a left eye and a right eye a step apart. A
                          light shifts between the views by more the nearer it is, so the order of
                          the shifts is the order of the depths. Put the lights nearest to farthest.
-                         A wrong check says how many stand in the right place and no more; a hint,
-                         at a price, shows where one light stands.
+                         A wrong check says how many stand in the right place and how many
+                         neighbouring pairs run nearer first, and no more; a hint, at a price,
+                         shows where one light stands. A light tapped into the order can be
+                         tapped again to take it back out, and a sealed postcard reads any
+                         light's true depth on a tap.
      which sky is yours  Four small skies. One is the visitor's pattern turned clockwise by one,
                          two or three quarter turns, perhaps flipped left for right first; the other
                          three are near misses, the same lights with a few nudged. Say which sky,
@@ -544,7 +547,7 @@ function postcardScene(g, w, h, c, plan, s, v) {
         const cp = came(s, s.clearedAt, 0.7, reduced);
         if (cp < 1) {
           ring(g, c, x, y, 0.8, size * 0.6, was.ring * (1 - own.ratchet(cp)));
-          if (was.said && !own.flicker(cp)) places.push({ text: String(gone + 1), x: x + size * 0.55, y: y + size * 0.55, size: size * 0.7 });
+          if (was.said && !own.flicker(cp)) places.push({ text: String(was.place || gone + 1), x: x + size * 0.55, y: y + size * 0.55, size: size * 0.7 });
         }
       } else if (s.hinted.includes(i)) {
         const own = roll(rite, 0x71 + i, 0);
@@ -605,7 +608,7 @@ function postcardPiece(env, plan) {
   }
   return {
     title: postcardTitle(plan),
-    brief: 'Compare two views of the same ' + WORDS[n] + ' lights to order their depths. A nearer light shifts farther between the views; size and brightness tell you nothing about depth. Inspect light reads its positions without placing it: each view has its own scale from 0 on the left to 100 on the right. Change view spacing to make the shifts smaller or larger. Arrange the answer with the order control, or tap all the lights nearest first.',
+    brief: 'Compare two views of the same ' + WORDS[n] + ' lights to order their depths. A nearer light shifts farther between the views; size and brightness tell you nothing about depth. Inspect light reads its positions without placing it: each view has its own scale from 0 on the left to 100 on the right. Change view spacing to make the shifts smaller or larger. Arrange the answer with the order control, or tap all the lights nearest first; tapping your latest light again takes it back out.',
     goal: 'Put the lights in order from nearest to farthest.',
     aspect: '4 / 3',
     checkLabel: 'check the postcard',
@@ -620,10 +623,15 @@ function postcardPiece(env, plan) {
       const value = c.value('order');
       const order = isPerm(value, n) ? value : s.order;
       const k = inPlace(order);
+      if (k === n) return { solved: true, say: 'every light in its place: the postcard has depth' };
+      // Measured feedback: how many neighbouring pairs of the visitor's order already run
+      // nearer first -- traction for deduction, and never an answer.
+      let pairs = 0;
+      for (let i = 0; i + 1 < order.length; i++) if (plan.ranks[order[i]] < plan.ranks[order[i + 1]]) pairs += 1;
       return {
-        solved: k === n,
-        say: k === n ? 'every light in its place: the postcard has depth'
-          : k === 0 ? 'none of them stands at its true depth yet' : WORDS[k] + ' of ' + WORDS[n] + ' at the right depth'
+        solved: false,
+        say: (k === 0 ? 'none of them stands at its true depth yet' : WORDS[k] + ' of ' + WORDS[n] + ' at the right depth')
+          + '; ' + WORDS[pairs] + ' of ' + WORDS[n - 1] + ' neighbouring pairs run nearer first'
       };
     },
     start(c) {
@@ -702,8 +710,24 @@ function postcardPiece(env, plan) {
       }
       c.set('inspect', best + 1);
       const measure = postcardMeasure(plan, best, postcardSpacing(s, rite, c.reduced));
+      if (c.done) {
+        // The postcard is sealed: a tap reads a light's true depth and places nothing.
+        c.status(measure + ' It is the ' + PLACE[plan.ranks[best]] + ' light.');
+        draw(c);
+        return;
+      }
       if (s.taps.includes(best)) {
-        c.status(measure + '; already in your order');
+        if (s.taps[s.taps.length - 1] === best) {
+          // The latest light tapped again is taken back out: its ring goes back the way it came.
+          const was = tapShown(s, rite, c.reduced, best);
+          s.taps.pop();
+          s.cleared = [Object.assign({ light: best, place: s.taps.length + 1 }, was)];
+          s.clearedAt = s.t;
+          s.rounds += 1;
+          c.status(measure + '; taken back out, ' + s.taps.length + ' of ' + n + ' placed');
+        } else {
+          c.status(measure + '; already in your order; tap your latest light to take it back out');
+        }
         draw(c);
         return;
       }
@@ -712,7 +736,7 @@ function postcardPiece(env, plan) {
       if (s.taps.length === n) {
         settle(s.taps, c);
         // The round is cleared from where each ring and place stood, on the next round's roll.
-        s.cleared = s.taps.map((light) => Object.assign({ light }, tapShown(s, rite, c.reduced, light)));
+        s.cleared = s.taps.map((light, idx) => Object.assign({ light, place: idx + 1 }, tapShown(s, rite, c.reduced, light)));
         s.clearedAt = s.t;
         s.rounds += 1;
         s.taps = [];
@@ -730,7 +754,7 @@ function postcardPiece(env, plan) {
       return !settled(s, c);
     },
     end(c) {
-      c.status('Sealed: postcard ' + plan.number + '. Light ' + LETTERS[answer[0]] + ' is nearest and light ' + LETTERS[answer[n - 1]] + ' farthest. The lines show their shifts: move the views closer and inspect the nearest two to see the gap shrink without their depths changing. The sky reads: ' + SEALS[plan.number % SEALS.length]);
+      c.status('Sealed: postcard ' + plan.number + '. Light ' + LETTERS[answer[0]] + ' is nearest and light ' + LETTERS[answer[n - 1]] + ' farthest. The lines show their shifts: move the views closer and inspect the nearest two to see the gap shrink without their depths changing; tap any light to read its true depth. The sky reads: ' + SEALS[plan.number % SEALS.length]);
     }
   };
 }
