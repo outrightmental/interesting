@@ -1,4 +1,4 @@
-/* The terrarium: plants under glass, grown from the persona's stars, and two puzzle families.
+/* The terrarium: plants under glass, lit by the card's configuration, and two puzzle families.
    As a card it is the puzzle the seed deals, drawn small through the glass (paint, spark); as a
    piece it is a watering or age puzzle below, and the card it was opened from says which. See
    js/feed.js for what a module is and js/stage.js for what a piece is.
@@ -27,8 +27,8 @@
 
    A card and the feature it opens as are one puzzle: the spark puts the whole plan on its spec as
    `of` -- the rules and readings, or the rates and leaf counts -- and piece(env) opens on that
-   rather than rolling another. The sky may be one star or many; it lights the glass, and the plan
-   stands whatever the sky is now. */
+   rather than rolling another. The sky says only whether a card is dealt (needsSky); nothing of
+   the glass is drawn from it, so the plan stands whatever the sky is now. */
 
 const WORDS = ['no', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine', 'ten', 'eleven', 'twelve'];
 const LETTERS = ['A', 'B', 'C', 'D'];
@@ -133,7 +133,7 @@ function own(rite, n) {
   }
   let r = kept.get(n);
   if (!r) {
-    r = rite.at(n);
+    r = typeof rite.at === 'function' ? rite.at(n) : rite;
     kept.set(n, r);
   }
   return r;
@@ -310,7 +310,7 @@ function wrap(g, text, max) {
 }
 
 // The air in the glasshouse: brighter under a lamp that is on, dappled by the configuration, with
-// the stars as they stand shining faintly through the top panes, and the soil along the bottom.
+// points of light shining faintly through the top panes, and the soil along the bottom.
 // The dapples lie where the configuration puts them and stay there: the light waits as the glass
 // does.
 function glass(g, w, h, env, v, lit) {
@@ -865,9 +865,11 @@ function waterPiece(env, plan) {
       }
       if (id === 'first' && later) c.status('you count ' + Number(value) + ' plants watered in round 1');
       if (id === 'hint') {
+        // A plant judged wrongly first, else the next unseen: the glass never says it has nothing
+        // left to point at, which would be saying the marks are already right.
         const unseen = plan.rules.map((r, i) => i).filter((i) => !s.hinted.includes(i));
         const next = s.hinted.length < helps
-          ? unseen.find((i) => s.chosen.includes(i) !== got[i]) ?? (later ? unseen[0] : undefined)
+          ? unseen.find((i) => s.chosen.includes(i) !== got[i]) ?? unseen[0]
           : undefined;
         if (next !== undefined) {
           s.hinted.push(next);
@@ -878,14 +880,8 @@ function waterPiece(env, plan) {
             ? 'Round 1, ' + waterReason(plan, next) + '. Before round 2 its soil reads ' + later.soil[next]
               + '. Round 2, ' + waterReason(later, next) + '.'
             : waterReason(plan, next) + '.');
-        } else if (s.hinted.length >= helps) {
-          c.status('that is all the glass will show at this difficulty; the rest is yours');
         } else {
-          // The glass only points at a plant judged wrongly, so when it finds none the line says
-          // that, rather than claiming wrong judgements were shown when there were none.
-          c.status(plan.rules.some((r, i) => s.chosen.includes(i) !== got[i])
-            ? 'every plant you have judged wrongly has been shown; the rest is yours'
-            : 'the glass points at plants judged wrongly, and finds none to point at');
+          c.status('that is all the glass will show at this difficulty; the rest is yours');
         }
       }
       draw(c);
@@ -1128,7 +1124,12 @@ function agePiece(env, plan) {
       }
       if (id === 'oldest') c.status('you say the oldest is ' + Math.round(Number(value)) + ' weeks old');
       if (id === 'hint') {
-        const next = s.hinted.length < helps ? order.find((i) => !s.hinted.includes(i)) : undefined;
+        // A stem out of place first, else the next by letter: never the oldest first, which would
+        // hand over half the answer with the first press.
+        const unseen = [0, 1, 2, 3].filter((i) => !s.hinted.includes(i));
+        const next = s.hinted.length < helps
+          ? unseen.find((i) => s.order.indexOf(i) !== order.indexOf(i)) ?? unseen[0]
+          : undefined;
         if (next !== undefined) {
           s.hinted.push(next);
           s.hintAt[next] = s.t;
