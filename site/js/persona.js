@@ -25,6 +25,8 @@
    reposition it. Only the trailing pointer click is suppressed, never keyboard activation.
    Closing the sheet keeps a move just as releasing the star does. Replacing the sky releases
    any drag before rendering, so a later pointer release cannot restore the previous sky.
+   A surviving star keeps its draft thought when its place in the list changes. If the star being
+   edited goes, keyboard focus moves to a remaining star or the drop control.
    The first preview's picture and words stay available for comparison while that world is being
    previewed in the open sheet; the first change opens that comparison. This is a temporary
    picture, never another saved or editable sky.
@@ -110,9 +112,8 @@
     return (m && m.ms(name)) || fallback;
   }
   // One passing rite on an element, by the name of its class is-<name>, taken off again after
-  // `after` ms. Put on here rather than by the engine's own rite(), which waits a frame before the
-  // class goes on so a restarted rite restarts: the shared lightbox holds the page's frames while
-  // the sheet is up (js/site.js), and most of these rites are the sheet's. A rite already playing
+  // `after` ms. Its clock stays here so makeRoom can extend an arrival's wait without replaying
+  // it. A rite already playing
   // is restarted by taking the class off and reading the box once, which makes the browser see the
   // gap; a class going on for the first time needs no such read, so a loop that deals many fresh
   // elements reads no layout at all.
@@ -470,6 +471,7 @@
   }
   function seedSky(count) {
     var n = Math.max(1, Math.min(MAX_STARS, count || SEED_COUNT));
+    if (!isFinite(n)) throw new TypeError('A star count must be a number.');
     var list = [];
     var start = Math.floor(Math.random() * THOUGHTS.length);
     for (var i = 0; i < n; i++) {
@@ -740,7 +742,7 @@
     return kept;
   }
   function addStar(star) {
-    if (!validStar(star)) return false;
+    if (!validStar(star)) throw new TypeError('A star must have finite coordinates and text.');
     var list = activeDrag ? serialize() : stars();
     if (list.length >= MAX_STARS) list.shift();
     list.push(cleanStar(star));
@@ -865,8 +867,7 @@
     // The status line gets the real words at once (it is aria-live) and is revealed around them.
     function tell(level, kept) {
       var at = levelOf(level) || DEFAULT_LEVEL;
-      say(status, levelLine(at)
-        + (kept === false ? ' Kept for this page only: this browser stores nothing between visits.' : ''));
+      say(status, levelLine(at) + keptNote(kept));
     }
     paint(difficulty().level);
     tell(difficulty().level, store && store.persistent ? undefined : false);
@@ -892,8 +893,10 @@
     });
     return function () {
       release();
-      if (host.contains(row)) host.textContent = '';
-      host.classList.remove('difficulty');
+      if (row.parentNode === host) {
+        host.textContent = '';
+        host.classList.remove('difficulty');
+      }
     };
   }
   /* The sky, drawn whole -- or, with a `pass`, one tread of it: `pass.order` is the place each
@@ -1559,7 +1562,7 @@
     say(sheet.neighbor, portrait + ' ' + line);
   }
   function keptNote(kept) {
-    return kept || !store || store.persistent ? '' : ' Kept for this page only: this browser stores nothing between visits.';
+    return kept === false ? ' Kept for this page only: this browser stores nothing between visits.' : '';
   }
   function placeElement(star) {
     if (!star.el) return;
@@ -1664,11 +1667,15 @@
   }
   function renderFound(found) {
     var line = sheet && sheet.found;
-    if (!line || !found.length) return;
+    if (!line) return;
+    if (!found.length) {
+      conceal(line, false, makeRoom);
+      return;
+    }
     line.setAttribute('data-all', found.length === FIGURES.length ? 'true' : 'false');
     var words = foundLine(found);
     if (line.hidden) makeRoom(function () { say(line, words, show(line)); }, [line]);
-    else say(line, words);
+    else say(line, words, show(line));
   }
   function figureTargets(f, count) {
     var n = Math.max(f.min, Math.min(f.max || MAX_STARS, count));
@@ -2195,6 +2202,15 @@
     // The chosen star stays chosen when the sky is drawn again around it (a star placed or taken
     // out elsewhere in it), so a press on the sky places a star and does nothing else besides.
     var chosen = !dealAll && selected >= 0 ? old[selected] : null;
+    var focused = document.activeElement;
+    var focusWasStar = !dealAll && old.some(function (star) { return star.el === focused; });
+    var focusWasEditing = false;
+    for (var parent = focused; !dealAll && parent && parent !== sheet.host; parent = parent.parentNode) {
+      if (parent === sheet.wordsForm || parent === sheet.remove) {
+        focusWasEditing = true;
+        break;
+      }
+    }
     // Every caller releases or guards a live drag before the field is dealt again, but if one
     // ever reached here, releasing it also lets go of the pointer capture and the lifted size --
     // nulling it alone would leave the star held large under a capture nothing ends.
@@ -2247,7 +2263,12 @@
       var length = cutOn(el, 'star-develop', { family: 'arrive', duration: 'long' });
       rite(el, 'placed', (length || riteMs('long', 500)) + wait + 200);
     }
-    select(chosen ? fieldStars.indexOf(chosen) : -1);
+    var choice = chosen ? fieldStars.indexOf(chosen) : -1;
+    // A new index for the same star must not replace its draft thought.
+    if (choice >= 0) selected = choice;
+    select(choice);
+    if ((focusWasStar && !fieldStars.some(function (star) { return star.el === focused; }))
+        || (focusWasEditing && selected < 0)) focusStar(0);
     sheetStatus(saved.status === 'unreadable'
       ? 'What this browser kept of your sky cannot be read, so it starts fresh. Tap the sky to place a star.'
       : fieldIntro(fieldStars) + keptNote(true));
