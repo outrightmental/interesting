@@ -1925,8 +1925,10 @@
      in their persona rest faintly behind the constellation while it is up, joined by the same
      hairline threads the persona draws between neighbours -- so pressing the logo opens the menu
      inside their own sky, and a sky changed in the sheet is the sky the next press opens onto.
-     Decoration and nothing more: under no pointer, hidden from a screen reader, below every ray
-     and chip (_sass/_nav.scss), and a visitor with no stars yet keeps the plain dark. Guarded
+     Under no pointer, hidden from a screen reader, below every ray and chip (_sass/_nav.scss),
+     and a visitor with no stars yet keeps the plain dark -- but the sky is not mute: a hand drawn
+     across the dark near one of the stars lights it and hears the words it carries (whisperAt,
+     below), which is the one thing there is to find between the options. Guarded
      throughout and wrapped whole: a browser without the persona, or without the DOM to draw in,
      simply has no motes and the constellation is exactly what it was.
 
@@ -1948,6 +1950,9 @@
         nav.sky.appendChild(nav.dust);
       }
       nav.dust.textContent = '';
+      nav.motes = null;
+      nav.whisper = null;
+      nav.whispered = null;
       var stars = persona && typeof persona.stars === 'function' ? persona.stars() : null;
       if (!stars || !stars.length) return;
       var vw = window.innerWidth || 1024;
@@ -1962,7 +1967,9 @@
         points.push({
           x: px,
           y: py,
-          ms: 0.7 + (size - Math.floor(size)) * 0.8
+          ms: 0.7 + (size - Math.floor(size)) * 0.8,
+          text: typeof s.text === 'string' ? s.text.replace(/\s+/g, ' ').trim() : '',
+          el: null
         });
       }
       // Each star reaches a thread toward its nearest neighbour, once per pair and only nearby,
@@ -2000,10 +2007,75 @@
         mote.style.setProperty('--sy', points[i].y.toFixed(1) + 'px');
         mote.style.setProperty('--ms', points[i].ms.toFixed(2));
         nav.dust.appendChild(mote);
+        points[i].el = mote;
       }
+      // Where a star's words stand when a hand finds it (whisperAt): one line, in the sky with the
+      // motes, so the dust's own layer and mask are its own.
+      var whisper = el('p', 'sparknav-whisper');
+      whisper.hidden = true;
+      nav.dust.appendChild(whisper);
+      nav.whisper = whisper;
+      nav.motes = points;
     } catch (e) {
       /* a browser without the room to draw a sky keeps the plain constellation */
     }
+  }
+
+  /* ---- a star whispered ---------------------------------------------------------------------- */
+
+  /* The sky answers a hand drawn across it. A pointer -- or a finger, on the dark the veil holds
+     still -- that comes within a few steps of one of the visitor's own stars lights that mote and
+     whispers, beside it, the words the star carries in the persona; moved away, the sky is quiet
+     again. Nothing is pressable and nothing is read aloud: the sheet is where a thought is read
+     and written, and this is only what there is to find between the options -- and a reason to
+     write a thought worth finding. The motes' places are the script's own (castDust), so no
+     layout is read on a move, and a visitor with no stars has nothing to find yet. */
+  var WHISPER_REACH = 30; // px: how near a hand has to come to a star to hear it
+
+  function hush() {
+    if (!nav) return;
+    var lit = nav.whispered && nav.whispered.el;
+    if (lit && lit.classList) lit.classList.remove('is-lit');
+    nav.whispered = null;
+    if (nav.whisper) nav.whisper.hidden = true;
+  }
+
+  function whisperAt(x, y) {
+    if (!nav || !nav.motes || !nav.whisper) return;
+    var best = WHISPER_REACH * WHISPER_REACH;
+    var near = null;
+    for (var i = 0; i < nav.motes.length; i++) {
+      var m = nav.motes[i];
+      if (!m.text) continue;
+      var dx = m.x - x;
+      var dy = m.y - y;
+      var d2 = dx * dx + dy * dy;
+      if (d2 < best) {
+        best = d2;
+        near = m;
+      }
+    }
+    if (near === nav.whispered) return;
+    hush();
+    if (!near) return;
+    nav.whispered = near;
+    if (near.el && near.el.classList) near.el.classList.add('is-lit');
+    var style = nav.whisper.style;
+    style.setProperty('--sx', near.x.toFixed(1) + 'px');
+    style.setProperty('--sy', near.y.toFixed(1) + 'px');
+    // The words stand on whichever side of the star has the more room.
+    var vw = window.innerWidth || 1024;
+    if (near.x > vw * 0.58) nav.whisper.classList.add('is-leftward');
+    else nav.whisper.classList.remove('is-leftward');
+    nav.whisper.hidden = false;
+    say(nav.whisper, near.text);
+  }
+
+  function whisperFromPointer(ev) {
+    if (!nav || !nav.motes || !navIsFront() || nav.sky.hidden
+        || !nav.sky.classList.contains('is-branching') || nav.sky.classList.contains('is-unmaking')) return;
+    if (!ev || typeof ev.clientX !== 'number' || typeof ev.clientY !== 'number') return;
+    whisperAt(ev.clientX, ev.clientY);
   }
 
   function branch(on, leave) {
@@ -2033,6 +2105,7 @@
     } else {
       // Whatever the lightbox was holding goes with it: the state interface back to its corner,
       // the constellation back on screen for the next press, and then the one box itself.
+      hush();
       stateModal(false);
       navBox.down(leave, leave > 0 ? leavingTreads() : '');
       nav.sky.classList.remove('is-branching');
@@ -2559,6 +2632,8 @@
       keepFocusInside(event);
     });
     document.addEventListener('focusin', restoreNavFocus);
+    // A hand drawn across the dark finds the visitor's own stars (whisperFromPointer, above).
+    document.addEventListener('pointermove', whisperFromPointer, { passive: true });
 
     // The options follow the reading and adopted controls; page markers follow the stage too.
     window.addEventListener('threshold:reading', shape);

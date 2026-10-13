@@ -998,6 +998,10 @@ html[data-nav='live'] .sparknav-sky.is-unmaking .sparknav-dust {
   box-shadow: 0 0 9px color-mix(in oklab, var(--md-sys-color-tertiary) 55%, transparent);
   opacity: 0.42;
   transform: scale(var(--ms, 1));
+  // Lit by a hand near it (below): its light and its size step up in treads, and back.
+  transition:
+    opacity var(--motion-short) var(--ease-stair),
+    transform var(--motion-short) var(--ease-stair);
 }
 
 .sparknav-thread {
@@ -1014,6 +1018,35 @@ html[data-nav='live'] .sparknav-sky.is-unmaking .sparknav-dust {
     color-mix(in oklab, var(--md-sys-color-tertiary) 10%, transparent)
   );
   opacity: 0.35;
+}
+
+// A star found (js/site.js, whisperAt): the mote nearest the hand comes up to its full light and
+// grows, in treads, and the words its star carries in the persona stand beside it in the rite's
+// serif, cut in by the engine's reveal. In the sky with the rest of the dust -- behind every ray
+// and chip, under no pointer, read aloud by nothing -- and gone the moment the hand moves on: the
+// sheet is where a thought is read.
+.sparknav-mote.is-lit {
+  opacity: 1;
+  transform: scale(calc(var(--ms, 1) * 1.7));
+}
+
+.sparknav-whisper {
+  position: absolute;
+  top: var(--sy, 50%);
+  left: var(--sx, 50%);
+  translate: 14px -50%;
+  margin: 0;
+  max-width: min(18rem, 56vw);
+  color: var(--md-sys-color-on-surface);
+  text-shadow: 0 0 12px var(--md-sys-color-surface), 0 0 3px var(--md-sys-color-surface);
+  overflow-wrap: anywhere;
+  @include type.scale(body-medium);
+  @include type.rite;
+}
+
+.sparknav-whisper.is-leftward {
+  translate: calc(-100% - 14px) -50%;
+  text-align: right;
 }
 
 // ---- a constellation closed before it has landed -------------------------------------------
@@ -1069,6 +1102,7 @@ html[data-nav] .sparknav-sky.is-branching:not(.is-unmaking) .sparknav-dust.is-la
   .sparknav-node.is-waxing .sparknav-gloss,
   .sparknav-node:hover .sparknav-gloss,
   .sparknav-node:focus-visible .sparknav-gloss,
+  .sparknav-mote,
   html[data-nav='live'] .sparknav-option > .sparknav-ray,
   html[data-nav='live'] .sparknav[open]::before,
   html[data-nav='live'] .sparknav[open]::after,

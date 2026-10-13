@@ -35,6 +35,10 @@
   background: color-mix(in oklab, var(--md-sys-color-surface) 62%, transparent);
   backdrop-filter: blur(9px) saturate(70%);
   -webkit-backdrop-filter: blur(9px) saturate(70%);
+  // A finger on the veil is a hand on the dark, not a scroll of the page it holds still: the page
+  // behind is inert, and the constellation reads the finger's way across its sky (js/site.js,
+  // whisperFromPointer). What stands in front of the veil -- the cascade, a sheet -- scrolls itself.
+  touch-action: none;
   mask: cut.curve();
   @include cut.play(in, veil, medium, wipe);
 }
