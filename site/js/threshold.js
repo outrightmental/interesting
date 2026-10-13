@@ -476,6 +476,25 @@
       high: { restless: 2, tempestuous: 2, cosmic: 1 },
       fussed: { curious: 2, verbal: 2, restless: 1 },
       decisive: { attentive: 2, analytic: 1, verbal: 1 }
+    },
+    {
+      probe: 'frost-pane', name: 'the frosted pane', kind: 'frost',
+      ask: 'A window furred with frost, and a night beyond it. Breathe a clear patch wherever you like -- press and hold -- then look through.',
+      label: 'look through',
+      corners: {
+        topLeft: { cosmic: 3, brooding: 1 }, topRight: { tempestuous: 3, restless: 1 },
+        bottomLeft: { rooted: 3, tender: 1 }, bottomRight: { analytic: 2, geometric: 2 }
+      },
+      centre: { divinatory: 2, attentive: 1 }, edge: { curious: 2, verbal: 1 },
+      areas: [
+        { under: 0.05, weights: { tender: 3, brooding: 2, attentive: 1 } },
+        { under: 0.14, weights: { attentive: 2, analytic: 2, divinatory: 1 } },
+        { under: 0.32, weights: { curious: 2, verbal: 2, tending: 1 } },
+        { under: Infinity, weights: { restless: 3, tempestuous: 2, cosmic: 1 } }
+      ],
+      one: { divinatory: 2, tender: 1, metrical: 1 },
+      several: { curious: 2, restless: 1, ceremonial: 1 },
+      untouched: { brooding: 2, cosmic: 2, divinatory: 1 }
     }
   ];
 
@@ -1387,7 +1406,7 @@
       slider: sliderProbe, sky: skyProbe, keys: keysProbe, knock: knockProbe,
       rubbing: rubbingProbe, cairn: cairnProbe, compass: compassProbe, dye: dyeProbe,
       censer: censerProbe, thread: threadProbe, lamp: lampProbe, tiles: tilesProbe,
-      paper: paperProbe, stones: stonesProbe, dice: diceProbe
+      paper: paperProbe, stones: stonesProbe, dice: diceProbe, frost: frostProbe
     };
     (kinds[probe.kind] || choiceProbe)(probe, body, trace, answer, finish, onDispose);
     return probe;
@@ -4828,6 +4847,214 @@
       retire(read, sealing);
     });
     gauge(trace, faces.join(' · '));
+  }
+  // A window furred with frost, and a night beyond it. The visitor breathes clear patches --
+  // press and hold, anywhere, as many as they like -- and the answer is the looking: where the
+  // patches lie (each weighted by its share of the cleared glass), how much glass was cleared,
+  // and whether they made one careful porthole or several. Looking through untouched frost is an
+  // answer of its own, so the pane is never a gate. A patch does not fade in: it is a curve
+  // growing from the breath, a tread at a time while the press is held, quickly at first and ever
+  // more slowly, and never a tread back; let go, and it stays exactly as far as it got. The frost
+  // rests in two shades split by one slice at the register's angle, and nothing runs at rest: the
+  // glass only changes under a held press. 'look through' seals the pane from the widest patch
+  // out -- the reading's one seal.
+  function frostProbe(probe, body, trace, answer, finish, onDispose) {
+    var MAXR = 90;
+    var pane = el('canvas', 'probe-pad');
+    pane.width = 600;
+    pane.height = 300;
+    pane.tabIndex = 0;
+    pane.setAttribute('role', 'application');
+    pane.setAttribute('aria-label', 'a frosted window: press and hold to breathe a clear patch, or move the spot with the arrow keys and hold enter; then look through');
+    var g = pane.getContext('2d');
+    pane.hidden = !g;
+    body.appendChild(pane);
+    var controls = el('div', 'controls');
+    var look = el('button', 'btn-filled', probe.label);
+    look.type = 'button';
+    controls.appendChild(look);
+    body.appendChild(controls);
+    body.appendChild(el('p', 'probe-count', 'clear as much or as little as you like, in one patch or several; the frost takes no offence if you look through it untouched'));
+    var style = window.getComputedStyle(body);
+    var tone = function (name, fallback) { return rgbOf(style.getPropertyValue(name), fallback); };
+    var night = tone('--bg', '#070a14');
+    var dusk = tone('--bg2', '#1c2a4e');
+    var cool = tone('--accent', '#9fcbff');
+    var warm = tone('--accent2', '#ffe7ab');
+    var fold = { kind: 'slice', angle: angleOf(style) };
+    var patches = [];
+    var current = null;
+    var ticker = 0;
+    var done = false;
+    var sealed = 0;
+    var cursor = { x: 0.5, y: 0.42 };
+    onDispose(function () {
+      current = null;
+      if (ticker) window.clearTimeout(ticker);
+      ticker = 0;
+    });
+    function area() {
+      var sum = 0;
+      for (var i = 0; i < patches.length; i++) sum += Math.PI * patches[i].r * patches[i].r;
+      return Math.min(1, sum / (pane.width * pane.height));
+    }
+    function widest() {
+      var best = null;
+      for (var i = 0; i < patches.length; i++) if (!best || patches[i].r > best.r) best = patches[i];
+      return best ? { x: best.x * pane.width, y: best.y * pane.height } : { x: pane.width / 2, y: pane.height / 2 };
+    }
+    // The night beyond the glass: a moon, a handful of stars, and a hill under them.
+    function beyond(w, h) {
+      g.fillStyle = rgba(night, 1);
+      g.fillRect(0, 0, w, h);
+      g.fillStyle = rgba(warm, 0.95);
+      g.beginPath();
+      g.arc(w * 0.7, h * 0.26, h * 0.1, 0, Math.PI * 2);
+      g.fill();
+      g.fillStyle = rgba(blend(cool, [255, 255, 255], 0.5), 0.95);
+      var far = [[0.12, 0.2], [0.3, 0.1], [0.5, 0.3], [0.86, 0.46], [0.2, 0.5], [0.6, 0.12], [0.42, 0.56]];
+      for (var s = 0; s < far.length; s++) {
+        g.beginPath();
+        g.arc(far[s][0] * w, far[s][1] * h, 1.7, 0, Math.PI * 2);
+        g.fill();
+      }
+      g.fillStyle = rgba(blend(night, dusk, 0.75), 1);
+      g.beginPath();
+      g.moveTo(0, h);
+      g.lineTo(0, h * 0.78);
+      g.quadraticCurveTo(w * 0.35, h * 0.58, w * 0.62, h * 0.82);
+      g.quadraticCurveTo(w * 0.82, h * 0.96, w, h * 0.8);
+      g.lineTo(w, h);
+      g.closePath();
+      g.fill();
+    }
+    function paint() {
+      if (!g) return;
+      var w = pane.width;
+      var h = pane.height;
+      // The frost: pale over the whole pane, two shades split by one slice.
+      g.clearRect(0, 0, w, h);
+      g.fillStyle = rgba(blend(cool, [255, 255, 255], 0.55), 0.92);
+      g.fillRect(0, 0, w, h);
+      paintCut(g, 0, 0, w, h, 0.5, fold, rgba(cool, 0.16));
+      for (var i = 0; i < patches.length; i++) {
+        var p = patches[i];
+        g.save();
+        g.beginPath();
+        g.arc(p.x * w, p.y * h, p.r, 0, Math.PI * 2);
+        g.clip();
+        beyond(w, h);
+        g.restore();
+        g.strokeStyle = rgba(cool, 0.55);
+        g.lineWidth = 1.5;
+        g.beginPath();
+        g.arc(p.x * w, p.y * h, p.r, 0, Math.PI * 2);
+        g.stroke();
+      }
+      // The spot a keyboard would breathe on: a small warm ring, wherever it was last put.
+      if (!done) {
+        g.strokeStyle = rgba(warm, 0.5);
+        g.lineWidth = 1.5;
+        g.beginPath();
+        g.arc(cursor.x * w, cursor.y * h, 9, 0, Math.PI * 2);
+        g.stroke();
+      }
+      if (sealed) sealWash(g, w, h, sealed, widest(), warm);
+    }
+    // The breath: while the press is held the patch grows a tread at a time, and never a tread
+    // back; the wait between treads is rolled for each, so no two breaths widen alike.
+    function breathe() {
+      ticker = window.setTimeout(function () {
+        ticker = 0;
+        if (!current || done) return;
+        current.r = Math.min(MAXR, current.r + Math.max(5, (MAXR - current.r) * 0.28));
+        paint();
+        gauge(trace, tally(Math.max(1, Math.min(30, Math.round(area() * 60)))));
+        if (current.r < MAXR) breathe();
+        else note(trace, 'this patch is as wide as a breath can make it');
+      }, between(150, 340));
+    }
+    function down(x, y) {
+      if (done || current) return;
+      cursor = { x: unit(x), y: unit(y) };
+      current = { x: cursor.x, y: cursor.y, r: 10 };
+      patches.push(current);
+      paint();
+      note(trace, patches.length === 1 ? 'a breath on the glass; hold to widen it'
+        : patches.length + ' patches cleared');
+      breathe();
+    }
+    function up() {
+      if (!current) return;
+      current = null;
+      if (ticker) window.clearTimeout(ticker);
+      ticker = 0;
+      paint();
+    }
+    pane.addEventListener('pointerdown', function (ev) {
+      if (done) return;
+      var box = pane.getBoundingClientRect();
+      if (!box.width || !box.height) return;
+      try { pane.setPointerCapture(ev.pointerId); } catch (e) { /* the hold still reads */ }
+      down((ev.clientX - box.left) / box.width, (ev.clientY - box.top) / box.height);
+    });
+    pane.addEventListener('pointerup', up);
+    pane.addEventListener('pointercancel', up);
+    pane.addEventListener('keydown', function (ev) {
+      if (done) return;
+      var step = 0.07;
+      var moves = { ArrowLeft: [-step, 0], ArrowRight: [step, 0], ArrowUp: [0, -step], ArrowDown: [0, step] };
+      if (moves[ev.key]) {
+        ev.preventDefault();
+        if (current) return;
+        cursor.x = unit(cursor.x + moves[ev.key][0]);
+        cursor.y = unit(cursor.y + moves[ev.key][1]);
+        paint();
+        note(trace, 'the spot moves; hold enter to breathe there');
+      } else if ((ev.key === 'Enter' || ev.key === ' ') && !ev.repeat) {
+        ev.preventDefault();
+        down(cursor.x, cursor.y);
+      }
+    });
+    pane.addEventListener('keyup', function (ev) {
+      if (ev.key === 'Enter' || ev.key === ' ') {
+        ev.preventDefault();
+        up();
+      }
+    });
+    look.addEventListener('click', function () {
+      if (done) return;
+      done = true;
+      up();
+      var n = patches.length;
+      if (!n) add(answer, probe.untouched, 1);
+      else {
+        var sum = 0;
+        patches.forEach(function (p) { sum += p.r * p.r; });
+        patches.forEach(function (p) {
+          var share = p.r * p.r / (sum || 1);
+          add(answer, probe.corners.topLeft, (1 - p.x) * (1 - p.y) * share);
+          add(answer, probe.corners.topRight, p.x * (1 - p.y) * share);
+          add(answer, probe.corners.bottomLeft, (1 - p.x) * p.y * share);
+          add(answer, probe.corners.bottomRight, p.x * p.y * share);
+          var fromCentre = Math.max(Math.abs(p.x - 0.5), Math.abs(p.y - 0.5)) * 2;
+          add(answer, fromCentre < 0.3 ? probe.centre : probe.edge, share);
+        });
+        bucket(probe.areas, area(), answer);
+        add(answer, n === 1 ? probe.one : probe.several, 1);
+      }
+      note(trace, !n ? 'looked through the frost as it stood'
+        : n === 1 ? 'one clear patch, looked through' : n + ' patches, looked through');
+      pane.style.cursor = 'default';
+      pane.setAttribute('aria-disabled', 'true');
+      pane.tabIndex = -1;
+      // Sealed from the widest patch out, in treads -- the reading's one seal. The button greys
+      // once it has grown.
+      var seal = beat('medium');
+      series({ ms: seal, treads: 3, step: function (k, n2) { if (k) { sealed = k / n2; paint(); } } });
+      retire(look, finish(seal));
+    });
+    paint();
   }
   function describe(reading) {
     var o = reading && reading.orientation;
