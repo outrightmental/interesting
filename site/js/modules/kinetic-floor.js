@@ -81,7 +81,7 @@ function asked(env) {
 // The rite of a piece handed none: everything stands where it ends, and a surface is cut by a
 // plain upright slice from its left side.
 const STILL = {
-  ease: () => 1, stair: () => 1, ratchet: () => 1, turn: () => 1, flicker: () => 1,
+  ease: () => 1, stair: () => 1, ratchet: () => 1, flicker: () => 1,
   treads: 1, kind: 'slice', angle: 90,
   region: (g, x, y, w, h, k) => {
     if (k > 0) g.rect(x, y, w * Math.min(1, k), h);
@@ -312,11 +312,11 @@ function lanesPlan(env) {
     const lanes = [];
     for (let i = 0; i < count; i++) {
       const h = env.int(4, 10);
-      const over = env.chance(0.5);
+      const across = env.chance(0.5);
       // Well away from the edge, by more than five per cent either way: 0.74 of the height or under
       // crosses, 0.86 or over stops.
-      const lo = over ? Math.max(1, Math.ceil(h * 0.3)) : Math.ceil(h * 0.86);
-      const hi = over ? Math.floor(h * 0.74) : Math.floor(h * 1.3);
+      const lo = across ? Math.max(1, Math.ceil(h * 0.3)) : Math.ceil(h * 0.86);
+      const hi = across ? Math.floor(h * 0.74) : Math.floor(h * 1.3);
       const n = env.int(4, 6);
       lanes.push({ h, g: env.int(lo, hi), n, at: env.int(1, n - 3) });
     }
@@ -735,8 +735,8 @@ function lanesPiece(env, plan) {
       s.time = 0;
       s.tippedAt = s.t;
       s.v += 1;
-      const over = truth.filter(Boolean).length;
-      c.status('tipped. ' + (over === 1 ? 'one lane goes over' : WORDS[over] + ' lanes go over') + ' and ' + (count - over === 1 ? 'one stops' : WORDS[count - over] + ' stop') + ' at the gap. nothing here was fragile.');
+      const across = truth.filter(Boolean).length;
+      c.status('tipped. ' + (across === 1 ? 'one lane goes over' : WORDS[across] + ' lanes go over') + ' and ' + (count - across === 1 ? 'one stops' : WORDS[count - across] + ' stop') + ' at the gap. nothing here was fragile.');
     }
   };
 }

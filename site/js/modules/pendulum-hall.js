@@ -296,12 +296,12 @@ function rackPlan(env) {
   const pool = [2, 3, 4, 5, 6];
   const periods = [];
   while (periods.length < n) periods.push(pool.splice(env.int(0, pool.length - 1), 1)[0]);
-  const meet = lcmOf(periods);
-  const anchor = env.chance(0.5) ? env.int(2, meet - 1) : 0;
+  const cycle = lcmOf(periods);
+  const anchor = env.chance(0.5) ? env.int(2, cycle - 1) : 0;
   const starts = periods.map((p) => anchor % p);
   // The stated beat: one on which some of them, not none and not all, come through the centre.
   const beats = [];
-  for (let t = 2; t <= Math.min(60, meet - 1); t++) {
+  for (let t = 2; t <= Math.min(60, cycle - 1); t++) {
     const through = throughAt(periods, t, starts).length;
     if (through > 0 && through < n) beats.push(t);
   }
@@ -703,7 +703,7 @@ function springPlan(env) {
     if (!springSolution(pair[0], breaths, event)) continue;
     return { kind: 'spring', number: 100 + env.int(0, 899), breath: pair[0], breaths, event, ask: env.chance(0.5) ? 'stiffer' : 'softer', open: env.int(4, 18) };
   }
-  return { kind: 'spring', number: 500, breath: 3, breaths: 3, ask: 'stiffer', open: 10 };
+  return { kind: 'spring', number: 500, breath: 3, breaths: 3, event: 'cross', ask: 'stiffer', open: 10 };
 }
 
 function carriedSpring(env) {
@@ -1089,8 +1089,13 @@ const dealt = new WeakMap();
 function deal(env) {
   let got = dealt.get(env);
   if (!got) {
-    const spring = env.chance(0.4);
-    got = { spring, plan: spring ? springPlan(env) : rackPlan(env) };
+    // A card's own plan first, so the picture and the piece opened from it are one puzzle.
+    const carried = carriedSpring(env) || carriedRack(env);
+    if (carried) got = { spring: carried.kind === 'spring', plan: carried };
+    else {
+      const spring = env.chance(0.4);
+      got = { spring, plan: spring ? springPlan(env) : rackPlan(env) };
+    }
     dealt.set(env, got);
   }
   return got;
@@ -1180,10 +1185,6 @@ export default {
     };
   },
   piece(env) {
-    const pair = carriedSpring(env);
-    if (pair) return springPiece(env, pair);
-    const rack = carriedRack(env);
-    if (rack) return rackPiece(env, rack);
     const d = deal(env);
     return d.spring ? springPiece(env, d.plan) : rackPiece(env, d.plan);
   }

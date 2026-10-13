@@ -3,12 +3,13 @@
    four puzzles below (spark); as a piece it is one of those puzzles, and the card it was opened
    from says which. See js/feed.js for what a module is and js/stage.js for what a piece is.
 
-   Three puzzles, each read from what happens in the room:
+   Four puzzles, each read from what happens in the room:
 
      the dark room   Lights Out. A square of lamps, some lit; pressing one flips it and its four
                      neighbours. Put every lamp out. The room is made by pressing lamps in a dark
-                     room, so every puzzle has a solution, and at three by three and four by four
-                     the solution is unique. The scene is the control: tap a lamp to press it, and
+                     room, so every puzzle has a solution. At three by three it is unique; a four by
+                     four room can go dark more than one way, and the check counts any way that
+                     leaves it dark. The scene is the control: tap a lamp to press it, and
                      the rail's grid keeps the record.
      the shelf       An ordering puzzle. Four to six keepsakes go on a shelf left to right, and a
                      few clues say how they stand -- left of, next to, at an end, two apart. The
@@ -590,7 +591,7 @@ function lampsPiece(env, plan) {
     end(c) {
       s.doneAt = s.t;
       stir(s, 2.4);
-      c.status('the room is dark and the door is shut');
+      c.status('the room is dark; press a lamp and it lights again');
     }
   };
 }
