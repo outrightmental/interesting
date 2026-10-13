@@ -19,6 +19,11 @@
                          exact coordinates. A wrong check counts coincident lights under the chosen
                          settings, without identifying correct answers; a hint marks one decoy.
 
+   Postcards also carry their actual, uneven shifts rather than evenly spaced depth bands.
+   A free inspector reads either view without placing an answer. Moving the views closer scales
+   every shift together, in the piece's own treads: the measurements change, but their order does
+   not. The widest spacing is the card's original picture and is always available again.
+
    A card and the feature it opens as are one puzzle: the spark puts the whole plan on its spec as
    `of` -- the lights, their depths, the four skies -- and piece(env) opens on that rather than
    rolling another. */
@@ -134,7 +139,7 @@ function came(s, since, span, reduced) {
 
 // The size and the state the canvas was last drawn at.
 function sizeOf(c) {
-  return c.w + 'x' + c.h + '@' + (c.dpr || 1) + (c.done ? ' solved' : '');
+  return c.w + 'x' + c.h + '@' + (c.dpr || 1) + (c.done ? ' solved' : '') + (c.reduced ? ' still' : '');
 }
 
 // Whether a frame has nothing to draw: the canvas holds the picture last drawn at this size and
@@ -143,7 +148,7 @@ function sizeOf(c) {
 // see; a new size (the stage clears the canvas to resize it), the solve, or a new change draws
 // again.
 function settled(s, c) {
-  return s.drawn === sizeOf(c) && s.drawnAt > (s.until == null ? -Infinity : s.until);
+  return s.drawn === sizeOf(c) && (c.reduced || s.drawnAt > (s.until == null ? -Infinity : s.until));
 }
 
 // Draws the scene and notes when and at what size it was drawn.
@@ -354,6 +359,22 @@ function shiftOf(rank, n) {
   return SHIFT_NEAR - rank * (SHIFT_NEAR - SHIFT_FAR) / Math.max(1, n - 1);
 }
 
+function postcardShift(plan, i) {
+  return plan.shifts ? plan.shifts[i] : shiftOf(plan.ranks[i], plan.points.length);
+}
+
+function postcardSpacing(s, rite, reduced) {
+  const step = roll(rite, 0xb45, s.spacings).stair(came(s, s.spacingAt, 0.8, reduced));
+  return (s.spacingFrom + (s.spacing - s.spacingFrom) * step) / 3;
+}
+
+function postcardMeasure(plan, i, spacing) {
+  const shift = postcardShift(plan, i) * spacing;
+  const mark = (value) => Math.round(value * 10) / 10;
+  return 'Light ' + LETTERS[i] + ': left ' + plan.points[i].x + ', right ' + mark(plan.points[i].x - shift)
+    + '; shift ' + mark(shift) + ' marks.';
+}
+
 function postcardPlan(env) {
   // Now and then a long exposure: seven lights to order instead of four to six.
   const n = env.chance(0.25) ? 7 : env.int(4, 6);
@@ -361,7 +382,10 @@ function postcardPlan(env) {
   let ranks = shuffled(env, range(n));
   for (let guard = 0; guard < 12 && ranks.every((r, i) => r === i); guard++) ranks = shuffled(env, range(n));
   if (ranks.every((r, i) => r === i)) ranks.reverse();
-  return { kind: 'postcard', number: 101 + env.int(0, 898), points, ranks };
+  const marks = shuffled(env, range(SHIFT_NEAR - SHIFT_FAR - n + 2)).slice(0, n)
+    .sort((a, b) => a - b).map((mark, i) => SHIFT_FAR + mark + i).reverse();
+  const shifts = ranks.map((rank) => marks[rank]);
+  return { kind: 'postcard', number: 101 + env.int(0, 898), points, ranks, shifts };
 }
 
 function carriedPostcard(env) {
@@ -370,7 +394,12 @@ function carriedPostcard(env) {
   const n = p.points.length;
   if (!isPerm(p.ranks, n) || p.ranks.every((r, i) => r === i)) return null;
   if (!Number.isInteger(p.number) || p.number < 101 || p.number > 999) return null;
-  return { kind: 'postcard', number: p.number, points: copyPoints(p.points), ranks: p.ranks.slice() };
+  const shifts = p.shifts === undefined ? p.ranks.map((rank) => shiftOf(rank, n)) : p.shifts;
+  if (!Array.isArray(shifts) || shifts.length !== n
+    || !shifts.every((shift) => Number.isFinite(shift) && shift >= SHIFT_FAR && shift <= SHIFT_NEAR)) return null;
+  const order = range(n).sort((a, b) => p.ranks[a] - p.ranks[b]);
+  if (order.some((i, k) => k > 0 && shifts[order[k - 1]] - shifts[i] < 2)) return null;
+  return { kind: 'postcard', number: p.number, points: copyPoints(p.points), ranks: p.ranks.slice(), shifts: shifts.slice() };
 }
 
 // The lights nearest first: the order that solves the postcard.
@@ -395,7 +424,8 @@ function postcardState(n, t) {
   return {
     t, order: null, orderAt: -1, orders: 0, orderWas: '', hinted: [], hintAt: new Array(n).fill(-1),
     taps: [], tapAt: new Array(n).fill(-1), cleared: [], clearedAt: -1, rounds: 0,
-    lit: -1, halo: Array.from({ length: n }, surface), doneAt: -1
+    lit: -1, halo: Array.from({ length: n }, surface), doneAt: -1,
+    spacing: 3, spacingFrom: 3, spacingAt: -1, spacings: 0
   };
 }
 
@@ -420,6 +450,7 @@ function postcardScene(g, w, h, c, plan, s, v) {
   const rite = riteOf(c);
   const reduced = !!c.reduced;
   const n = plan.points.length;
+  const spacing = postcardSpacing(s, rite, reduced);
   const size = Math.max(10, Math.min(18, Math.round(Math.min(w, h) * 0.04)));
   const glow = v.scale * Math.max(0.55, Math.min(1, box.width / 300));
   backdrop(g, w, h, c);
@@ -464,7 +495,7 @@ function postcardScene(g, w, h, c, plan, s, v) {
     // is set once for each size rather than twice for each light.
     const places = [];
     plan.points.forEach((p, i) => {
-      const shift = pane === 1 ? shiftOf(plan.ranks[i], n) : 0;
+      const shift = pane === 1 ? postcardShift(plan, i) * spacing : 0;
       const x = left + (p.x - shift) / 100 * box.width;
       const y = box.top + p.y / 100 * box.height;
       if (pane === 1 && s.doneAt >= 0) {
@@ -534,10 +565,8 @@ function postcardScene(g, w, h, c, plan, s, v) {
   g.textAlign = 'center';
   g.fillStyle = c.alpha(c.colors.fg, 0.8);
   if (s.lit >= 0) {
-    const p = plan.points[s.lit];
-    const shift = Math.round(shiftOf(plan.ranks[s.lit], n));
     g.fillStyle = c.alpha(c.colors.accent2, 0.95);
-    g.fillText('light ' + LETTERS[s.lit] + ': left ' + p.x + ', right ' + (p.x - shift) + '; shift ' + shift, w / 2, h * 0.81, w * 0.94);
+    g.fillText(postcardMeasure(plan, s.lit, spacing), w / 2, h * 0.81, w * 0.94);
   }
   const line = orderShown(s, rite, reduced);
   if (line) g.fillText(line, w / 2, h * 0.86, w * 0.9);
@@ -556,6 +585,8 @@ function postcardPiece(env, plan) {
   const answer = postcardOrder(plan);
   const s = postcardState(n, 0);
   s.order = range(n);
+  s.lit = 0;
+  s.halo[0].on = true;
   const draw = (c) => drawn(s, c, () => postcardScene(c.g, c.w, c.h, c, plan, s, v));
   const inPlace = (order) => order.filter((item, i) => item === answer[i]).length;
   // A new order: the line keeps the words on it until the new ones are cut over them.
@@ -565,15 +596,24 @@ function postcardPiece(env, plan) {
     s.orderAt = s.t;
     s.orders += 1;
   }
+  function inspectLight(i, c) {
+    if (s.lit === i) return;
+    const rite = riteOf(c);
+    if (s.lit >= 0) turnTo(s.halo[s.lit], false, rite, 0x11 + s.lit, s, HALO, c.reduced);
+    turnTo(s.halo[i], true, rite, 0x11 + i, s, HALO, c.reduced);
+    s.lit = i;
+  }
   return {
     title: postcardTitle(plan),
-    brief: 'A reading by two eyes. Two views of the same ' + WORDS[n] + ' lights, from a left eye and a right eye a step apart. The nearer a light is, the farther it shifts between the views; the farthest barely moves. Nothing else about them changes.',
+    brief: 'Compare two views of the same ' + WORDS[n] + ' lights to order their depths. A nearer light shifts farther between the views; size and brightness tell you nothing about depth. Inspect light reads its positions without placing it: each view has its own scale from 0 on the left to 100 on the right. Change view spacing to make the shifts smaller or larger. Arrange the answer with the order control, or tap all the lights nearest first.',
     goal: 'Put the lights in order from nearest to farthest.',
     aspect: '4 / 3',
     checkLabel: 'check the postcard',
     steps: [
       { id: 'order', ask: 'the lights, nearest first: arrange them here, or tap them in that order', kind: 'order', items: range(n).map((i) => ({ label: 'light ' + LETTERS[i], value: i })) },
-      { id: 'hint', ask: 'where one light stands', kind: 'press', count: 1, label: 'show me one', optional: true }
+      { id: 'hint', ask: 'where one light stands', kind: 'press', count: 1, label: 'show me one', optional: true },
+      { id: 'inspect', ask: 'inspect light without placing it (1 = A; no hint cost)', kind: 'number', min: 1, max: n, step: 1, value: 1, optional: true },
+      { id: 'spacing', ask: 'view spacing (no hint cost)', kind: 'range', min: 1, max: 3, step: 1, value: 3, low: 'closer', high: 'farther', optional: true }
     ],
     solution: { order: answer.slice() },
     check(c) {
@@ -587,13 +627,37 @@ function postcardPiece(env, plan) {
       };
     },
     start(c) {
-      c.status('compare each light\'s place in the two views');
+      c.status(postcardMeasure(plan, 0, 1) + ' Inspect another light without changing your answer; the largest shift belongs nearest.');
       draw(c);
     },
     apply(id, value, c) {
       if (id === 'order' && isPerm(value, n)) {
         settle(value, c);
         c.status('nearest to farthest: ' + s.order.map((i) => LETTERS[i]).join(', '));
+      }
+      if (id === 'inspect') {
+        const i = Number(value) - 1;
+        if (!Number.isInteger(i) || i < 0 || i >= n) {
+          c.status('Choose a light number from 1 to ' + n + '.');
+          return;
+        }
+        inspectLight(i, c);
+        c.status(postcardMeasure(plan, i, s.spacing / 3) + ' Your order has not changed.');
+      }
+      if (id === 'spacing') {
+        const spacing = Number(value);
+        if (!Number.isInteger(spacing) || spacing < 1 || spacing > 3) {
+          c.status('Choose view spacing 1, 2 or 3.');
+          return;
+        }
+        if (spacing !== s.spacing) {
+          s.spacingFrom = postcardSpacing(s, riteOf(c), c.reduced) * 3;
+          s.spacing = spacing;
+          s.spacingAt = s.t;
+          s.spacings += 1;
+        }
+        c.status('View spacing ' + spacing + ' of 3. ' + postcardMeasure(plan, s.lit, spacing / 3)
+          + ' All shifts scale together; the depth order stays the same.');
       }
       if (id === 'hint') {
         const next = s.hinted.length < helps
@@ -603,7 +667,7 @@ function postcardPiece(env, plan) {
           s.hinted.push(next);
           s.hintAt[next] = s.t;
           c.hint();
-          c.status('light ' + LETTERS[next] + ' is the ' + PLACE[plan.ranks[next]]);
+          c.status('Light ' + LETTERS[next] + ' is the ' + PLACE[plan.ranks[next]] + '. At the widest view spacing it shifts ' + (Math.round(postcardShift(plan, next) * 10) / 10) + ' marks; compare that with the lights beside it in your order.');
         } else if (s.hinted.length >= helps) {
           c.status('that is all the sky will show at this difficulty; the rest is yours');
         } else {
@@ -619,7 +683,7 @@ function postcardPiece(env, plan) {
       let best = -1;
       let bd = Infinity;
       plan.points.forEach((p, i) => {
-        const shift = pane === 1 ? shiftOf(plan.ranks[i], n) : 0;
+        const shift = pane === 1 ? postcardShift(plan, i) * postcardSpacing(s, riteOf(c), c.reduced) : 0;
         const d = Math.hypot(box.lefts[pane] + (p.x - shift) / 100 * box.width - x * c.w, box.top + p.y / 100 * box.height - y * c.h);
         if (d < bd) {
           bd = d;
@@ -634,11 +698,10 @@ function postcardPiece(env, plan) {
       if (s.lit !== best) {
         // The halo moves to the light touched: the last one gives its halo back and this one's
         // comes, each from wherever it stood.
-        if (s.lit >= 0) turnTo(s.halo[s.lit], false, rite, 0x11 + s.lit, s, HALO, c.reduced);
-        turnTo(s.halo[best], true, rite, 0x11 + best, s, HALO, c.reduced);
-        s.lit = best;
+        inspectLight(best, c);
       }
-      const measure = 'light ' + LETTERS[best] + ' shifts ' + Math.round(shiftOf(plan.ranks[best], n)) + ' marks between the views';
+      c.set('inspect', best + 1);
+      const measure = postcardMeasure(plan, best, postcardSpacing(s, rite, c.reduced));
       if (s.taps.includes(best)) {
         c.status(measure + '; already in your order');
         draw(c);
@@ -667,7 +730,7 @@ function postcardPiece(env, plan) {
       return !settled(s, c);
     },
     end(c) {
-      c.status('sealed: postcard ' + plan.number + '. light ' + LETTERS[answer[0]] + ' is nearest and light ' + LETTERS[answer[n - 1]] + ' farthest; the lines show how far each one shifted. the sky reads: ' + SEALS[plan.number % SEALS.length]);
+      c.status('Sealed: postcard ' + plan.number + '. Light ' + LETTERS[answer[0]] + ' is nearest and light ' + LETTERS[answer[n - 1]] + ' farthest. The lines show their shifts: move the views closer and inspect the nearest two to see the gap shrink without their depths changing. The sky reads: ' + SEALS[plan.number % SEALS.length]);
     }
   };
 }
@@ -1217,7 +1280,7 @@ export default {
       return {
         title: postcardTitle(plan),
         quote: WORDS[plan.points.length] + ' lights, two eyes, one depth',
-        text: 'A light shifts between the views by more the nearer it is. Put them in order, nearest to farthest.',
+        text: 'These lights sit at uneven depths. Inspect their two positions, move the views closer or farther apart, and order them nearest first: the greatest shift belongs nearest.',
         aspect: '4 / 3',
         paint: (g, w, h, cardEnv) => postcardPreview(g, w, h, cardEnv, plan),
         of: plan

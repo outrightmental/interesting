@@ -21,6 +21,11 @@
                            was too soon or too late; the run is replayed and logged on the ruler,
                            so each try is one more point on the curve.
 
+   Some spring pairs ask for the first return rather than the first handoff. The return takes
+   twice as long: the same model and ruler show the swing travelling both ways. A free time
+   inspector holds any half-breath on the ruler; changing stiffness compares that same moment
+   without another run. Its native control and the canvas ruler operate the same inspector.
+
    A card and the feature it opens as are one puzzle: the spark puts the whole plan on its spec as
    `of` -- the periods and the stated beat, or the breath, the target and the question -- and
    piece(env) opens on that rather than rolling another. */
@@ -669,15 +674,20 @@ function crossTime(k) {
   return Math.PI / (w2 - W1);
 }
 
+function crossingTime(plan, k) {
+  return crossTime(k) * (plan.event === 'return' ? 2 : 1);
+}
+
 // The stiffness that crosses in `target` seconds, with the slider's slack either way, or null
 // when the target is not one the slider can hold with both its ends missing.
-function springSolution(breath, breaths) {
+function springSolution(breath, breaths, event = 'cross') {
+  const factor = event === 'return' ? 2 : 1;
   const target = breath * breaths;
   const tol = 0.1 * target;
   const ok = [];
-  for (let k = 1; k <= 100; k++) if (Math.abs(crossTime(k) - target) <= tol) ok.push(k);
+  for (let k = 1; k <= 100; k++) if (Math.abs(crossTime(k) * factor - target) <= tol) ok.push(k);
   if (!ok.length || ok[0] <= 1 || ok[ok.length - 1] >= 100) return null;
-  const r = 1 + OWN / (2 * target);
+  const r = 1 + OWN * factor / (2 * target);
   let value = Math.round((r * r - 1) / (2 * COUPLE));
   value = Math.max(ok[0], Math.min(ok[ok.length - 1], value));
   const near = Math.min(value - ok[0], ok[ok.length - 1] - value);
@@ -688,8 +698,10 @@ function springSolution(breath, breaths) {
 function springPlan(env) {
   for (let attempt = 0; attempt < 12; attempt++) {
     const pair = env.pick(TARGETS);
-    if (!springSolution(pair[0], pair[1])) continue;
-    return { kind: 'spring', number: 100 + env.int(0, 899), breath: pair[0], breaths: pair[1], ask: env.chance(0.5) ? 'stiffer' : 'softer', open: env.int(4, 18) };
+    const event = env.chance(0.45) ? 'return' : 'cross';
+    const breaths = pair[1] * (event === 'return' ? 2 : 1);
+    if (!springSolution(pair[0], breaths, event)) continue;
+    return { kind: 'spring', number: 100 + env.int(0, 899), breath: pair[0], breaths, event, ask: env.chance(0.5) ? 'stiffer' : 'softer', open: env.int(4, 18) };
   }
   return { kind: 'spring', number: 500, breath: 3, breaths: 3, ask: 'stiffer', open: 10 };
 }
@@ -702,16 +714,18 @@ function carriedSpring(env) {
   const breaths = Number(p.breaths);
   const open = Number(p.open);
   if (!Number.isInteger(number) || number < 100 || number > 999) return null;
-  if (!TARGETS.some((pair) => pair[0] === breath && pair[1] === breaths)) return null;
+  const event = p.event === undefined ? 'cross' : p.event;
+  if (event !== 'cross' && event !== 'return') return null;
+  if (!TARGETS.some((pair) => pair[0] === breath && pair[1] * (event === 'return' ? 2 : 1) === breaths)) return null;
   if (p.ask !== 'stiffer' && p.ask !== 'softer') return null;
   if (!Number.isInteger(open) || open < 1 || open > 100) return null;
-  const sol = springSolution(breath, breaths);
-  if (!sol || Math.abs(crossTime(open) - sol.target) <= sol.tol) return null;
-  return { kind: 'spring', number, breath, breaths, ask: p.ask, open };
+  const sol = springSolution(breath, breaths, event);
+  if (!sol || Math.abs(crossingTime({ event }, open) - sol.target) <= sol.tol) return null;
+  return { kind: 'spring', number, breath, breaths, event, ask: p.ask, open };
 }
 
 function springTitle(plan) {
-  return 'pair ' + plan.number + ': cross in ' + WORDS[plan.breaths] + ' breaths';
+  return 'pair ' + plan.number + (plan.event === 'return' ? ': the returning swing, ' : ': cross in ') + WORDS[plan.breaths] + ' breaths';
 }
 
 // Where the two swings are `time` seconds after the first is let go, as fractions of the start.
@@ -791,9 +805,22 @@ function springRuler(g, w, h, c, plan, s, v, size, now) {
   g.lineTo(tx, bottom);
   g.stroke();
   g.setLineDash([]);
-  text(g, c, 'cross here', tx, top - size * 0.9, Math.max(8, size * 0.85), col.accent2);
+  text(g, c, plan.event === 'return' ? 'return here' : 'cross here', tx, top - size * 0.9, Math.max(8, size * 0.85), col.accent2);
+  if (s.inspected !== null) {
+    const ix = xOf(s.inspected);
+    g.strokeStyle = col.fg;
+    g.lineWidth = 1.5;
+    g.beginPath();
+    g.moveTo(ix, top);
+    g.lineTo(ix, bottom);
+    g.stroke();
+    g.fillStyle = col.fg;
+    g.beginPath();
+    g.arc(ix, bottom, Math.max(3, size * 0.25), 0, TAU);
+    g.fill();
+  }
   if (s.runs.length) {
-    const predicted = crossTime(stiffnessShown(s, rite, reduced));
+    const predicted = crossingTime(plan, stiffnessShown(s, rite, reduced));
     const px = xOf(predicted);
     g.strokeStyle = c.alpha(col.accent, 0.85);
     g.lineWidth = 1.5;
@@ -857,7 +884,7 @@ function drawSpring(g, w, h, c, plan, s, variant) {
   if (s.doneAt != null && s.doneAt >= 0) daybreak(g, rite, c, w, h, came(s, s.doneAt, 2.4, reduced), 0.1);
   bar(g, c, w, barY, m);
   // The replay's clock, read through the escapement: the pair is handed its swing in clicks.
-  const now = s.replay ? replayTime(rite, s.replay.t) : 0;
+  const now = s.replay ? (s.inspected === null ? replayTime(rite, s.replay.t) : s.inspected) : 0;
   const motion = s.replay ? springMotion(s.replay.k, now) : { first: 1, second: 0, firstReach: 1, secondReach: 0 };
   const pivots = [w * 0.3, w * 0.7];
   g.strokeStyle = c.alpha(col.muted, 0.3);
@@ -889,14 +916,14 @@ function drawSpring(g, w, h, c, plan, s, variant) {
 // let-go; doneAt is when the piece was solved; drawn, drawnKey and drawnAt are the size, the click
 // and the moment of the picture on the canvas (settled).
 function springBlank(plan) {
-  return { k: plan.open, kFrom: plan.open, kAt: -1, sets: 0, runs: [], probes: [], replay: null, t: 0, doneAt: -1,
+  return { k: plan.open, kFrom: plan.open, kAt: -1, sets: 0, runs: [], probes: [], replay: null, inspected: null, t: 0, doneAt: -1,
     drawn: null, drawnKey: null, drawnAt: -1 };
 }
 
 // The pair's clock as it is drawn -- the run being replayed, at its time read through the
 // escapement -- which is all of it that changes the picture between two frames.
 function springKey(rite, s) {
-  return s.replay ? s.replay.k + '@' + replayTime(rite, s.replay.t) : '';
+  return s.replay ? s.replay.k + '@' + (s.inspected === null ? replayTime(rite, s.replay.t) : s.inspected) + (s.inspected === null ? '' : ' held') : '';
 }
 
 // The latest change on the pair that is still read against the clock: a move of the slider, a
@@ -918,7 +945,9 @@ function springPiece(env, plan) {
   // no margin to widen. What the difficulty buys is how many springs the hall will try for you,
   // each one marked on the ruler beside your own runs.
   const probes = [10, 30, 50, 70, 90];
-  const sol = springSolution(plan.breath, plan.breaths);
+  const sol = springSolution(plan.breath, plan.breaths, plan.event);
+  const event = plan.event === 'return' ? 'first return' : 'first handoff';
+  const action = plan.event === 'return' ? 'returns to the first pendulum' : 'crosses to the second pendulum';
   const then = plan.ask === 'stiffer' ? 'sooner' : 'later';
   const s = springBlank(plan);
   const span = (plan.breaths + 1.5) * plan.breath;
@@ -929,34 +958,51 @@ function springPiece(env, plan) {
     s.drawnAt = s.t;
   };
   const breathsOf = (tau) => (tau / plan.breath).toFixed(1);
+  const report = (c) => {
+    const motion = springMotion(s.k, s.inspected);
+    c.status('At ' + breathsOf(s.inspected) + ' breaths with spring ' + s.k
+      + ': first swing reaches ' + Math.round(motion.firstReach * 100) + '% of the starting size; second reaches '
+      + Math.round(motion.secondReach * 100) + '%. Change the spring to compare this same moment, or let go to check and replay.');
+  };
+  const inspect = (value, c) => {
+    const breaths = Number(value);
+    if (!Number.isFinite(breaths) || breaths < 0 || breaths > span / plan.breath) {
+      c.status('Choose an inspection time from 0 to ' + (span / plan.breath) + ' breaths.');
+      return;
+    }
+    s.inspected = Math.round(breaths * 2) / 2 * plan.breath;
+    s.replay = { k: s.k, t: s.inspected };
+    report(c);
+  };
   return {
     title: springTitle(plan),
-    brief: 'The rite of the handed swing. Two pendulums of the same length, joined by a spring. Only the first is let go, from the side; the spring hands the swing across until the first hangs still and the second has all of it. '
-      + 'A stiffer spring hands it across sooner; a softer one takes longer. One breath is ' + plan.breath + ' seconds. Let the pair go once to mark its crossing on the ruler; after that, moving the spring previews where the next run will cross.',
-    goal: 'Set the spring so the swing crosses to the second pendulum in ' + WORDS[plan.breaths] + ' breaths, and say what a ' + plan.ask + ' spring would do.',
+    brief: 'Tune a spring pair for its ' + event + '. Only the first pendulum is released from the side. The spring hands its swing to the second, then brings it back; the first return takes twice as long as the first handoff. A stiffer spring makes both happen sooner. One breath is ' + plan.breath + ' seconds. Inspect time, or tap the ruler, to measure both swing sizes without waiting. Change the spring while inspecting to compare the same moment. Let go checks your answer and replays the pair; after one run, a dashed line previews the next ' + event + '.',
+    goal: 'Set the spring so the swing first ' + action + ' in ' + WORDS[plan.breaths] + ' breaths (within 10%), and say what a ' + plan.ask + ' spring would do to that time.',
     aspect: '16 / 10',
     checkLabel: 'let go',
     steps: [
       { id: 'spring', ask: 'how stiff the spring is', kind: 'range', min: 1, max: 100, step: 1, value: plan.open, low: 'soft', high: 'stiff' },
-      { id: 'then', ask: 'with a ' + plan.ask + ' spring than that, the swing crosses', kind: 'choice', options: THEN },
-      { id: 'hint', ask: 'one spring tried for you', kind: 'press', count: 1, label: 'try one for me', optional: true }
+      { id: 'then', ask: 'with a ' + plan.ask + ' spring, the ' + event + ' happens', kind: 'choice', options: THEN },
+      { id: 'hint', ask: 'one spring tried for you', kind: 'press', count: 1, label: 'try one for me', optional: true },
+      { id: 'inspect', ask: 'inspect time after release (no hint cost; let go resumes the replay)', kind: 'range', min: 0, max: plan.breaths + 1.5, step: 0.5, value: 0, unit: 'breaths', low: 'release', high: 'later', optional: true }
     ],
     solution: { spring: { value: sol.value, near: sol.near }, then },
     check(c) {
       const k = Math.max(1, Math.min(100, Math.round(Number(c.value('spring')) || plan.open)));
-      const tau = crossTime(k);
+      const tau = crossingTime(plan, k);
+      s.inspected = null;
       const onMark = Math.abs(tau - sol.target) <= sol.tol;
       const thenRight = c.value('then') === then;
       if (!s.runs.some((run) => run.k === k)) s.runs.push({ k, tau, at: s.t });
       s.replay = { k, t: 0 };
-      const took = 'crosses in ' + breathsOf(tau) + ' breaths';
-      if (onMark && thenRight) return { solved: true, say: took + ': on the mark, the swing handed whole' };
+      const took = event + ' in ' + breathsOf(tau) + ' breaths';
+      if (onMark && thenRight) return { solved: true, say: took + (plan.event === 'return' ? ': on the mark, the swing brought home' : ': on the mark, the swing handed whole') };
       const parts = [onMark ? took + ': on the mark' : took + (tau < sol.target ? ', too soon' : ', too late')];
       if (!thenRight) parts.push('and the ' + plan.ask + ' spring would not do that');
       return { solved: false, say: parts.join('; ') };
     },
     start(c) {
-      c.status('pair ' + plan.number + ': aim for ' + WORDS[plan.breaths] + ' breaths of ' + plan.breath + ' seconds; let go once to start tracing crossings');
+      c.status('Pair ' + plan.number + ': aim for the ' + event + ' at ' + plan.breaths + ' breaths. Inspect that time, then vary the spring to compare both swing sizes; let go checks and replays.');
       draw(c);
     },
     apply(id, value, c) {
@@ -964,11 +1010,11 @@ function springPiece(env, plan) {
         const tried = s.probes;
         const next = tried.length < helps ? probes.find((k) => !s.runs.some((run) => run.k === k)) : undefined;
         if (next !== undefined) {
-          const tau = crossTime(next);
+          const tau = crossingTime(plan, next);
           s.runs.push({ k: next, tau, at: s.t });
           s.probes.push(next);
           c.hint();
-          c.status('a spring at ' + next + ' crosses in ' + breathsOf(tau) + ' breaths; its mark is on the ruler');
+          c.status('A spring at ' + next + ' makes its ' + event + ' in ' + breathsOf(tau) + ' breaths; its mark is on the ruler. ' + (tau < sol.target ? 'That is too soon: try a softer spring.' : tau > sol.target ? 'That is too late: try a stiffer spring.' : 'That is on the target time.'));
         } else if (tried.length >= helps) {
           c.status('that is all the hall will try at this difficulty; let go and read the ruler yourself');
         } else {
@@ -988,13 +1034,25 @@ function springPiece(env, plan) {
             // The run on show was the old spring's. Before the solve the pair is put back at its
             // let-go, to be let go by the next check; after it, the new spring's run plays at once,
             // so another stiffness is another experiment.
-            s.replay = c.done ? { k: next, t: 0 } : null;
+            s.replay = s.inspected !== null ? { k: next, t: s.inspected } : c.done ? { k: next, t: 0 } : null;
           }
         }
         c.status('spring at ' + s.k + (s.k < 20 ? ', soft' : s.k > 75 ? ', stiff' : '')
           + (c.done ? '; the pair keeps trading the swing' : '; let go to see the crossing'));
       }
-      if (id === 'then') c.status('a ' + plan.ask + ' spring, you say, crosses ' + (value === 'same' ? 'at the same time' : value));
+      if (id === 'then') c.status('With a ' + plan.ask + ' spring, you say, the ' + event + ' happens ' + (value === 'same' ? 'at the same time' : value));
+      if (id === 'inspect') inspect(value, c);
+      else if (id === 'spring' && s.inspected !== null) report(c);
+      draw(c);
+    },
+    tap(x, y, c) {
+      if (y < 0.72 || y > 0.98 || x < 0.08 || x > 0.92) {
+        c.status('Tap the ruler below the pendulums, or use inspect time, to hold a moment and compare the two swing sizes.');
+        return;
+      }
+      const breaths = Math.round((x - 0.08) / 0.84 * (plan.breaths + 1.5) * 2) / 2;
+      c.set('inspect', breaths);
+      inspect(breaths, c);
       draw(c);
     },
     // A run plays out once, from the let-go to the end of the ruler, and rests on its last tooth --
@@ -1007,14 +1065,15 @@ function springPiece(env, plan) {
     frame(t, dt, c) {
       s.t += Math.max(0, dt);
       if (c.done && s.doneAt < 0) s.doneAt = s.t;
-      if (s.replay) s.replay.t = c.reduced ? span : Math.min(span, s.replay.t + Math.max(0, dt));
+      if (s.replay && s.inspected === null) s.replay.t = c.reduced ? span : Math.min(span, s.replay.t + Math.max(0, dt));
       if (!settled(s, c, springKey(riteOf(c), s), springLast(s))) draw(c);
-      return (s.replay && s.replay.t < span) || !settled(s, c, springKey(riteOf(c), s), springLast(s));
+      return (s.replay && s.inspected === null && s.replay.t < span) || !settled(s, c, springKey(riteOf(c), s), springLast(s));
     },
     end(c) {
+      s.inspected = null;
       s.replay = { k: s.replay ? s.replay.k : sol.value, t: 0 };
       if (s.doneAt < 0) s.doneAt = s.t;
-      c.status('the swing crosses in ' + WORDS[plan.breaths] + ' breaths and comes back; the pair keeps trading it');
+      c.status('The swing ' + action + ' at the target. Inspect ' + (plan.event === 'return' ? 'half that time to find the handoff' : 'a later time to see the swing returning') + ', or change the spring and compare the same moment.');
       draw(c);
     }
   };
@@ -1103,8 +1162,8 @@ export default {
       const plan = d.plan;
       return {
         title: springTitle(plan),
-        text: 'Two pendulums and a spring: aim for a crossing in ' + WORDS[plan.breaths] + ' breaths. Run it once, then watch the next crossing follow your spring setting.',
-        mono: 'breath   ' + plan.breath + ' seconds\ncross in ' + plan.breaths + ' breaths\nalone    one swing in ' + OWN + ' seconds',
+        text: 'Two pendulums and a spring: aim for the first ' + (plan.event === 'return' ? 'return to the starting pendulum' : 'handoff to the second pendulum') + ' in ' + WORDS[plan.breaths] + ' breaths. Hold a moment on the ruler and change the spring to see how much swing each one has.',
+        mono: 'breath   ' + plan.breath + ' seconds\n' + (plan.event === 'return' ? 'return in ' : 'cross in ') + plan.breaths + ' breaths\nalone    one swing in ' + OWN + ' seconds',
         aspect: '16 / 10',
         paint: (g, w, h, cardEnv) => springPreview(g, w, h, cardEnv, plan),
         of: plan
