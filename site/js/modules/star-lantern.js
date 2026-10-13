@@ -5,10 +5,11 @@
 
    Four puzzles, all deduction:
 
-     the lighting order  Four or five lettered lanterns rise one after another, and a few clues
-                         under the sky say how: before, right after, first, last, so many between,
+     the lighting order  Four, five or -- on the seed that rolls the long rite -- six lettered
+                         lanterns rise one after another, and a few clues under the sky say how:
+                         before, right after, right before or after, first, last, so many between,
                          not last. The clues are drawn from the true order and pruned until exactly
-                         one order fits them all, never more than five. A wrong check says how many
+                         one order fits them all, never more than six. A wrong check says how many
                          stand in the right place and no more; a hint, at a price, names one
                          lantern's place.
      where it drifts     One lantern let go at the dotted column rises through four bands of wind,
@@ -32,8 +33,8 @@
    rolling another. The sky may be one star or many; it only lights the picture, and the plan
    stands whatever the sky is now. */
 
-const LETTERS = ['A', 'B', 'C', 'D', 'E'];
-const ORDINAL = ['first', 'second', 'third', 'fourth', 'fifth'];
+const LETTERS = ['A', 'B', 'C', 'D', 'E', 'F'];
+const ORDINAL = ['first', 'second', 'third', 'fourth', 'fifth', 'sixth'];
 const WORDS = ['no', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine', 'ten', 'eleven', 'twelve'];
 const PLAIN = { density: 1, scale: 1, turn: 0 };
 const TAU = Math.PI * 2;
@@ -409,6 +410,7 @@ function holds(clue, order) {
     case 'between': return Math.abs(at(clue.a) - at(clue.b)) === clue.d + 1;
     case 'notLast': return at(clue.a) !== n - 1;
     case 'notFirst': return at(clue.a) !== 0;
+    case 'beside': return Math.abs(at(clue.a) - at(clue.b)) === 1;
     case 'slot': return at(clue.a) === clue.k;
     default: return false;
   }
@@ -425,6 +427,7 @@ function clueText(clue) {
     case 'between': return clue.d === 1 ? 'one lantern rises between ' + a + ' and ' + b : WORDS[clue.d] + ' lanterns rise between ' + a + ' and ' + b;
     case 'notLast': return a + ' does not rise last';
     case 'notFirst': return a + ' does not rise first';
+    case 'beside': return a + ' rises right before or right after ' + b;
     case 'slot': return a + ' rises ' + ORDINAL[clue.k];
     default: return '';
   }
@@ -471,6 +474,7 @@ function trueClues(order) {
       if (pa === pb + 1) out.push({ t: 'after', a, b });
       if (pa - pb >= 2 && a < b) out.push({ t: 'between', a, b, d: pa - pb - 1 });
       if (pb - pa >= 2 && a < b) out.push({ t: 'between', a, b, d: pb - pa - 1 });
+      if (Math.abs(pa - pb) === 1 && a < b) out.push({ t: 'beside', a, b });
     }
   }
   return out;
@@ -483,7 +487,9 @@ function clueWeight(clue) {
 }
 
 function orderPlan(env) {
-  const n = env.chance(0.45) ? 5 : 4;
+  // Most seeds hang four or five lanterns; some roll the long rite, six.
+  const n = env.chance(0.18) ? 6 : env.chance(0.45) ? 5 : 4;
+  const most = n === 6 ? 6 : 5;
   const perms = permutations(n);
   let order = null;
   let clues = null;
@@ -510,7 +516,7 @@ function orderPlan(env) {
       const without = chosen.slice(0, i).concat(chosen.slice(i + 1));
       if (fits(without, perms).length === 1) chosen = without;
     }
-    if (chosen.length <= 5 && fits(chosen, perms).length === 1) {
+    if (chosen.length <= most && fits(chosen, perms).length === 1) {
       order = draw;
       clues = chosen;
     }
@@ -533,14 +539,14 @@ function carriedOrder(env) {
   const p = env.card && env.card.of;
   if (!p || p.kind !== 'order') return null;
   const n = Number(p.n);
-  if (n !== 4 && n !== 5) return null;
+  if (n !== 4 && n !== 5 && n !== 6) return null;
   const okIndex = (i) => Number.isInteger(i) && i >= 0 && i < n;
   const isPerm = (list) => Array.isArray(list) && list.length === n && list.every(okIndex) && new Set(list).size === n;
   if (!isPerm(p.order) || !isPerm(p.start) || p.start.every((v, i) => v === p.order[i])) return null;
-  if (!Array.isArray(p.clues) || !p.clues.length || p.clues.length > 5) return null;
-  const okClue = (c) => c && typeof c === 'object' && ['before', 'after', 'first', 'last', 'between', 'notLast', 'notFirst', 'slot'].includes(c.t)
+  if (!Array.isArray(p.clues) || !p.clues.length || p.clues.length > 6) return null;
+  const okClue = (c) => c && typeof c === 'object' && ['before', 'after', 'first', 'last', 'between', 'notLast', 'notFirst', 'beside', 'slot'].includes(c.t)
     && okIndex(c.a)
-    && (!['before', 'after', 'between'].includes(c.t) || (okIndex(c.b) && c.b !== c.a))
+    && (!['before', 'after', 'between', 'beside'].includes(c.t) || (okIndex(c.b) && c.b !== c.a))
     && (c.t !== 'between' || (Number.isInteger(c.d) && c.d >= 1 && c.d <= n - 2))
     && (c.t !== 'slot' || okIndex(c.k));
   if (!p.clues.every(okClue)) return null;
@@ -551,7 +557,7 @@ function carriedOrder(env) {
 }
 
 function orderTitle(plan) {
-  return 'the lighting order: ' + WORDS[plan.n] + ' lanterns';
+  return plan.n === 6 ? 'the long rite: six lanterns' : 'the lighting order: ' + WORDS[plan.n] + ' lanterns';
 }
 
 // Where the lanterns hang: one column each, left to right by letter, and a height for every rank.
@@ -628,15 +634,17 @@ function drawOrder(g, w, h, env, plan, s, variant) {
     write(g, ORDINAL[hung.name], x, geo.bottom + 24 * k, small, 'center', env.alpha(c.fg, 0.8));
   }
   // The clues, under the sky.
-  const size = Math.max(9, Math.min(15, Math.round(Math.min(w, h) * 0.04)));
+  const size = Math.max(9, Math.min(15, Math.round(Math.min(w, h) * (plan.clues.length > 5 ? 0.034 : 0.04))));
   const x0 = w * 0.08;
   g.fillStyle = env.alpha(c.muted, 0.2);
   g.fillRect(x0, h * 0.585, w * 0.84, 1);
   let y = h * 0.64;
+  // Six clues of the long rite still fit under the sky: the lines close up as far as they must.
+  const step = Math.min(size * 1.5, (h * 0.96 - y) / plan.clues.length);
   plan.clues.forEach((clue, i) => {
     write(g, String(i + 1) + '.', x0, y, size, 'left', env.alpha(c.accent2, 0.9));
     write(g, clueText(clue), x0 + size * 1.6, y, size, 'left', env.alpha(c.fg, 0.9));
-    y += size * 1.5;
+    y += step;
   });
   if (s.doneAt != null && s.doneAt >= 0) daybreak(g, rite, env, w, h, came(s, s.doneAt, 2.4, reduced), 0.06);
 }
@@ -741,19 +749,19 @@ function orderPiece(env, plan) {
       let rising = false;
       if (c.done) {
         if (s.doneAt < 0) s.doneAt = s.t;
-        rising = s.rose < 2;
-        s.rose = c.reduced ? 2 : Math.min(2, s.rose + dt * 2);
+        rising = s.rose < 3;
+        s.rose = c.reduced ? 3 : Math.min(3, s.rose + dt * 2);
         // The lanterns rise and brighten in treads, first to rise first, each on a roll of its own.
         for (let i = 0; i < n; i++) {
           const own = roll(riteOf(c), 0x300, i);
-          const up = own.stair(Math.max(0, Math.min(1, s.rose - s.order.indexOf(i) * 0.12)));
-          s.lift[i] = c.reduced ? 0 : up * 4 * Math.max(1, c.h / 320);
+          const up = own.stair(Math.max(0, Math.min(1, s.rose - s.order.indexOf(i) * 0.25)));
+          s.lift[i] = c.reduced ? 0 : up * 7 * Math.max(1, c.h / 320);
           s.glow[i] = up * 0.9;
         }
       }
       if (!rising && settled(s, c)) return false;
       draw(c);
-      return (c.done && s.rose < 2) || !settled(s, c);
+      return (c.done && s.rose < 3) || !settled(s, c);
     },
     end(c) {
       if (s.doneAt < 0) s.doneAt = s.t;
@@ -1588,12 +1596,21 @@ function mirrorPiece(env, plan) {
     ],
     solution: { cross: first, exit },
     check(c) {
-      const crossingMatches = Number(c.value('cross')) === first;
-      const exitMatches = Number(c.value('exit')) === exit;
-      return { solved: crossingMatches && exitMatches, say: crossingMatches && exitMatches
-        ? 'A reaches or passes B after band ' + first + ' and leaves at column ' + signed(exit)
-        : 'the first crossing band ' + (crossingMatches ? 'matches' : 'does not match')
-          + '; A\'s exit column ' + (exitMatches ? 'matches' : 'does not match') };
+      const cross = Number(c.value('cross'));
+      const guess = Number(c.value('exit'));
+      const crossingMatches = cross === first;
+      const exitMatches = guess === exit;
+      if (crossingMatches && exitMatches) {
+        return { solved: true, say: 'A reaches or passes B after band ' + first + ' and leaves at column ' + signed(exit) };
+      }
+      // Measured, and nothing given away: which side of B A still stands on after the band
+      // named, and which way to look for the exit.
+      const parts = [];
+      if (!crossingMatches) parts.push(cross < first ? 'after band ' + cross + ' A is still left of B' : 'A had already drawn level with B before band ' + cross);
+      else parts.push('the crossing band holds');
+      if (!exitMatches) parts.push('A leaves the top further ' + (guess < exit ? 'right' : 'left') + ' than ' + signed(guess));
+      else parts.push('the exit column holds');
+      return { solved: false, say: parts.join('; ') };
     },
     start(c) {
       c.status('A follows each wind; B mirrors it. Compare their columns after each band.');
@@ -1714,7 +1731,7 @@ export default {
       return {
         title: orderTitle(plan),
         quote: clueText(plan.clues[0]),
-        text: (plan.clues.length === 1 ? 'That is the one clue.' : capital(WORDS[plan.clues.length - 1]) + ' more clues wait under the sky.')
+        text: (plan.n === 6 ? 'The long rite. ' : '') + (plan.clues.length === 1 ? 'That is the one clue.' : capital(WORDS[plan.clues.length - 1]) + ' more clues wait under the sky.')
           + ' Find the one order the ' + WORDS[plan.n] + ' lanterns rise in.',
         aspect: '1 / 1',
         paint: (g, w, h, cardEnv) => orderPreview(g, w, h, cardEnv, plan),

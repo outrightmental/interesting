@@ -23,7 +23,7 @@
     { "file": "pendulum-hall.html", "name": "the pendulum hall", "gloss": "find when the pendulums cross", "orientation": "counting in echoes", "mood": "metrical", "aspect": "16 / 10",
       "what": "Keep time with pendulums: find a shared crossing, or tune a spring pair for its first handoff or return; hold a moment on the ruler and change the spring to compare how much swing each pendulum has." },
     { "file": "star-lantern.html", "name": "the lantern ritual", "gloss": "order lanterns from clues", "orientation": "wants a rite", "mood": "ceremonial", "aspect": "3 / 4",
-      "what": "Light the rite: order lanterns from clues, predict a drift, recover missing winds, or follow mirrored lanterns to their first crossing." },
+      "what": "Light the rite: order four, five or six lanterns from clues, predict a drift, recover missing winds, or follow mirrored lanterns to their first crossing." },
     { "file": "wish-terrarium.html", "name": "the terrarium", "gloss": "judge watering rounds or recover stem ages", "orientation": "minding something", "mood": "tending", "aspect": "4 / 5",
       "what": "Tend what is under glass: decide which plants get water, forecast a second round as the soil changes, or recover stem ages from leaves and weeks at rest." },
     { "file": "constellation-weather.html", "name": "the weather lab", "gloss": "trace wind between high and low pressure", "orientation": "weather coming", "mood": "tempestuous", "aspect": "16 / 10",
