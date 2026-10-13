@@ -1,11 +1,11 @@
 /* The orbital weaver: a midnight loom under the persona's sky, read as puzzles. A small motif is
    turned about the centre into a kaleidoscopic weave, or two screens of fine lines are laid over
-   each other and show their difference as broad bands. As a card it is one of the two puzzles
+   each other and show their difference as broad bands. As a card it is one of the three puzzles
    below, printed as it stands (paint, spark); as a piece it is that puzzle, and the card it was
    opened from says which. See js/feed.js for what a module is and js/stage.js for what a piece
    is.
 
-   Two puzzles, both deduction by looking:
+   Three puzzles, all deduction by looking:
 
      count the folds   A motif of three or four joined points is laid on the loom and turned about
                        the centre some number of times -- the folds -- and on some looms every copy
@@ -17,6 +17,10 @@
                        line, and shows as many broad bands as the two counts differ by. Say the
                        second count and whether it is more or fewer. A wrong check says how many
                        of the two hold.
+     the moved bead    A small beaded block repeats across a six- or nine-cell-wide weave, sometimes
+                       reflected in alternate block columns. One bead has moved between blocks.
+                       Compare the weave with its reference and name both cells. Inspection reads
+                       the cell pressed; hints narrow the search without setting an answer.
 
    The sky colours the loom -- the stars are drawn behind it -- but never decides a puzzle: the
    plan is made from the seed, serialised whole on the card's `of`, and piece(env) opens on that
@@ -904,6 +908,284 @@ function moirePiece(env, plan) {
   };
 }
 
+/* ---- the wandering bead --------------------------------------------------------------------- */
+
+function repairBlock(plan, index) {
+  const row = Math.floor(index / plan.size);
+  const column = index % plan.size;
+  return Math.floor(row / 3) * (plan.size / 3) + Math.floor(column / 3);
+}
+
+function repairBead(plan, index, restored) {
+  if (!restored && index === plan.gap) return false;
+  if (!restored && index === plan.extra) return true;
+  const row = Math.floor(index / plan.size);
+  const column = index % plan.size;
+  const local = plan.reflected && Math.floor(column / 3) % 2 ? 2 - column % 3 : column % 3;
+  return plan.motif.includes(row % 3 * 3 + local);
+}
+
+function repairPlan(env) {
+  const cells = Array.from({ length: 9 }, (_, i) => i);
+  for (let i = cells.length - 1; i > 0; i--) {
+    const j = env.int(0, i);
+    [cells[i], cells[j]] = [cells[j], cells[i]];
+  }
+  const plan = {
+    kind: 'repair', number: env.int(100, 999), size: env.chance(0.35) ? 9 : 6,
+    motif: cells.slice(0, env.int(3, 5)).sort((a, b) => a - b), reflected: env.chance(0.5)
+  };
+  const occupied = [];
+  const empty = [];
+  for (let i = 0; i < plan.size * plan.size; i++) {
+    (repairBead(plan, i, true) ? occupied : empty).push(i);
+  }
+  plan.gap = env.pick(occupied);
+  plan.extra = env.pick(empty.filter((i) => repairBlock(plan, i) !== repairBlock(plan, plan.gap)));
+  return plan;
+}
+
+function carriedRepair(env) {
+  const p = env.card && env.card.of;
+  if (!p || p.kind !== 'repair') return null;
+  if (!Number.isInteger(p.number) || p.number < 100 || p.number > 999) return null;
+  if (p.size !== 6 && p.size !== 9) return null;
+  if (typeof p.reflected !== 'boolean') return null;
+  if (!Array.isArray(p.motif) || p.motif.length < 3 || p.motif.length > 5) return null;
+  if (!p.motif.every((i) => Number.isInteger(i) && i >= 0 && i < 9) || new Set(p.motif).size !== p.motif.length) return null;
+  if (![p.gap, p.extra].every((i) => Number.isInteger(i) && i >= 0 && i < p.size * p.size)) return null;
+  const plan = { kind: 'repair', number: p.number, size: p.size, motif: p.motif.slice().sort((a, b) => a - b), reflected: p.reflected, gap: p.gap, extra: p.extra };
+  if (!repairBead(plan, plan.gap, true) || repairBead(plan, plan.extra, true)) return null;
+  if (repairBlock(plan, plan.gap) === repairBlock(plan, plan.extra)) return null;
+  return plan;
+}
+
+function repairTitle(plan) {
+  return 'weave ' + plan.number + ': the wandering bead';
+}
+
+function repairGeometry(w, h, v, plan) {
+  const side = Math.min(w * 0.76, h * 0.66) * clamp(v.scale, 0.86, 1.06);
+  return { x: (w - side) / 2, y: h * 0.08, side, cell: side / plan.size };
+}
+
+function repairPoint(box, plan, index) {
+  return { x: box.x + (index % plan.size + 0.5) * box.cell,
+    y: box.y + (Math.floor(index / plan.size) + 0.5) * box.cell };
+}
+
+function repairThreads(g, box, env, plan, restored, density) {
+  const blocks = plan.size / 3;
+  const radius = Math.max(1.8, box.cell * 0.12 * clamp(density, 0.8, 1.2));
+  for (let row = 0; row < blocks; row++) {
+    for (let column = 0; column < blocks; column++) {
+      const points = [];
+      for (let y = 0; y < 3; y++) {
+        for (let x = 0; x < 3; x++) {
+          const i = (row * 3 + y) * plan.size + column * 3 + x;
+          if (repairBead(plan, i, restored)) points.push(repairPoint(box, plan, i));
+        }
+      }
+      g.strokeStyle = env.alpha((row + column) % 2 ? env.colors.accent : env.colors.accent2, 0.65);
+      g.lineWidth = Math.max(1, box.cell * 0.045 * clamp(density, 0.75, 1.4));
+      thread(g, points, null);
+      g.fillStyle = env.colors.fg;
+      beads(g, points, radius);
+    }
+  }
+  g.strokeStyle = env.alpha(env.colors.fg, 0.45);
+  g.lineWidth = 1;
+  for (let i = 0; i <= blocks; i++) {
+    const at = i * box.cell * 3;
+    g.beginPath();
+    g.moveTo(box.x + at, box.y);
+    g.lineTo(box.x + at, box.y + box.side);
+    g.moveTo(box.x, box.y + at);
+    g.lineTo(box.x + box.side, box.y + at);
+    g.stroke();
+  }
+}
+
+function drawRepair(g, w, h, env, plan, look, variant) {
+  const v = variant || PLAIN;
+  const c = env.colors;
+  const rite = riteOf(env);
+  const box = repairGeometry(w, h, v, plan);
+  const size = Math.max(9, Math.min(13, Math.min(w, h) * 0.037));
+  night(g, w, h, env);
+  sky(g, w, h, env, v);
+  g.fillStyle = c.bg;
+  g.fillRect(box.x, box.y, box.side, box.side);
+  for (const [index, coverage] of [[plan.gap, look.gapHelp], [plan.extra, look.extraHelp]]) {
+    if (coverage <= 0) continue;
+    const block = repairBlock(plan, index);
+    const blocks = plan.size / 3;
+    g.fillStyle = env.alpha(c.accent, 0.18);
+    cover(g, rite, box.x + block % blocks * box.cell * 3,
+      box.y + Math.floor(block / blocks) * box.cell * 3, box.cell * 3, box.cell * 3, coverage);
+  }
+  repairThreads(g, box, env, plan, false, v.density);
+  if (look.reveal > 0) {
+    g.save();
+    g.beginPath();
+    rite.region(g, box.x, box.y, box.side, box.side, look.reveal);
+    g.clip();
+    g.fillStyle = c.bg;
+    g.fillRect(box.x, box.y, box.side, box.side);
+    repairThreads(g, box, env, plan, true, v.density);
+    g.restore();
+  }
+  for (let i = 0; i < plan.size; i++) {
+    label(g, env, String(i + 1), box.x + (i + 0.5) * box.cell, box.y - size, size, 'center');
+    label(g, env, String(i + 1), box.x - size, box.y + (i + 0.5) * box.cell, size, 'center');
+  }
+  for (const name of ['gap', 'extra']) {
+    const row = look.answers[name + '-row'];
+    const column = look.answers[name + '-column'];
+    if (!row || !column) continue;
+    const p = repairPoint(box, plan, (row - 1) * plan.size + column - 1);
+    g.strokeStyle = c.accent2;
+    g.lineWidth = 2;
+    g.setLineDash(name === 'gap' ? [3, 3] : []);
+    g.beginPath();
+    g.arc(p.x, p.y, box.cell * 0.36, 0, Math.PI * 2);
+    g.stroke();
+  }
+  g.setLineDash([]);
+  if (look.inspect != null) {
+    const p = repairPoint(box, plan, look.inspect);
+    g.strokeStyle = c.fg;
+    g.lineWidth = 1.5;
+    g.strokeRect(p.x - box.cell * 0.43, p.y - box.cell * 0.43, box.cell * 0.86, box.cell * 0.86);
+  }
+  const key = Math.min(w, h) * 0.13;
+  const kx = w * 0.07;
+  const ky = h * 0.83;
+  label(g, env, 'one block', kx + key / 2, ky - size, size, 'center');
+  g.fillStyle = c.bg;
+  g.fillRect(kx, ky, key, key);
+  for (let i = 0; i < 9; i++) {
+    const x = kx + i % 3 * key / 3;
+    const y = ky + Math.floor(i / 3) * key / 3;
+    g.strokeStyle = env.alpha(c.fg, 0.45);
+    g.lineWidth = 1;
+    g.strokeRect(x, y, key / 3, key / 3);
+    if (plan.motif.includes(i)) {
+      g.fillStyle = c.fg;
+      g.beginPath();
+      g.arc(x + key / 6, y + key / 6, Math.max(1.8, key * 0.045), 0, Math.PI * 2);
+      g.fill();
+    }
+  }
+  const tx = kx + key + w * 0.05;
+  label(g, env, plan.reflected ? 'alternate blocks mirrored' : 'every block the same way', tx, h * 0.86, size);
+  label(g, env, 'dotted: old / solid: new', tx, h * 0.92, size);
+}
+
+function repairPreview(g, w, h, env, plan) {
+  drawRepair(g, w, h, env, plan, { reveal: 0, gapHelp: 0, extraHelp: 0, inspect: null, answers: {} }, env.variant);
+}
+
+function repairPiece(env, plan) {
+  const helps = asked(env).helps;
+  const rowOf = (i) => Math.floor(i / plan.size) + 1;
+  const columnOf = (i) => i % plan.size + 1;
+  const regionOf = (i) => {
+    const row = Math.floor((rowOf(i) - 1) / 3) * 3 + 1;
+    const column = Math.floor((columnOf(i) - 1) / 3) * 3 + 1;
+    return 'rows ' + row + ' to ' + (row + 2) + ', columns ' + column + ' to ' + (column + 2);
+  };
+  const shows = [
+    'The missing bead is in ' + regionOf(plan.gap) + '. That block is marked on the weave.',
+    'The extra bead is in ' + regionOf(plan.extra) + '. That block is marked too.',
+    'Count within each marked block: one has a bead fewer than the reference, the other a bead more. Compare positions to find which cell changed.',
+    'The missing bead is in row ' + rowOf(plan.gap) + '. Compare that row with the reference to find its column.',
+    'The extra bead is in row ' + rowOf(plan.extra) + '. Compare that row with the reference to find its column.'
+  ];
+  const s = { t: 0, drawn: null, shown: 0, answers: {}, inspect: null, inspectAt: null,
+    gapHelpAt: null, extraHelpAt: null, openAt: null };
+  const look = (c) => {
+    const rite = riteOf(c);
+    const coverage = (at, seed, span) => at == null ? 0 : rite.at(seed).stair(came(s, at, span, !!c.reduced));
+    return { reveal: coverage(s.openAt, 0x81, 1.1), gapHelp: coverage(s.gapHelpAt, 0x82, 0.8),
+      extraHelp: coverage(s.extraHelpAt, 0x83, 0.8), answers: s.answers,
+      inspect: s.inspectAt != null && rite.at(0x84).flicker(came(s, s.inspectAt, 0.35, !!c.reduced)) ? s.inspect : null };
+  };
+  const draw = painter(s, look, (c, now) => drawRepair(c.g, c.w, c.h, c, plan, now, env.variant));
+  const solution = { 'gap-row': rowOf(plan.gap), 'gap-column': columnOf(plan.gap),
+    'extra-row': rowOf(plan.extra), 'extra-column': columnOf(plan.extra) };
+  const answers = [
+    ['gap-row', 'old cell: row'], ['gap-column', 'old cell: column'],
+    ['extra-row', 'new cell: row'], ['extra-column', 'new cell: column']
+  ];
+  return {
+    title: repairTitle(plan),
+    brief: 'Find where one bead moved in this repeating weave. Each outlined block is three rows by three columns and follows the small reference below. '
+      + (plan.reflected ? 'Block columns 2' + (plan.size === 9 ? '' : '') + ' are reflected left to right; the other blocks keep the reference the same way. ' : 'Every block keeps the reference the same way. ')
+      + 'One bead was removed from an occupied cell and added to an empty cell in a different block. Rows count from the top, columns from the left. Tap a cell to inspect it; the four number fields mark your answer.',
+    goal: 'Name the row and column of the missing bead, and the row and column of the extra bead.',
+    aspect: '1 / 1',
+    checkLabel: 'check the repair',
+    steps: answers.map(([id, ask]) => ({ id, ask, kind: 'number', min: 1, max: plan.size, step: 1 })).concat([
+      { id: 'hint', ask: 'help compare the blocks', kind: 'press', count: 1, label: 'show a clue', optional: true }
+    ]),
+    solution,
+    check(c) {
+      const right = answers.filter(([id]) => Number(c.value(id)) === solution[id]).length;
+      return { solved: right === 4, say: right === 4 ? 'The bead is home: every block repeats again.'
+        : right + ' of 4 coordinates match. Compare your marked cells with the repeated block.' };
+    },
+    start(c) {
+      c.status('Find the missing bead and the extra bead. Tap any cell to read its row, column and contents.');
+      draw(c, true);
+    },
+    apply(id, value, c) {
+      if (id === 'hint') {
+        const given = help(c, s, shows, helps, 'No hints left at this difficulty. The reference and cell inspection remain available.',
+          'All five clues have been shown. The reference and cell inspection remain available.');
+        if (given === 1) s.gapHelpAt = s.t;
+        if (given === 2) s.extraHelpAt = s.t;
+      } else if (Object.prototype.hasOwnProperty.call(solution, id)) {
+        const n = Number(value);
+        if (!Number.isInteger(n) || n < 1 || n > plan.size) {
+          c.status('Choose a whole number from 1 to ' + plan.size + '.');
+          return;
+        }
+        s.answers[id] = n;
+        c.status('Your old cell has a dotted ring; your new cell has a solid ring once both coordinates are set.');
+      }
+      draw(c, true);
+    },
+    tap(x, y, c) {
+      const box = repairGeometry(c.w, c.h, env.variant || PLAIN, plan);
+      const column = Math.floor((x * c.w - box.x) / box.cell);
+      const row = Math.floor((y * c.h - box.y) / box.cell);
+      if (column < 0 || column >= plan.size || row < 0 || row >= plan.size) {
+        c.status('Tap inside the numbered weave to inspect a cell. Use the four number fields to mark your answer.');
+        return;
+      }
+      s.inspect = row * plan.size + column;
+      s.inspectAt = s.t;
+      const restored = look(c).reveal === 1;
+      c.status('Row ' + (row + 1) + ', column ' + (column + 1) + ': '
+        + (repairBead(plan, s.inspect, restored) ? 'a bead.' : 'no bead.')
+        + (restored ? ' The weave is restored; your answer marks can still be changed.' : ' This inspection does not change your answer.'));
+      draw(c, true);
+    },
+    frame(t, dt, c) {
+      if (!c.reduced) s.t += dt;
+      draw(c);
+      return !c.reduced && s.t < settledAt([[s.openAt, 1.1], [s.gapHelpAt, 0.8], [s.extraHelpAt, 0.8], [s.inspectAt, 0.35]]);
+    },
+    end(c) {
+      if (s.openAt == null) s.openAt = s.t;
+      c.status('The bead returns from row ' + rowOf(plan.extra) + ', column ' + columnOf(plan.extra)
+        + ' to row ' + rowOf(plan.gap) + ', column ' + columnOf(plan.gap) + '. Keep inspecting the restored weave or changing your marks.');
+      draw(c, true);
+    }
+  };
+}
+
 /* ---- the module ----------------------------------------------------------------------------- */
 
 // Which puzzle a seed is dealt, from the seed alone so that paint, spark and piece agree.
@@ -911,7 +1193,11 @@ function dealsMoire(env) {
   return (((Math.imul(env.seed >>> 0, 0x9E3779B1) >>> 0) >>> 3) & 1) === 1;
 }
 
-// The plan, dealt once from the env's seeded stream and kept with that env. Which of the two this
+function dealsRepair(env) {
+  return (Math.imul(env.seed >>> 0, 0x85ebca6b) >>> 0) % 3 === 0;
+}
+
+// The plan, dealt once from the env's seeded stream and kept with that env. Which of the three this
 // card is comes off the seed above and so is free to ask twice, but the plan is not: every pass
 // over one env -- its still picture, its spark -- has to get the same loom, and dealing again would
 // thread another from a stream already spent (issue #92).
@@ -919,8 +1205,9 @@ const dealt = new WeakMap();
 function deal(env) {
   let got = dealt.get(env);
   if (!got) {
-    const moire = dealsMoire(env);
-    got = { moire, plan: moire ? moirePlan(env) : foldsPlan(env) };
+    const repair = dealsRepair(env);
+    const moire = !repair && dealsMoire(env);
+    got = { repair, moire, plan: repair ? repairPlan(env) : moire ? moirePlan(env) : foldsPlan(env) };
     dealt.set(env, got);
   }
   return got;
@@ -931,7 +1218,8 @@ export default {
   needsSky: false,
   paint(g, w, h, env) {
     const d = deal(env);
-    if (d.moire) moirePreview(g, w, h, env, d.plan);
+    if (d.repair) repairPreview(g, w, h, env, d.plan);
+    else if (d.moire) moirePreview(g, w, h, env, d.plan);
     else foldsPreview(g, w, h, env, d.plan);
   },
   animate() {
@@ -943,6 +1231,16 @@ export default {
   spark(env) {
     const d = deal(env);
     const plan = d.plan;
+    if (d.repair) {
+      return {
+        title: repairTitle(plan),
+        text: 'One bead wandered between two blocks of a repeating weave. Compare the small reference with the numbered cells to find where it left and where it landed.',
+        mono: plan.size + ' by ' + plan.size + ' / one moved bead',
+        aspect: '1 / 1',
+        paint: (ctx, cw, ch, cardEnv) => repairPreview(ctx, cw, ch, cardEnv, plan),
+        of: plan
+      };
+    }
     if (d.moire) {
       return {
         title: moireTitle(plan),
@@ -963,11 +1261,13 @@ export default {
     };
   },
   piece(env) {
+    const repair = carriedRepair(env);
+    if (repair) return repairPiece(env, repair);
     const folds = carriedFolds(env);
     if (folds) return foldsPiece(env, folds);
     const moire = carriedMoire(env);
     if (moire) return moirePiece(env, moire);
     const d = deal(env);
-    return d.moire ? moirePiece(env, d.plan) : foldsPiece(env, d.plan);
+    return d.repair ? repairPiece(env, d.plan) : d.moire ? moirePiece(env, d.plan) : foldsPiece(env, d.plan);
   }
 };
