@@ -19,9 +19,11 @@
                       the same family that four of them would witness singles out another one. A
                       wrong check says whether the specimen is right, and no more.
      the forged number
-                      Five catalogue cards and the rule a true number keeps (its last digit is the
-                      last digit of the sum of its first three). One card breaks it: find it and
-                      say the digit it should end in. A wrong check says whether the card is right.
+                      Five catalogue cards and one of three seals: add three digits, multiply
+                      the first pair, or multiply the last pair. One number breaks the seal;
+                      find it and repair its last digit. Inspecting lays out the arithmetic
+                      without doing it; a paid hint works through a true card. A wrong check
+                      counts matching parts without naming which part matched.
 
    A card and the feature it opens as are one puzzle: the spark puts the whole plan on its spec as
    `of` -- the specimens, the order, the clues; the six and the rule; the five numbers -- and
@@ -1072,9 +1074,10 @@ function oddPiece(env, plan) {
       const picked = Array.isArray(c.value('pick')) ? c.value('pick').map(Number) : [];
       const specRight = picked.length === 1 && picked[0] === plan.odd;
       const featureRight = c.value('choice') === plan.rule.thenAttr;
-      if (specRight && featureRight) return { solved: true, say: 'specimen ' + (plan.odd + 1) + ' breaks the rule on ' + feature.label };
-      if (specRight) return { solved: false, say: 'the specimen is right; the feature is off' };
-      return { solved: false, say: picked.length === 1 ? 'specimen ' + (picked[0] + 1) + ' keeps the rule' : 'pick one specimen' };
+      const matched = Number(specRight) + Number(featureRight);
+      return { solved: matched === 2, say: matched === 2
+        ? 'specimen ' + (plan.odd + 1) + ' breaks the rule on ' + feature.label
+        : matched + ' of two parts of your filing match; compare the specimen and the feature with the pinned rule' };
     },
     start(c) {
       c.status('the rule: ' + ruleText(plan.rule));
@@ -1156,41 +1159,65 @@ function oddPiece(env, plan) {
 
 /* ---- the forged number: one check digit wrong ---------------------------------------------- */
 
-function checkDigit(number) {
-  return (Number(number[0]) + Number(number[1]) + Number(number[2])) % 10;
+const SEALS = {
+  sum: { title: 'the forged number: the sum', rule: 'Add the first three digits. The last digit of the result must be the fourth digit.' },
+  first: { title: 'the forged number: the first pair', rule: 'Multiply the first two digits, then add the third. The last digit of the result must be the fourth digit.' },
+  last: { title: 'the forged number: the last pair', rule: 'Multiply the second and third digits, then add the first. The last digit of the result must be the fourth digit.' }
+};
+
+function sealMath(number, seal) {
+  const a = Number(number[0]);
+  const b = Number(number[1]);
+  const c = Number(number[2]);
+  if (seal === 'sum') return { text: a + ' + ' + b + ' + ' + c, total: a + b + c };
+  if (seal === 'first') return { text: a + ' times ' + b + ' plus ' + c, total: a * b + c };
+  if (seal === 'last') return { text: b + ' times ' + c + ' plus ' + a, total: b * c + a };
+  throw new Error('Unknown catalogue seal: ' + seal);
+}
+
+function checkDigit(number, seal = 'sum') {
+  return sealMath(number, seal).total % 10;
 }
 
 function forgedPlan(env) {
+  const seal = env.pick(['sum', 'first', 'last']);
   for (let attempt = 0; attempt < 40; attempt++) {
     const numbers = [];
     while (numbers.length < 5) {
       const head = String(env.int(100, 999));
-      const number = head + checkDigit(head);
+      const number = head + checkDigit(head, seal);
       if (!numbers.includes(number)) numbers.push(number);
     }
     const odd = env.int(0, 4);
-    const digit = checkDigit(numbers[odd]);
+    const digit = checkDigit(numbers[odd], seal);
     const wrong = (digit + env.int(1, 9)) % 10;
     const forged = numbers[odd].slice(0, 3) + wrong;
     if (numbers.includes(forged)) continue;
     numbers[odd] = forged;
-    return { kind: 'forged', numbers, odd, digit };
+    return { kind: 'forged', seal, numbers, odd, digit };
   }
-  return { kind: 'forged', numbers: ['1012', '2035', '3107', '4116', '5207'], odd: 2, digit: checkDigit('310') };
+  const heads = ['101', '203', '310', '411', '520'];
+  const numbers = heads.map((head) => head + checkDigit(head, seal));
+  const odd = 2;
+  const digit = checkDigit(heads[odd], seal);
+  numbers[odd] = heads[odd] + ((digit + 1) % 10);
+  return { kind: 'forged', seal, numbers, odd, digit };
 }
 
 function carriedForged(env) {
   const p = env.card && env.card.of;
   if (!p || p.kind !== 'forged') return null;
+  const seal = p.seal === undefined ? 'sum' : p.seal;
+  if (!Object.prototype.hasOwnProperty.call(SEALS, seal)) return null;
   if (!Array.isArray(p.numbers) || p.numbers.length !== 5 || !p.numbers.every((n) => typeof n === 'string' && /^[1-9]\d{3}$/.test(n))) return null;
   if (new Set(p.numbers).size !== 5 || !Number.isInteger(p.odd) || p.odd < 0 || p.odd > 4) return null;
-  const broken = p.numbers.map((n, i) => (Number(n[3]) !== checkDigit(n) ? i : -1)).filter((i) => i >= 0);
-  if (broken.length !== 1 || broken[0] !== p.odd || p.digit !== checkDigit(p.numbers[p.odd])) return null;
-  return { kind: 'forged', numbers: p.numbers.slice(), odd: p.odd, digit: p.digit };
+  const broken = p.numbers.map((n, i) => (Number(n[3]) !== checkDigit(n, seal) ? i : -1)).filter((i) => i >= 0);
+  if (broken.length !== 1 || broken[0] !== p.odd || p.digit !== checkDigit(p.numbers[p.odd], seal)) return null;
+  return { kind: 'forged', seal, numbers: p.numbers.slice(), odd: p.odd, digit: p.digit };
 }
 
 function forgedTitle(plan) {
-  return 'the forged number: five cards, one wrong';
+  return SEALS[plan.seal].title;
 }
 
 function drawFan(g, w, h, env, plan, s, look, variant) {
@@ -1262,10 +1289,12 @@ function drawFan(g, w, h, env, plan, s, look, variant) {
   const m = Math.min(10, sw * 0.06);
   const room = sw - m * 2 - 4;
   const { f, lines } = linesFor(plan, w, h, () => {
+    const example = sealMath('263', plan.seal);
+    const last = example.total % 10;
     const at = (px, worked) => {
       const out = [{ text: 'the rule of the desk', kind: 'head' }];
-      wrap(g, 'a true number ends in the last digit of the sum of its first three digits', px, room, 1).forEach((l) => out.push({ text: l, kind: 'rule' }));
-      if (worked) wrap(g, 'so 4172 is true: 4 + 1 + 7 = 12, and it ends in 2. one card on the desk is forged', px, room, 1).forEach((l) => out.push({ text: l, kind: 'worked' }));
+      wrap(g, SEALS[plan.seal].rule, px, room, 1).forEach((l) => out.push({ text: l, kind: 'rule' }));
+      if (worked) wrap(g, '263' + last + ' is true: ' + example.text + ' = ' + example.total + '; use ' + last + '. One card on the desk is forged', px, room, 1).forEach((l) => out.push({ text: l, kind: 'worked' }));
       return { f: px, lines: out, fits: out.length * px * 1.5 <= sh };
     };
     for (let px = Math.round(rs); px >= 9; px--) {
@@ -1317,7 +1346,7 @@ function forgedPiece(env, plan) {
   }
   return {
     title: forgedTitle(plan),
-    brief: 'The seal is a sum. Five catalogue cards lie on the desk, each with a four-figure number, and the slip under them gives the rule a true number keeps: it ends in the last digit of the sum of its first three. Four of the cards keep it. One was written by someone who did not know the rule. Tap a card to inspect its addition.',
+    brief: 'Five catalogue cards lie on the desk, each with a four-digit number. ' + SEALS[plan.seal].rule + ' Four cards keep the seal; one does not. Tap a card to lay out its arithmetic without doing the calculation.',
     goal: 'Find the forged card, and say which digit it should end in.',
     aspect: '4 / 3',
     checkLabel: 'check the cards',
@@ -1331,9 +1360,10 @@ function forgedPiece(env, plan) {
       const picked = Array.isArray(c.value('pick')) ? c.value('pick').map(Number) : [];
       const cardRight = picked.length === 1 && picked[0] === plan.odd;
       const digitRight = Number(c.value('digit')) === plan.digit;
-      if (cardRight && digitRight) return { solved: true, say: 'APC-' + plan.numbers[plan.odd] + ' is the forgery; it should end in ' + plan.digit };
-      if (cardRight) return { solved: false, say: 'the card is right; the digit is off' };
-      return { solved: false, say: picked.length === 1 ? 'APC-' + plan.numbers[picked[0]] + ' keeps the rule' : 'pick one card' };
+      const matched = Number(cardRight) + Number(digitRight);
+      return { solved: matched === 2, say: matched === 2
+        ? 'APC-' + plan.numbers[plan.odd] + ' is the forgery; it should end in ' + plan.digit
+        : matched + ' of two parts of your filing match; compare the card and its replacement digit with the seal' };
     },
     start(c) {
       c.status('five numbers, one rule, one forgery');
@@ -1376,7 +1406,8 @@ function forgedPiece(env, plan) {
           s.vouchAt.push(s.t);
           busy(s, c, SPAN);
           c.hint();
-          c.status('APC-' + plan.numbers[next] + ' keeps the rule: ' + plan.numbers[next].slice(0, 3).split('').join(' + ') + ' ends in ' + plan.numbers[next][3]);
+          const math = sealMath(plan.numbers[next], plan.seal);
+          c.status('APC-' + plan.numbers[next] + ' keeps the seal: ' + math.text + ' = ' + math.total + '; its last digit is ' + plan.numbers[next][3]);
         }
       }
       draw(c);
@@ -1406,8 +1437,8 @@ function forgedPiece(env, plan) {
         return;
       }
       const number = plan.numbers[nearest];
-      const sum = Number(number[0]) + Number(number[1]) + Number(number[2]);
-      c.status('card ' + (nearest + 1) + ', APC-' + number + ': ' + number.slice(0, 3).split('').join(' + ') + ' = ' + sum + '; compare the last digit of the sum with the card');
+      const math = sealMath(number, plan.seal);
+      c.status('card ' + (nearest + 1) + ', APC-' + number + ': work out ' + math.text + '; compare the last digit of your result with ' + number[3] + ' on the card');
     },
     end(c) {
       s.reveal = true;
@@ -1460,7 +1491,7 @@ export default {
       return {
         overline: 'APC-' + plan.numbers[0] + ' and four more',
         title: forgedTitle(plan),
-        text: 'Five catalogue numbers, sealed by one rule. One card was written by someone who did not know it. Find it, and say the digit it should end in.',
+        text: 'Five catalogue numbers. ' + SEALS[plan.seal].rule + ' Find the forged card and repair its last digit.',
         aspect: '4 / 3',
         paint: (g, w, h, cardEnv) => forgedPreview(g, w, h, cardEnv, plan),
         of: plan
