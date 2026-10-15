@@ -21,4 +21,13 @@ locals {
   # makeitmoreinteresting.com keeps the same measurement ID and only needs the stream's URL updated
   # by hand in the GA4 console.
   ga_measurement_id = "G-P7PXJQT2Z4"
+
+  # The Clickadu zones the site's worlds serve ads from (issue #110), one for each of the only two
+  # formats the site serves: the address the zone's code loads, which is the src of the <script>
+  # Clickadu's "get code" gives for it, with the zone's ID in it. Not a credential, for the same
+  # reason the measurement ID is not, and delivered the same way, so the repository's own files
+  # carry no publisher identifier. Empty until the zone is created in Clickadu's dashboard: an empty
+  # zone sets no secret (github.tf), and the deploy publishes the site without that format.
+  clickadu_banner_src       = ""
+  clickadu_in_page_push_src = ""
 }
