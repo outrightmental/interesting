@@ -2209,9 +2209,9 @@ const KNOBS = {
       byButton.set(button, v);
       button.addEventListener('click', (ev) => pressed(v, ev));
       li.addEventListener('pointerdown', (ev) => down(v, ev));
-      li.addEventListener('pointermove', (ev) => moved(v, ev));
-      li.addEventListener('pointerup', (ev) => up(v, ev));
-      li.addEventListener('pointercancel', () => cancel(v));
+      li.addEventListener('pointermove', moved);
+      li.addEventListener('pointerup', up);
+      li.addEventListener('pointercancel', cancel);
     });
     // Where every row stands on the screen, translated or not, by its value.
     function tops() {
@@ -2391,10 +2391,11 @@ const KNOBS = {
     }
     // Pressed: a drag in waiting, until the pointer has travelled far enough to mean one. A finger
     // on the words is a tap, or the page being scrolled past the list, so under a finger only the
-    // grip drags and the rest of the row is left to the browser. A press that never travelled far
-    // enough to be a drag is not followed past its row, so one let go of off the row it began on
-    // leaves no pointerup behind to end it: the next press takes its place rather than finding the
-    // list still waiting on it, and never sorting again.
+    // grip drags and the rest of the row is left to the browser. Until it is a drag nothing holds
+    // the pointer, so it is followed over whichever row it is on -- a quick flick is already over
+    // the next row by its first move, and is a drag all the same -- but not off the list, so one
+    // let go of outside it leaves no pointerup behind to end it: the next press takes its place
+    // rather than finding the list still waiting on it, and never sorting again.
     function down(v, ev) {
       swallow = false;
       const r = rows.get(v);
@@ -2404,8 +2405,8 @@ const KNOBS = {
       if (ev.pointerType === 'touch' && !onGrip(ev.target, r)) return;
       drag = { value: v, id: ev.pointerId, y: Number(ev.clientY) || 0, live: false };
     }
-    function moved(v, ev) {
-      if (!drag || drag.value !== v || ev.pointerId !== drag.id) return;
+    function moved(ev) {
+      if (!drag || ev.pointerId !== drag.id) return;
       const dy = (Number(ev.clientY) || 0) - drag.y;
       if (!drag.live) {
         if (Math.abs(dy) < 4) return;
@@ -2491,13 +2492,13 @@ const KNOBS = {
       give();
       tell(labelOf(value) + ' put down in ' + where(value));
     }
-    function up(v, ev) {
-      if (!drag || drag.value !== v || ev.pointerId !== drag.id) return;
+    function up(ev) {
+      if (!drag || ev.pointerId !== drag.id) return;
       if (drag.live) settle(true);
       else drag = null; // a press that never travelled: the click that follows is a tap
     }
-    function cancel(v) {
-      if (!drag || drag.value !== v) return;
+    function cancel(ev) {
+      if (!drag || ev.pointerId !== drag.id) return;
       if (drag.live) settle(false);
       else drag = null;
     }

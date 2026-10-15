@@ -1366,13 +1366,14 @@ async function orderSorted(stageDir, worlds, deal, clock) {
   layOut();
   fire(lis()[n - 1], 'pointerdown', press({ clientY: 100 + ROW_PITCH * (n - 1) + 2 }));
   fire(lis()[n - 1], 'pointermove', press({ clientY: 100 + ROW_PITCH * (n - 1) }));
-  // A mouse drag: the top row, nudged under the threshold, then two rows down, and let go -- and
-  // the click a browser sends after it.
+  // A mouse drag: the top row, nudged under the threshold, then flicked two rows down in one move
+  // -- which, with nothing holding the pointer until it is a drag, a browser hands to the row it is
+  // now over -- and let go, and the click a browser sends after it.
   let li = lis()[0];
   fire(li, 'pointerdown', press({ clientY: 122 }));
   fire(li, 'pointermove', press({ clientY: 124 }));
   seen.nudged = read();
-  fire(li, 'pointermove', press({ clientY: 122 + ROW_PITCH * 2 }));
+  fire(lis()[Math.min(2, n - 1)], 'pointermove', press({ clientY: 122 + ROW_PITCH * 2 }));
   seen.dragging = read();
   fire(li, 'pointerup', press({ clientY: 122 + ROW_PITCH * 2 }));
   fire(li.querySelector('.knob-order-row'), 'click', { detail: 1 });
