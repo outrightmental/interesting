@@ -1847,7 +1847,7 @@ invariant of the iteration, stated in the prompt and held to in code.
   scenario steps by hand so a 1.8-second hold costs nothing, a canvas that records nothing, and a
   feed that deals the worlds it is told to. It plays every piece the way a visitor who knows the
   answer would — the helpers worked, the answers set to the module's own solution, read by asking
-  the module for the very piece the stage opened — and presses the check. Eleven scenarios: a world
+  the module for the very piece the stage opened — and presses the check. Twelve scenarios: a world
   played, another played, and the first dealt again, each round solving, sitting out six seconds
   of its own clock to prove the stage does not see itself out, and then opening the next when the
   way on is pressed; every answer set wrong and checked, which must be refused, counted, said on
@@ -1866,11 +1866,16 @@ invariant of the iteration, stated in the prompt and held to in code.
   the persona's difficulty slider, which the stage must ask the persona for in the rail's own
   host, only until a level is picked (issue #100), and which, moved, must deal the same world and
   the same seed again as the piece the module makes at the new setting, still playable to a solve
-  (issue #93); and a piece answered wrong and then left by the way on, which must open the next
+  (issue #93); a piece answered wrong and then left by the way on, which must open the next
   card and be reported once as an incomplete attempt — no ceremony, nothing on the tally, the
   address replaced — with a second press over the same leaving taking no second card, and a press
   over a world with nothing to play or a module still loading opening the next card all the same
-  (issue #109). What the persona draws in that host — the slider for a new visitor, the footnote
+  (issue #109); and an order sorted every way a visitor sorts one — tapped, carried by the
+  keyboard and put back with Escape, dragged by a mouse and by a finger on its handle, a finger on
+  its words that must move nothing, and drags the browser takes back or Escape puts back — which
+  must have no control beside its rows, and must give the piece the order the rows show at every
+  put-down and every step the keyboard carries a row, and at nothing else (issue #104). What the
+  persona draws in that host — the slider for a new visitor, the footnote
   once a level is picked, by pointer, by keys, in the sheet or at the middle of the dial outright —
   is played by [`.github/scripts/lightbox_harness.mjs`](.github/scripts/lightbox_harness.mjs),
   the one stub browser that runs the real `js/persona.js`.
@@ -1878,7 +1883,7 @@ invariant of the iteration, stated in the prompt and held to in code.
   like the piece harness it is outside `/site`, so a run cannot soften it. Deliberately, it holds
   the site as committed rather than refusing a plan: it drives the stage through the stage's own
   elements, and those are a run's to rewrite, so gating plans on it would pin markup the silo leaves
-  open. The prompt says so, and says to keep all twelve true when rewriting the stage.
+  open. The prompt says so, and says to keep all thirteen true when rewriting the stage.
 - **Held to in code.** `check_completion` in
   [`.github/scripts/make_interesting.py`](.github/scripts/make_interesting.py) reads the one list
   of worlds off the built home page (the `#site-worlds` JSON the layout writes from
@@ -1908,7 +1913,7 @@ invariant of the iteration, stated in the prompt and held to in code.
   on the committed site rather than on a plan, for the reason given above.
 - **True of the site as committed**: `RealSiteTest` builds `/site` and plays every world's piece
   through the law on every pull request and before every deploy, plays the stage itself through the
-  eleven scenarios above, checks that every world page is the stage and that the threshold hosts the
+  twelve scenarios above, checks that every world page is the stage and that the threshold hosts the
   question on it, checks that every world's module reads `env.difficulty` inside its pieces, and
   checks that the limits the prompt states are the harness's own.
 
