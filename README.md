@@ -1277,8 +1277,9 @@ place by the same machinery.
   world, the high-traffic content pages behind the threshold — carries ads; the threshold
   (`index.html`) is the landing page and carries none, and neither do the mood atlas, the site map,
   the fine print or the error page. The site has no accounts. What comes nearest — the persona
-  sheet, the state menu and the cookie dialog — opens as a modal dialog, which the browser draws in
-  its top layer, above anything an ad floats, and the slot is never put inside one.
+  sheet and the state menu — opens as a modal dialog, which the browser draws in its top layer,
+  above anything an ad floats, and the cookie dialog is drawn at the highest z-index a page has.
+  The slot is never put inside any of them.
 - **Asked for, under its own category.** The banner offers *advertising* beside *analytics*, each
   declinable on its own, and its words only ever describe what that copy of the site serves: a
   deploy with no ad zone has no *advertising* category and says nothing about ads, as one with no
