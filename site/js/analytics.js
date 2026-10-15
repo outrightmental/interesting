@@ -107,6 +107,23 @@
     if (tagLoaded) gtag('consent', 'update', { analytics_storage: 'denied' });
   }
 
+  /* A puzzle left unsolved: the stage's way on pressed before the piece was solved (js/stage.js,
+     'stage:incomplete', issue #109). It is counted as an incomplete attempt -- which world, which
+     seed, how many checks and hints it had, whether it was touched at all -- and never as a
+     finished piece, which the stage does not report here. Only once the tag is on and while
+     measurement is: nothing is queued for a visitor who has not accepted, or who has withdrawn. */
+  function countIncomplete(ev) {
+    if (!tagLoaded || window['ga-disable-' + MEASUREMENT_ID]) return;
+    var d = (ev && ev.detail) || {};
+    gtag('event', 'puzzle_incomplete', {
+      world: String(d.file || '').replace(/\.html$/, ''),
+      seed: Number(d.seed) || 0,
+      tries: Number(d.tries) || 0,
+      hints: Number(d.hints) || 0,
+      touched: d.touched ? 1 : 0
+    });
+  }
+
   /* A small, quiet way back to the choice: withdrawing consent has to be as easy as giving it, and
      the banner is gone once answered. The styles live here rather than in a page, because every
      page of this site may be rewritten by an AI run. */
@@ -221,6 +238,7 @@
     addPreferencesButton(cc);
   }
 
+  window.addEventListener('stage:incomplete', countIncomplete);
   loadStylesheet(base + CONSENT_STYLE);
   loadScript(base + CONSENT_SCRIPT, run);
 })();

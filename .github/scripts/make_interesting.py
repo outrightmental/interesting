@@ -85,9 +85,10 @@ Ten axioms stand over every run, each stated in the prompt and held to in code:
     wrong answer has to fail, and a plan that leaves a world without a module,
     without a piece, or with one that is not such a puzzle is refused.
     A piece being Done is not a piece Ending, though: it stays playable, with the
-    done mark clear of its picture, until the visitor presses the way on. That
-    half is stated in the prompt and held on the committed site by the stage
-    harness, not by a check that refuses a plan.
+    done mark clear of its picture, until the visitor presses the way on -- which
+    they may press before it is Done, too, leaving it unsolved. That half is
+    stated in the prompt and held on the committed site by the stage harness,
+    not by a check that refuses a plan.
   - Nothing on the site moves along a standard curve. Every transition and every
     animation -- a fade, a slide, a wipe, a colour shifting, a ring opening, a
     page scrolling -- is one clean edge (a slice or a curve, chosen for a reason)
@@ -3109,7 +3110,10 @@ def build_prompt(shown, omitted=(), run=None, budget=None, feedback=""):
         "right of the screen, dim for the whole piece -- and waits: the stage never moves on by "
         "itself, and that press is what vanishes the whole piece and opens the next card in the "
         "feed in its place, so one puzzle follows another without end and no two are quite the "
-        "same; the river of cards is the river of pieces. Not solved writes `say` on the live "
+        "same; the river of cards is the river of pieces. The way on is never disabled: dim is not "
+        "off, and a visitor may press it over a piece they have not solved, which opens the next "
+        "card just the same and is reported as an incomplete attempt (the stage:incomplete event) "
+        "-- never as a finish, never on the tally of solves. Not solved writes `say` on the live "
         "line, counts the try, and changes nothing else, so the visitor can think again. And a "
         "piece of content does not End just because it is Done -- this one holds "
         "site-wide, and the stage is where it is read off. Finishing is a report, not a closing "
@@ -3239,7 +3243,9 @@ def build_prompt(shown, omitted=(), run=None, budget=None, feedback=""):
         "stands counts as set and the check is offered, a knob nobody set is named rather than "
         "silently holding the check shut, a hold knob is set the moment its bar fills rather than "
         "when the visitor lets go, a solved piece stays on the stage with the way on lit and the "
-        "keyboard on it rather than showing itself out, a solved piece is still fully playable "
+        "keyboard on it rather than showing itself out, the way on can be pressed over a piece "
+        "nobody solved and opens the next card as an incomplete attempt rather than a finish, "
+        "one card for one press, a solved piece is still fully playable "
         "(its frames coming back when it is worked again, its knobs still settable, a tap still "
         "reaching it, the done "
         "mark clear of its scene, and the ceremony played once through all of it), a piece that "
@@ -3249,7 +3255,7 @@ def build_prompt(shown, omitted=(), run=None, budget=None, feedback=""):
         "line, and the persona's difficulty slider stands beside the piece and deals it again at "
         "the setting it is moved to. That one is checked on the site as committed rather than on a "
         "plan, because it reads the stage's own elements and those are yours to rewrite -- so if "
-        "you rewrite the stage, keep all eleven true.\n"
+        "you rewrite the stage, keep all twelve true.\n"
         "- Leave the site working at the end of the run. If you extract something into a shared "
         "file, or merge or delete a page, update every page that refers to it in the same run: "
         "never leave a link, a stylesheet, a script, a layout or an @use pointing at something "
@@ -3768,11 +3774,12 @@ FRAMEWORK_PINS = (
     "is-locked, \"function rejectTap(\" with the .stage-reject mark it appends to ui.scene and the "
     "is-still it writes on it for calm.matches, the .stage-dot progress, "
     "the modes done, vanishing, loading, arriving and live, "
-    "the stage:complete event, the way on disabled until 1.2s after a finish and then focused, "
+    "the stage:complete and stage:incomplete events, the way on never disabled but dim until "
+    "1.2s after a finish and then lit (data-lit) and focused, "
     f"and nothing moving on by itself (\"{STAGE_HARNESS_REL}\" plays all of that against a stub "
     "with no document.body or document.querySelector). "
     f"In \"{STAGE_INCLUDE}\": id='stage-next' as a <button type='button' class='stage-next' "
-    "with disabled and aria-label= and never the text Next, outside #stage-inner; id='stage-head'; "
+    "with aria-label= and never disabled and never the text Next, outside #stage-inner; id='stage-head'; "
     "id='stage-goal' with id='stage-goal-text' in the head; id='stage-check' as a disabled "
     "<button type='button' in the rail with id='stage-tries' beside it; "
     "data-stage-world on every world page; data-threshold='true' and id='persona-probe' on "
@@ -3784,7 +3791,9 @@ FRAMEWORK_PINS = (
     "the tests hold the recolouring to, and the rite block (from the rite:begin comment to "
     "rite:end) kept word for word the same as the copy in the piece harness. "
     f"In \"{SASS_DIR}/_stage.scss\": \".stage-next {{\" with position: fixed, right: "
-    "var(--nav-inset) and bottom: var(--nav-inset); \".stage-reject {{\" as a position: absolute "
+    "var(--nav-inset) and bottom: var(--nav-inset), lit by \".stage-next[data-lit] {\" and "
+    "\".stage-next[data-lit]:focus-visible {\" and never by .stage-next:disabled or "
+    ".stage-next:enabled; \".stage-reject {{\" as a position: absolute "
     "mark with pointer-events: none, held still under prefers-reduced-motion; the first-screen "
     "arithmetic the tests "
     "recompute from .stage, .stage-body, .stage-scene, .stage-side, main's padding and "

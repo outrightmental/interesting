@@ -80,7 +80,11 @@
       </div>
     </div>
   </div>
-  <button type='button' class='stage-next' id='stage-next' aria-label='the next piece' disabled>
+  {# The way on: the one mark that sends a piece away and opens the next card in its place. It is
+     never disabled (issue #109) -- a visitor can leave a puzzle unsolved -- but it is dim until a
+     piece is finished, when js/stage.js lights it (data-lit). The stage never moves on by itself:
+     the press of this is the only thing that does. #}
+  <button type='button' class='stage-next' id='stage-next' aria-label='the next piece'>
     <svg class='icon' viewBox='0 0 24 24' aria-hidden='true' focusable='false'><path d='M6.41 6L5 7.41 9.58 12 5 16.59 6.41 18l6-6zm6.59 0l-1.41 1.41L16.17 12l-4.58 4.59L13 18l6-6z'/></svg>
   </button>
 </main>
