@@ -264,13 +264,19 @@
   The difficulty: one setting, every puzzle on the site
 
   env.difficulty is how hard the visitor asked for their puzzles -- { level, of, name, says, set },
-  where level is 1 (gentle) to 5 (fierce) and the middle of the dial stands until a visitor moves
-  it. The persona keeps it (js/persona.js, under `difficulty` in the local-state document), the
-  persona sheet names it as plainly as the constellation, and the same slider stands on the stage
-  beside the piece, because a setting is settable wherever it is a dependency (issue #93). Moving
-  it deals this piece again at the same seed with the same card, so the subject a visitor pressed
-  stays the subject and only how hard it is asked moves. Nothing is powered down over it: unlike
-  the sky it always holds a value.
+  where level is 1 (gentle) to 5 (fierce) and the middle of the dial stands until a visitor picks
+  one. The persona keeps it (js/persona.js, under `difficulty` in the local-state document), and
+  the persona sheet names it as plainly as the constellation and keeps its slider for good: that
+  is where a visitor changes it. The stage offers the same slider beside the piece only while set
+  is false -- to a visitor who has never picked a level (issue #100; issue #93 put it there) --
+  and once one is picked, there or in the sheet, the slider goes at once and the stage shows one
+  footnote in its place, on this piece and every piece after it: what the puzzles are set at, and
+  a quiet button that opens the sheet at the difficulty. The persona draws both (its tuner's
+  `once`); the stage only asks for them. A browser that keeps nothing between visits keeps the
+  pick for the page, so a later visit is offered the slider again. Changing the setting, wherever
+  it is changed, deals this piece again at the same seed with the same card, so the subject a
+  visitor pressed stays the subject and only how hard it is asked moves. Nothing is powered down
+  over it: unlike the sky it always holds a value.
 
   What a level changes is the same thing in every world, so a visitor learns the dial once:
 
@@ -3173,20 +3179,27 @@ function start() {
   window.setTimeout(() => {
     for (const w of WORLDS) loadModule(w.id);
   }, 1500);
-  /* Settable where it is a dependency (issue #93): every piece this stage deals is made at the
-     persona's difficulty, so the one slider that sets it stands beside the piece as well as in the
-     sheet. A piece is never powered down over it: the setting always holds a value, and the
-     alternative would be every puzzle on the site dimmed behind a slider nobody had been asked to
-     touch yet. */
+  /* Offered where it is a dependency, until it is picked (issues #93 and #100): every piece this
+     stage deals is made at the persona's difficulty, so a visitor who has never picked a level
+     finds the one slider that sets it beside the piece. Once they pick one -- here or in the sheet
+     -- it is not a slider on the stage any more, only a footnote, on every piece from then on; the
+     sheet is where it changes after that. The persona draws the slider and the footnote and swaps
+     one for the other (`once`), so the stage asks once and needs nothing more. A piece is never
+     powered down over it: the setting always holds a value, and the alternative would be every
+     puzzle on the site dimmed behind a slider nobody had been asked to touch yet. */
   if (ui.tune && persona && typeof persona.tuner === 'function') {
-    persona.tuner(ui.tune, { note: 'Every piece on this site is dealt at this setting.' });
+    persona.tuner(ui.tune, {
+      once: true,
+      note: 'Every piece on this site is dealt at this setting. Pick one and your persona keeps it; change it there later.'
+    });
   }
   if (persona && typeof persona.onDifficulty === 'function') {
     // Deal this piece again whenever the setting changes -- the same seed and the same card, so
     // the subject the visitor pressed stays the subject and only how hard it is asked moves. The
     // re-deal hangs off the persona's own change rather than this slider's, so moving the setting
-    // in the persona sheet changes the piece on the stage just as moving the slider beside it
-    // does: one setting, every puzzle on the site, settable wherever it is met.
+    // in the persona sheet changes the piece on the stage just as a new visitor's first pick on
+    // the slider beside it does -- and the sheet is the only place it changes once the stage
+    // shows a footnote instead: one setting, every puzzle on the site.
     persona.onDifficulty(() => {
       if (!current) return;
       // The re-deal is a shuffle (README: "Motion axiom"): the rail that was leaves behind its

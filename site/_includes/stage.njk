@@ -63,15 +63,14 @@
             <div class='stage-progress' id='stage-progress'></div>
           </div>
         </div>
-        {# The nest: what a solved piece was one piece of, scale by scale out to the great work (README:
-           "Nesting axiom"). js/stage.js writes it on the solve from the piece's own seed and takes it
-           away with the piece. It is in the rail, under the seal, never over the scene, and it counts
-           nothing: the work it names is never finished. #}
-        <p class='stage-nest' id='stage-nest' aria-live='polite' hidden></p>
-        {# The difficulty every piece is dealt at, settable where it is a dependency (issue #93).
-           js/persona.js keeps the setting and renders the one slider into this host; js/stage.js
-           mounts it and deals this piece again whenever it moves, so the visitor does not have to
-           open the persona sheet to change their mind about the puzzle in front of them. #}
+        {# The difficulty every piece is dealt at, offered where it is a dependency until it is
+           picked (issues #93 and #100). A visitor who has never picked a level finds the one
+           slider here; once they pick one -- here or in the persona sheet -- the slider goes and
+           this host holds only a footnote saying what the puzzles are set at, on every piece from
+           then on, with a quiet button that opens the sheet, which is where the setting changes
+           after that. js/persona.js keeps the setting and renders the slider or the footnote into
+           this host (its tuner's `once`); js/stage.js asks for it and deals this piece again
+           whenever the setting changes. #}
         <div class='stage-difficulty' id='stage-difficulty'></div>
       </div>
     </div>
