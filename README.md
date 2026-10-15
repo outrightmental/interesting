@@ -1768,7 +1768,8 @@ invariant of the iteration, stated in the prompt and held to in code.
   put-down is said on a live line, every row is named by its place, the one focus ring stays on
   the row being carried, and for a visitor who asked for less motion the rows are simply in their
   new places. The knob's contract is unchanged — `ctx.value(id)` is the array of item values in
-  their current order, set at the first put-down, and `solution` gives the array that solves — so
+  their current order, set at the first move (a put-down, or a step the keyboard carries a row),
+  and `solution` gives the array that solves — so
   the light table's filter order and every other order on the site play exactly as they did. A
   list with an up and a down button beside each item, moving one thing along one place at a time,
   is the pattern this replaced, and it does not come back: the prompt says so, for the stage and
@@ -1847,7 +1848,7 @@ invariant of the iteration, stated in the prompt and held to in code.
   and put back with Escape, dragged by a mouse and by a finger on its handle, a finger on its words
   that must move nothing, and drags the browser takes back or Escape puts back — which must have no
   control beside its rows, and must give the piece the order the rows show at every put-down and
-  at nothing else (issue #104). What the persona draws in that host — the slider for a new visitor, the footnote
+  every step the keyboard carries a row, and at nothing else (issue #104). What the persona draws in that host — the slider for a new visitor, the footnote
   once a level is picked, by pointer, by keys, in the sheet or at the middle of the dial outright —
   is played by [`.github/scripts/lightbox_harness.mjs`](.github/scripts/lightbox_harness.mjs),
   the one stub browser that runs the real `js/persona.js`.
