@@ -35,7 +35,9 @@
                       Nothing moves on by itself any more (issue #78), so each round waits out
                       six seconds -- long past the linger the stage used to depart on -- to see
                       that the piece it solved is still there, and then presses the way on in
-                      the lower right, which is what opens the next.
+                      the lower right, which is what opens the next. The way on is read before
+                      the check too: dim over an unsolved piece, and pressable all the same
+                      (issue #109).
     wrongThenRight    The puzzle half. Open a piece, work its helpers, set every answer wrong and
                       press check: the stage must say so, count the try, leave every knob live and
                       the piece unfinished, and light nothing. Then set the answers right and
@@ -86,6 +88,15 @@
                       same card on a world with no module at all, which is where the stage used to
                       fall back on the world's one line, and then a piece opened with no card at
                       all, which the stage has to configure from the seed instead.
+    leftUnsolved      The way on pressed over a piece answered wrong and never solved (issue
+                      #109): the next card has to open, and the leaving has to be an incomplete
+                      attempt and not a finish -- reported once, with no ceremony, nothing on the
+                      tally of solves and the address replaced rather than pushed. Then the way on
+                      pressed twice over one leaving, which must take one card and not two, and
+                      pressed over a world with nothing to play and over a module still loading,
+                      each of which must open the next card from the stack. Last, the way on
+                      pressed over a piece whose answer is set and the check pressed as it leaves,
+                      which must not finish a piece that was left.
 
   Every scenario reports what it observed and makes no judgements: StageTest in
   test_make_interesting.py makes the assertions, as ParticipateButtonTest does for the button.
@@ -98,7 +109,7 @@ import { Worker, isMainThread, parentPort, workerData } from 'node:worker_thread
 import { wrongFor, difficultyAt, MIDDLE_DIFFICULTY } from './piece_harness.mjs';
 
 const SCENARIOS = ['rounds', 'wrongThenRight', 'afterDone', 'sliderUsed', 'sliderUntouched', 'holdFilled', 'teardown',
-                   'carried', 'pressAnswered', 'difficultyMoved'];
+                   'carried', 'pressAnswered', 'difficultyMoved', 'leftUnsolved'];
 const SCENARIO_TIMEOUT_MS = 20000;
 const MISSING_WORLD = 'stage-harness-nowhere.html'; // a world with no module: the teardown and the card
 const SEEDS = [4242, 101, 99991, 7]; // tried in turn until a piece with the knob wanted turns up
@@ -371,8 +382,10 @@ class Node {
   }
 }
 
-/* The stage as _includes/stage.njk writes it, with the globals js/stage.js reads. */
-function makePage(worlds, clock) {
+/* The stage as _includes/stage.njk writes it, with the globals js/stage.js reads. `options.store`
+   gives the page the local-state store as well, which is where the stage keeps its tally of
+   solves; without one, as on most of these pages, the stage keeps no tally at all. */
+function makePage(worlds, clock, options) {
   const html = new Node('html');
   html.setAttribute('data-root', '');
   const doc = {
@@ -436,8 +449,9 @@ function makePage(worlds, clock) {
   // it and only records how it was asked, because what is being read off here is what the stage
   // does when the setting moves; what the persona draws there is lightbox_harness.mjs's to play.
   make('div', 'stage-difficulty', side, 'stage-difficulty');
-  // The way on, outside the inner the vanish transforms, and dim until the stage lights it.
-  make('button', 'stage-next', stage, 'stage-next').disabled = true;
+  // The way on, outside the inner the vanish transforms: never disabled (issue #109), and dim until
+  // the stage lights it (data-lit).
+  make('button', 'stage-next', stage, 'stage-next');
 
   const events = [];
   const modes = [];
@@ -514,9 +528,26 @@ function makePage(worlds, clock) {
     }
   });
 
+  // The local-state store, holding only what the stage writes into it: read back as copies, the
+  // way the real store hands out what it keeps.
+  const kept = new Map();
+  if (options && options.store) {
+    win.interestingState = {
+      get: (key, fallback) => (kept.has(key) ? JSON.parse(kept.get(key)) : fallback),
+      set: (key, value) => {
+        kept.set(key, JSON.stringify(value));
+      }
+    };
+  }
+  // Every address the stage writes, and whether it pushed it or replaced the one before: the back
+  // button walks back through what was pushed, so a piece left unfinished must be replaced.
+  const addresses = [];
   globalThis.window = win;
   globalThis.document = doc;
-  globalThis.history = { pushState() {}, replaceState() {} };
+  globalThis.history = {
+    pushState: (state, title, url) => addresses.push({ how: 'push', url: String(url) }),
+    replaceState: (state, title, url) => addresses.push({ how: 'replace', url: String(url) })
+  };
   globalThis.location = { hash: '' };
   globalThis.performance = { now: () => clock.now };
   // Every animation frame the stage is given is counted, because a frame loop that is still
@@ -536,7 +567,8 @@ function makePage(worlds, clock) {
   };
 
   return { doc, win, stage, events, modes, frames: () => drawn.frames,
-           calm: (on) => { motion.calm = !!on; }, tuned };
+           calm: (on) => { motion.calm = !!on; }, tuned, addresses,
+           kept: (key) => (kept.has(key) ? JSON.parse(kept.get(key)) : null) };
 }
 
 /* ---- playing the stage --------------------------------------------------------------------- */
@@ -806,7 +838,9 @@ function look(page) {
     dots: by('stage-progress').querySelectorAll('.stage-dot').length,
     doneShown: !by('stage-done').hidden,
     doneOverScene: within(by('stage-done'), by('stage-scene')),
-    nextLit: !by('stage-next').disabled,
+    // The way on can be pressed whenever it is shown (issue #109); lit is how much it is asking to be.
+    nextLit: by('stage-next').dataset.lit !== undefined,
+    nextEnabled: !by('stage-next').disabled,
     focused: focusedId(),
     sceneLabel: by('stage-canvas').getAttribute('aria-label'),
     aspect: by('stage-scene').css.get('--piece-aspect') || ''
@@ -912,8 +946,8 @@ function wrongAnswers(answers) {
 
 /* ---- the scenarios ------------------------------------------------------------------------- */
 
-async function load(stageDir, worlds, clock) {
-  const page = makePage(worlds, clock);
+async function load(stageDir, worlds, clock, options) {
+  const page = makePage(worlds, clock, options);
   await import(pathToFileURL(path.join(stageDir, 'stage.js')).href);
   // The stage loads every module 1.5 seconds in, to learn which read the sky; let it.
   await clock.advance(2000);
@@ -923,9 +957,10 @@ async function load(stageDir, worlds, clock) {
 /* The way on, waited for and pressed -- which is the whole of how one piece is left for the next
    now (issue #78). The six seconds first: the stage used to depart on a linger of 1.2 of them, so a
    stage that moves on by itself is caught here rather than mistaken for a press that worked. Then
-   what the ceremony left behind is read off -- whether the mark lit, and what has the keyboard --
-   and the mark is pressed, the way a visitor presses it. Reports what it saw and judges none of it;
-   a mark that never lit is not pressed and says so. */
+   what the ceremony left behind is read off -- whether the mark lit, whether it can be pressed,
+   and what has the keyboard -- and the mark is pressed, the way a visitor presses it. Reports what
+   it saw and judges none of it; a mark that is disabled cannot be pressed by anyone, so it is not
+   pressed here either, and the report says so. */
 async function pressOnward(page, clock, was) {
   const api = page.win.interestingStage;
   const button = page.doc.getElementById('stage-next');
@@ -934,7 +969,8 @@ async function pressOnward(page, clock, was) {
     return !!(now && was && (now.file !== was.file || now.seed !== was.seed));
   };
   await clock.advance(6000);
-  const seen = { movedOnByItself: elsewhere(), lit: !button.disabled, focused: focusedId() };
+  const seen = { movedOnByItself: elsewhere(), lit: button.dataset.lit !== undefined, enabled: !button.disabled,
+                 focused: focusedId() };
   if (button.disabled) return Object.assign({ pressed: false, movedOn: seen.movedOnByItself }, seen);
   button.dispatchEvent({ type: 'click' });
   for (let i = 0; i < 100 && !elsewhere(); i++) await clock.advance(200);
@@ -981,8 +1017,11 @@ async function rounds(stageDir, worlds, deal, clock) {
       modes: page.modes.slice(),
       wantedWhilePlaying: finished.wanted,
       litWhilePlaying: finished.nextLit,
+      // Before the check, with the piece still unsolved: the way on can be pressed all the same.
+      enabledWhilePlaying: offered.nextEnabled,
       movedOnByItself: onward.movedOnByItself,
       litWhenFinished: onward.lit,
+      enabledWhenFinished: onward.enabled,
       focusedWhenFinished: onward.focused,
       pressed: onward.pressed,
       movedOn: onward.movedOn,
@@ -1432,6 +1471,129 @@ async function wrongThenRight(stageDir, worlds, deal, clock) {
   return out;
 }
 
+/* A piece left unsolved, and the way on pressed wherever else it is shown (issue #109). The mark is
+   never disabled now, so a visitor can walk away from a puzzle they would rather not finish -- and
+   walking away is an incomplete attempt, not a finish. So a piece is opened, answered wrong and
+   checked, and then the way on is pressed over it: the next card on the stack has to open, the
+   leaving has to be reported once ('stage:incomplete', with the try it had), and nothing of a finish
+   may happen -- no ceremony, no 'stage:complete', nothing added to the tally of solves the store
+   keeps, and the address replaced rather than pushed, so the back button does not walk back into
+   a piece that was passed over.
+
+   Then a double press: the way on pressed and pressed again while the first press's piece is still
+   leaving, which is one departure and must take one card off the stack, not two. Then the stage's
+   two states with no piece on them that the mark shows in: a world with nothing to play, and a
+   module still loading, which must never land over the card the press opened instead. Each press
+   reads off what the mark looked like as it was pressed. Reports what it saw; judges none of it. */
+async function leftUnsolved(stageDir, worlds, deal, clock) {
+  const nowhere = { file: MISSING_WORLD, name: 'nowhere', orientation: 'lost', mood: 'tender', what: 'No module lives here.' };
+  const page = await load(stageDir, worlds.concat([nowhere]), clock, { store: true });
+  // The stack: the deal, round and round, each card a seed of its own, so every card dealt is one
+  // the stage has not had on it yet and what is on the stage says which card it was.
+  const taken = [];
+  page.win.interestingFeed = {
+    take: () => {
+      const card = deal[taken.length % deal.length];
+      taken.push({ file: card.file, seed: card.seed + 31 * (taken.length + 1), kind: 'world' });
+      return taken[taken.length - 1];
+    },
+    consume() {}
+  };
+  const api = page.win.interestingStage;
+  const count = (type) => page.events.filter((e) => e.type === type).length;
+  const button = page.doc.getElementById('stage-next');
+  // The way on pressed as a visitor presses it -- `again` ms later a second time, if asked -- and
+  // the stage given the time to send away what was there and bring on what the stack dealt next.
+  const press = async (again) => {
+    const before = { opens: count('stage:open'), taken: taken.length, incomplete: count('stage:incomplete'),
+                     addresses: page.addresses.length };
+    const seen = { mode: page.stage.dataset.mode, lit: button.dataset.lit !== undefined, enabled: !button.disabled };
+    if (button.disabled) return Object.assign({ pressed: false }, seen);
+    button.dispatchEvent({ type: 'click' });
+    if (again !== undefined) {
+      await clock.advance(again);
+      seen.secondMode = page.stage.dataset.mode;
+      button.dispatchEvent({ type: 'click' });
+    }
+    for (let i = 0; i < 100 && count('stage:open') === before.opens; i++) await clock.advance(200);
+    await clock.advance(3000); // long enough for a second card to have opened, had one been taken
+    return Object.assign(seen, {
+      pressed: true,
+      opened: count('stage:open') - before.opens,
+      taken: taken.length - before.taken,
+      dealt: taken[taken.length - 1] || null,
+      now: api.current(),
+      incomplete: page.events.filter((e) => e.type === 'stage:incomplete').slice(before.incomplete).map((e) => e.detail),
+      addresses: page.addresses.slice(before.addresses).map((a) => a.how),
+      look: look(page)
+    });
+  };
+
+  api.open(deal[0].file, deal[0].seed, { arriving: true });
+  if (!(await waitForPiece(page, clock))) return { playable: false, world: '', seed: 0, look: look(page) };
+  const was = api.current();
+  // A visitor with solves behind them already, so a tally that moved is a number that changed.
+  page.win.interestingState.set('puzzles', { solved: 3, tries: 5, hints: 1 });
+  const out = { playable: true, world: was.file, seed: was.seed, opened: look(page) };
+  const answers = await answersFor(stageDir, worlds, was.file, was.seed, {});
+  out.unset = await playKnobs(page, clock, 'move', wrongAnswers(answers));
+  out.checked = (await pressCheck(page, clock)).pressed;
+  out.afterWrong = look(page);
+  page.events.length = 0;
+  out.left = await press();
+  out.completes = count('stage:complete');
+  out.tally = page.kept('puzzles');
+
+  // Pressed twice in a row over the piece the stack dealt next, the second while the first one's
+  // piece is still leaving.
+  page.events.length = 0;
+  out.twice = await press(200);
+
+  // A world with nothing to play: no piece, so nothing to leave unsolved, and the way on is what
+  // the stage offers.
+  api.open(MISSING_WORLD, 7, { push: false });
+  await clock.advance(1000);
+  page.events.length = 0;
+  out.empty = await press();
+
+  // A module still loading: open() is awaited by nobody here, which is what catches the stage in
+  // that state, and the press comes before the module has landed.
+  const late = { file: deal[0].file, seed: deal[0].seed + 977 };
+  page.events.length = 0;
+  api.open(late.file, late.seed, { arriving: true });
+  out.loading = Object.assign({ late }, await press());
+  out.loading.lateOpened = page.events.some((e) => e.type === 'stage:open' && e.detail && e.detail.seed === late.seed);
+
+  // The way on pressed over a piece with its right answer set and the check not yet pressed, and
+  // the check pressed while the piece is still leaving: it was left unsolved, and a piece on its
+  // way out is not finished by a press that lands on it as it goes. Then the way on pressed again
+  // while it is still leaving, which a finish would have answered as a press over a new piece.
+  await waitForPiece(page, clock);
+  const last = api.current();
+  if (last) {
+    await playKnobs(page, clock, 'move', await answersFor(stageDir, worlds, last.file, last.seed, {}));
+    page.events.length = 0;
+    const before = { opens: count('stage:open'), taken: taken.length };
+    const caught = { offered: look(page).checkEnabled };
+    button.dispatchEvent({ type: 'click' });
+    await clock.advance(100);
+    caught.modeAtCheck = page.stage.dataset.mode;
+    caught.checked = (await pressCheck(page, clock)).pressed;
+    caught.modeAtSecond = page.stage.dataset.mode;
+    button.dispatchEvent({ type: 'click' });
+    for (let i = 0; i < 100 && count('stage:open') === before.opens; i++) await clock.advance(200);
+    await clock.advance(3000);
+    out.checkedLeaving = Object.assign(caught, {
+      completes: count('stage:complete'),
+      incomplete: count('stage:incomplete'),
+      taken: taken.length - before.taken,
+      opened: count('stage:open') - before.opens,
+      tally: page.kept('puzzles')
+    });
+  }
+  return out;
+}
+
 /* The difficulty, offered where it is a dependency (issue #93). Every piece this stage deals is
    made at the persona's difficulty, so the stage asks the persona for the one slider in the host
    _includes/stage.njk leaves at the foot of the rail -- once, only until a level is picked (issue
@@ -1489,6 +1651,7 @@ async function runScenario(name, stageDir, worlds, deal) {
   if (name === 'carried') return carried(stageDir, worlds, deal, clock);
   if (name === 'pressAnswered') return pressAnswered(stageDir, worlds, deal, clock);
   if (name === 'difficultyMoved') return difficultyMoved(stageDir, worlds, deal, clock);
+  if (name === 'leftUnsolved') return leftUnsolved(stageDir, worlds, deal, clock);
   throw new Error('no scenario named ' + name);
 }
 
