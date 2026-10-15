@@ -1224,6 +1224,13 @@ new content for any page it is shown.
   category — the Google tag, which is not even fetched before then. Declining later switches
   measurement back off and lets the banner clear the cookies it set, and a small *cookies* button in
   the corner of every page reopens the choice.
+- **One event of the site's own: a puzzle left unsolved** (issue
+  [#109](https://github.com/outrightmental/interesting/issues/109)). When the stage's way on is
+  pressed over a piece nobody solved, [`site/js/stage.js`](site/js/stage.js) announces it
+  (`stage:incomplete`) and `analytics.js` sends it as a GA4 `puzzle_incomplete` event — the world,
+  the seed, how many checks and hints it had and whether it was touched at all — as an incomplete
+  attempt, never as a finished piece. It is sent only while the tag is loaded and measurement is
+  on, so nothing is queued before a visitor accepts or after they withdraw.
 - **No measurement ID in the repository.** `analytics.js` ships a placeholder, and
   [`deploy.yml`](.github/workflows/deploy.yml) pastes the `GA_MEASUREMENT_ID` repository secret into
   the copy on its way to the bucket. The placeholder switches the whole file off, so a fork, a local
@@ -1242,7 +1249,9 @@ new content for any page it is shown.
   55 KB of consent library cannot push a page of the site out of the prompt.
 - **True of the site as committed**, checked by `RealSiteTest` on every pull request and before every
   deploy: every page loads the script, the three files are there, no measurement ID is committed,
-  `deploy.yml` still replaces the placeholder, and the vendored library keeps its license and version.
+  `deploy.yml` still replaces the placeholder, the vendored library keeps its license and version,
+  and a puzzle left unsolved is counted as an incomplete attempt only between consent given and
+  consent withdrawn.
 
 ### Responsive and accessible axiom
 
@@ -1645,7 +1654,8 @@ lights up the way on — one mark, in the lower right of the screen — and ther
 playable: nothing moves on by itself, nothing goes inert (see
 [Continued-interaction axiom](#continued-interaction-axiom)), and the press of that mark is what
 vanishes the whole piece and opens the next card in the feed in its place, so one puzzle follows
-another without end and no two are quite the same. A "content page" does not discretely exist: it
+another without end and no two are quite the same. The mark can be pressed before the solve as
+well — dim, but never disabled — so a visitor is never held by a puzzle they would rather leave. A "content page" does not discretely exist: it
 exists as a procedural generation, and the feed that keeps dealing is the river of pieces coming
 up the pipe. Two families live inside that. A *deduction* puzzle puts everything on the screen and
 asks for an answer — a cipher to read, an order to find, a count to make, the odd one out. An
@@ -1686,7 +1696,19 @@ invariant of the iteration, stated in the prompt and held to in code.
   double caret, dim for the whole piece and lit the moment it is over — and the stage stops there.
   Pressing it is what scales the piece away and brings the next in from below, so a finished piece
   is the visitor's to sit with for as long as they like. It takes the keyboard as it lights, so
-  whoever finished the piece with a key can go on with one. And it never moves between pieces,
+  whoever finished the piece with a key can go on with one. Dim is not disabled (issue
+  [#109](https://github.com/outrightmental/interesting/issues/109), which reverted the mark being
+  unpressable until the solve): it can be pressed over a piece nobody solved, and whatever the stage
+  is doing — a piece unsolved, a module loading, a world with nothing to play — a press opens the
+  next card from the stack, one card for one press however many presses land while the last piece
+  is leaving. A piece left unsolved is an incomplete attempt and nothing more: it is replaced in the
+  history rather than kept, it is not added to the tally of solves, it plays no ceremony and sends
+  no `stage:complete`, and it is reported once as `stage:incomplete`, which the analytics count (see
+  [Analytics axiom](#analytics-axiom)). Lit and dim are the one flag the stage sets, `data-lit`, and
+  only lit is emphasis: the primary raised off the page, where dim is the dark plate it always was.
+  On the threshold at rest — waiting, or asking its question — the mark is not shown at all, so the
+  home page floats nothing but the logo and the persona, and *skip the question* is its way to the
+  first card. And it never moves between pieces,
   because it is pinned to the screen rather than laid out with the knobs, and written outside the
   box the vanish transforms — a transformed ancestor being what a fixed child would be positioned
   against. A *skip this one* button used to sit under the knobs; it is gone, the feed below being
@@ -1844,11 +1866,11 @@ invariant of the iteration, stated in the prompt and held to in code.
   the persona's difficulty slider, which the stage must ask the persona for in the rail's own
   host, only until a level is picked (issue #100), and which, moved, must deal the same world and
   the same seed again as the piece the module makes at the new setting, still playable to a solve
-  (issue #93); and an order sorted every way a visitor sorts one — tapped, carried by the keyboard
-  and put back with Escape, dragged by a mouse and by a finger on its handle, a finger on its words
-  that must move nothing, and drags the browser takes back or Escape puts back — which must have no
-  control beside its rows, and must give the piece the order the rows show at every put-down and
-  every step the keyboard carries a row, and at nothing else (issue #104). What the persona draws in that host — the slider for a new visitor, the footnote
+  (issue #93); and a piece answered wrong and then left by the way on, which must open the next
+  card and be reported once as an incomplete attempt — no ceremony, nothing on the tally, the
+  address replaced — with a second press over the same leaving taking no second card, and a press
+  over a world with nothing to play or a module still loading opening the next card all the same
+  (issue #109). What the persona draws in that host — the slider for a new visitor, the footnote
   once a level is picked, by pointer, by keys, in the sheet or at the middle of the dial outright —
   is played by [`.github/scripts/lightbox_harness.mjs`](.github/scripts/lightbox_harness.mjs),
   the one stub browser that runs the real `js/persona.js`.

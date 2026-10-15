@@ -12,11 +12,13 @@
   stage asks the piece whether that answer solves it, and only a solved answer finishes the piece.
   A wrong answer costs a try, says so, and leaves everything exactly as it was, so the visitor can
   think again. When the puzzle is solved it plays its ceremony -- and then it waits. The stage
-  never moves on by itself (issue #78): the ceremony ends by lighting the way on, one mark pinned
-  in the lower right of the screen for every piece, and the press of that is what vanishes the
-  piece and opens the next card in the feed's stack in its place. So one puzzle follows another
-  without end, and it is the visitor who says when. _includes/stage.njk writes the stage; this
-  file runs it; js/feed.js hands it the next card.
+  never moves on by itself (issue #78): the way on, one mark pinned in the lower right of the
+  screen for every piece, is what vanishes the piece and opens the next card in the feed's stack
+  in its place, and only its press does. It can be pressed at any time, solved or not (issue
+  #109) -- a visitor is never held by a puzzle they would rather leave -- but it is dim while the
+  puzzle is unsolved, and the ceremony ends by lighting it. So one puzzle follows another without
+  end, and it is the visitor who says when. _includes/stage.njk writes the stage; this file runs
+  it; js/feed.js hands it the next card.
 
   ---------------------------------------------------------------------------------------------
   The puzzle axiom: every piece is a legitimate puzzle
@@ -358,12 +360,13 @@
         .next()                      finish nothing, open the next card from the feed's stack
         .current()                   { file, seed } or null
       events on window: 'stage:open' { file, seed }, 'stage:complete' { file, seed },
-      'stage:home' (the threshold's own state, on going back)
+      'stage:incomplete' { file, seed, tries, hints, touched } (a piece left by the way on before
+      it was solved), 'stage:home' (the threshold's own state, on going back)
 
   The URL carries the piece: `world.html#<seed>` is this piece, shareable, and the back button
   walks back through the pieces a visitor finished (one left without finishing -- the way on
-  pressed over a piece that needed a sky, or over a world with nothing to play -- is replaced,
-  not kept).
+  pressed over a piece still unsolved, a piece that needed a sky, or a world with nothing to
+  play -- is replaced, not kept).
   Opening a card from another world moves the address to that world's page without a load: a
   page is wherever the stage is -- and so is the site's colour, which follows the piece on the
   stage for as long as it is there (see feature(), and the precedence in _sass/_mood.scss).
@@ -372,7 +375,9 @@
   persona, the next
   card through the feed, and the one thing written besides the address is the tally of solves --
   `puzzles` in the local-state document, through window.interestingState like everything else the
-  site keeps, so it exports with the rest.
+  site keeps, so it exports with the rest. A piece left unsolved is not a solve and is not
+  tallied: it is only announced ('stage:incomplete'), which js/analytics.js counts as an
+  incomplete attempt where a visitor has accepted analytics, and nothing here keeps it.
 */
 
 import { PLAIN, revive, recolor, aspect as framed, ratioOf, mulberry32, hash, mix, alpha, rite } from './variant.js';
@@ -1024,7 +1029,8 @@ const home = stage ? {
 
 let current = null; // the piece on stage, and everything the stage knows about it
 let lastWidth = 0; // the scene's width at the last reflow, so a resize that changes nothing is free
-let pending = null; // the token of the open() in flight, so a slow module cannot land late
+let pending = null; // the token of the open() in flight, or of the way on's departure (goOn), so a slow module cannot land late
+let departing = false; // the way on pressed, until something stands on the stage again (goOn)
 let frameHandle = 0;
 let lastFrame = 0;
 let firstPiece = null; // on a page of no world (the 404): the piece that opened on arrival
@@ -1058,6 +1064,9 @@ function stopRunning() {
 
 function setMode(mode) {
   stage.dataset.mode = mode;
+  // A press of the way on is answered once the stage stands again: the piece it sent away has left,
+  // and the card it opened has arrived or is whatever the stage could make of it.
+  if (mode !== 'vanishing' && mode !== 'loading' && mode !== 'arriving') departing = false;
   // A stage that is gone arrives whole in any mode that shows it (see isGone above).
   if (mode !== 'vanishing' && mode !== 'loading') arriveWhole();
 }
@@ -1143,9 +1152,9 @@ async function open(file, seed, options) {
 // open's own, so a later piece is never dimmed by a sky cleared after this one is gone.
 function gate(opened) {
   setMode('unpowered');
-  // Nothing to finish until there is a sky, so the way on is lit from the start: a visitor who
-  // does not want to seed one is never held here. The focus stays on the heading, which is where
-  // the piece would have put it.
+  // Nothing to finish until there is a sky, so the way on is lit from the start: for a visitor who
+  // does not want to seed one it is the whole of what this offers. The focus stays on the heading,
+  // which is where the piece would have put it.
   lightTheWayOn(false);
   const host = el('div', 'stage-gate');
   ui.body.insertBefore(host, ui.scene);
@@ -1361,6 +1370,7 @@ function begin(opened) {
     steps,
     state: new Map(steps.map((s) => [s.id, { step: s, set: false, value: undefined, knob: null }])),
     completed: false,
+    left: false, // the way on pressed over it: on its way out, and never finished after that
     touched: false,
     tries: 0, // checks pressed: a wrong answer costs one, and the solve is reported on one
     hints: 0, // hints the piece has given, through ctx.hint()
@@ -1427,10 +1437,11 @@ function begin(opened) {
   renderProgress();
   renderCheck();
   renderTries();
-  // Dim for the whole piece, lit only when it is finished (issue #78). begin() is reached both
-  // through open()/close(), which dims it, and straight from a gate's onReady once a sky is
-  // seeded, where it was lit so the visitor could pass the seeding by -- so the piece itself has
-  // to put it back to dim, or a sky-gated world would start live with the way on still lit.
+  // Dim for the whole piece, lit only when it is finished (issue #78) -- dim and never disabled,
+  // so a visitor can leave the piece unsolved whenever they like (issue #109). begin() is reached
+  // both through open()/close(), which dims it, and straight from a gate's onReady once a sky is
+  // seeded, where it was lit because there was nothing to finish -- so the piece itself has to
+  // put it back to dim, or a sky-gated world would start live with the way on still lit.
   dimTheWayOn();
   setMode(arriving ? 'arriving' : 'live');
   current.ctx = makeCtx(env);
@@ -2930,7 +2941,9 @@ if (ui) {
    piece's own apply(), which is where fidgeting with a finished toy belongs. */
 function finish(say) {
   const c = current;
-  if (!c || c.completed) return;
+  // A piece the way on was pressed over is leaving unfinished (issue #109): a check pressed while
+  // it vanishes does not turn that into a solve, a ceremony, a tally or a second way on.
+  if (!c || c.completed || c.left) return;
   c.completed = true;
   for (const s of c.state.values()) {
     if (!s.set) {
@@ -2989,33 +3002,61 @@ function finish(say) {
 
 /* ---- the way on ----------------------------------------------------------------------------- */
 
-// Lit: there is somewhere to go. `disabled` is the whole of the state -- the stylesheet dims it,
-// fills it and raises it off that one flag -- so there is nothing here to fall out of step with
-// what the visitor sees. A finished piece also hands it the keyboard, so the way on is one key
-// away from the knob that finished the piece; the stage's other lit moments (a piece waiting on a
-// sky, a world with nothing to play) leave the focus on the heading, where they already put it.
+// The way on is never disabled (issue #109): whatever is on the stage, a press of it opens the
+// next card. What it says is how much it is asking to be pressed. Lit, it is the one filled
+// control on the screen, raised off the page -- the piece is finished, or there is nothing here to
+// finish -- and dim, it is the dark plate, there for a visitor who would rather leave the puzzle
+// unsolved but not asking them to. `data-lit` is the whole of that -- the stylesheet dims it, fills
+// it and raises it off that one flag -- so there is nothing here to fall out of step with what the
+// visitor sees. A finished piece also hands it the keyboard, so the way on is one key away from
+// the knob that finished the piece; the stage's other lit moments (a piece waiting on a sky, a
+// world with nothing to play) leave the focus on the heading, where they already put it.
 function lightTheWayOn(focus) {
   if (!ui.onward) return;
-  ui.onward.disabled = false;
+  ui.onward.dataset.lit = '';
   if (focus) ui.onward.focus({ preventScroll: true });
 }
 
 // Dim again: the lamp steps back to the unlit plate along the stair, as it stepped up (the colour
-// transition every control carries), off the same one flag.
+// transition every control carries), off the same one flag. Dim is not disabled: it still goes on.
 function dimTheWayOn() {
   if (!ui.onward) return;
-  ui.onward.disabled = true;
+  delete ui.onward.dataset.lit;
 }
 
-// The way on, pressed: the piece leaves and the next card opens in its place -- exactly what the
-// timer in finish() used to do on the visitor's behalf. A piece nobody finished is replaced in
-// the history rather than kept, so the back button walks back through what was finished and not
-// what was passed over.
+// The way on, pressed: what is on the stage leaves and the next card opens in its place -- exactly
+// what the timer in finish() used to do on the visitor's behalf, and now whenever the visitor asks
+// for it: over a piece solved or unsolved, a piece waiting on a sky, a world with nothing to play,
+// or a module still loading, which is then never let land. One press is one piece: a press while
+// the last press's piece is still leaving, or the card it opened is still on its way in, is
+// answered by that card already on its way, and does not take a second from the stack behind it.
+//
+// A piece nobody finished is replaced in the history rather than kept, so the back button walks
+// back through what was finished and not what was passed over. One left unsolved is an incomplete
+// attempt, and it is reported as one ('stage:incomplete', which js/analytics.js counts) and as
+// nothing more: no ceremony, no 'stage:complete', and nothing added to the tally, which is a tally
+// of solves.
 function goOn() {
-  if (!ui.onward || ui.onward.disabled) return;
-  dimTheWayOn(); // one press is one piece: a second one cannot overtake the first
-  const finished = !!(current && current.completed);
-  const piece = current; // null where there was nothing to finish: a missing module, or a gate
+  if (!ui.onward || departing) return;
+  departing = true;
+  dimTheWayOn();
+  const piece = current; // null where there was nothing to finish: a module loading or missing, a gate
+  const finished = !!(piece && piece.completed);
+  if (piece) piece.left = true; // and so it stays as it was pressed: see finish()
+  if (piece && !finished) {
+    try {
+      window.dispatchEvent(new CustomEvent('stage:incomplete', {
+        detail: { file: piece.world.file, seed: piece.seed, tries: piece.tries, hints: piece.hints, touched: !!piece.touched }
+      }));
+    } catch (e) {
+      /* no event, no matter */
+    }
+  }
+  // The stage is waiting on this departure now, and on nothing else: a module still loading is
+  // never let land over it (open() checks the token), and anything opened while it leaves -- a card
+  // pressed in the feed, the threshold's question coming up -- takes the stage from it.
+  const turn = {};
+  pending = turn;
   // The leaving is cut for this one press: the whole inner goes behind one slice toward where the
   // roll sends departures, at a length of its own, and the stage stays gone until the next piece
   // arrives whole (isGone above). Less motion asked for: the next piece is simply there.
@@ -3029,7 +3070,7 @@ function goOn() {
   // has crossed it (whenEnded), however late a busy page started it -- or, with nothing cut (less
   // motion, no engine), after the stylesheet's own length (--motion-long, js/motion.js).
   const onward = () => {
-    if (current !== piece) return; // something else took the stage while this one was leaving
+    if (pending !== turn) return; // something else took the stage while this one was leaving
     next(finished ? {} : { replace: true });
   };
   if (calm.matches) later(onward, 120);
