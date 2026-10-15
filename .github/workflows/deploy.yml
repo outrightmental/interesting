@@ -5,8 +5,9 @@ name: Deploy site
 # blocks every deploy, and so does a failing build.
 #
 # https://makeitmoreinteresting.com/ is the site's only home — the bucket, the distribution and every
-# secret this workflow reads, the GA4 measurement ID included, are all defined in /infra. (GitHub
-# Pages used to publish /site in parallel; it is retired, and nothing here publishes to it.)
+# secret this workflow reads, the GA4 measurement ID and the Clickadu zones included, are all defined
+# in /infra. (GitHub Pages used to publish /site in parallel; it is retired, and nothing here
+# publishes to it.)
 on:
   push:
     branches: [main]
@@ -116,13 +117,15 @@ jobs:
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: us-east-1
 
-      # The one thing the published copy of /site does not carry in the repository. site/js/analytics.js
-      # ships a placeholder instead of the GA4 measurement ID, and the copy on its way to S3 gets
-      # the real one here. That is what lets a fork, a local copy or any checkout this step has not
-      # run over stay silent: the placeholder switches that file off, so no tag loads, no consent
-      # banner appears and no cookie is set. GA_MEASUREMENT_ID comes from the same
-      # `terraform apply` as the AWS secrets (infra/github.tf); until it is set, the site is
-      # published without analytics rather than not published at all.
+      # One of the two things the published copy of /site does not carry in the repository (the
+      # Clickadu zones, in the next step, are the other). site/js/analytics.js ships a placeholder
+      # instead of the GA4 measurement ID, and the copy on its way to S3 gets the real one here.
+      # That is what lets a fork, a local copy or any checkout this step has not run over stay
+      # silent: the placeholder switches the Google tag off, and with the Clickadu placeholders it
+      # switches that whole file off, so no tag loads, no consent banner appears and no cookie is
+      # set. GA_MEASUREMENT_ID comes from the same `terraform apply` as the AWS secrets
+      # (infra/github.tf); until it is set, the site is published without analytics rather than not
+      # published at all.
       #
       # The substitution is done on the built artifact, not on site/ in the checkout: the build runs
       # above and copies analytics.js through verbatim (placeholder and all), and it is that built
@@ -145,7 +148,8 @@ jobs:
             {
               echo "### Published without analytics"
               echo "The \`GA_MEASUREMENT_ID\` repository secret is not set, so \`site/js/analytics.js\`"
-              echo "keeps its placeholder and loads neither the Google tag nor the consent banner."
+              echo "keeps its placeholder and never loads the Google tag (nor the consent banner,"
+              echo "unless a Clickadu zone is set below)."
               echo "It is created by \`terraform apply\` in \`/infra\` (see \`infra/README.md\`)."
             } >> "$GITHUB_STEP_SUMMARY"
             exit 0
@@ -162,6 +166,63 @@ jobs:
             exit 1
           fi
           echo "Measurement ID injected into ${analytics}."
+
+      # The other thing the published copy does not carry: the Clickadu zones (issue #110), pasted
+      # into the same built copy of js/analytics.js. Each is the address of one zone's code -- the
+      # src of the <script> Clickadu's "get code" gives -- one zone for the banner and one for
+      # in-page push, the only two formats the site serves. analytics.js hands them to
+      # js/clickadu.js once a visitor accepts the advertising category of the consent banner, and
+      # that file only ever serves them on a world's page. Each zone is optional on its own: one
+      # that is not set keeps its placeholder, which switches that format off, and with neither set
+      # the site is published without ads and the banner does not mention them. The secrets come
+      # from the same `terraform apply` as the others, out of the zones written in infra/locals.tf.
+      - name: Inject the Clickadu zones
+        if: steps.secrets.outputs.ready == 'true'
+        env:
+          CLICKADU_BANNER_SRC: ${{ secrets.CLICKADU_BANNER_SRC }}
+          CLICKADU_IN_PAGE_PUSH_SRC: ${{ secrets.CLICKADU_IN_PAGE_PUSH_SRC }}
+          BUILD_DIR: ${{ steps.build.outputs.dir }}
+        run: |
+          set -euo pipefail
+          analytics="${BUILD_DIR}/js/analytics.js"
+          # Checked, not trusted: the value is pasted into a string in a script, so it has to be an
+          # address and nothing that could close that string or the substitution -- https or
+          # protocol-relative, no quotes, backslashes, spaces or "|". Matched by bash rather than
+          # grep, so a value with a newline in it cannot pass on the strength of one good line.
+          address='^(https:)?//[A-Za-z0-9.-]+/[A-Za-z0-9._~%/?=&+-]*$'
+          injected=""
+          for name in CLICKADU_BANNER_SRC CLICKADU_IN_PAGE_PUSH_SRC; do
+            placeholder="__${name}__"
+            value="${!name}"
+            if ! grep -q "$placeholder" "$analytics"; then
+              echo "::error::${analytics} has no ${placeholder} for the Clickadu zone to replace."
+              exit 1
+            fi
+            [ -n "$value" ] || continue
+            if ! [[ "$value" =~ $address ]]; then
+              echo "::error::${name} is not the address of a Clickadu zone's code (expected https://host/path)."
+              exit 1
+            fi
+            # "&" means the matched text to sed, so it is escaped; the address can hold no "|".
+            sed -i "s|${placeholder}|${value//&/\\&}|g" "$analytics"
+            if grep -q "$placeholder" "$analytics"; then
+              echo "::error::the placeholder for ${name} survived the substitution in ${analytics}."
+              exit 1
+            fi
+            injected="${injected} ${name}"
+          done
+          if [ -z "$injected" ]; then
+            echo "::notice::No Clickadu zone is set, so the site is published without ads."
+            {
+              echo "### Published without ads"
+              echo "Neither \`CLICKADU_BANNER_SRC\` nor \`CLICKADU_IN_PAGE_PUSH_SRC\` is set, so"
+              echo "\`site/js/analytics.js\` keeps both placeholders, never loads \`js/clickadu.js\`"
+              echo "and the consent banner does not mention advertising. They are created by"
+              echo "\`terraform apply\` in \`/infra\` once a zone is written in \`infra/locals.tf\`."
+            } >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          echo "Clickadu zones injected into ${analytics}:${injected}."
 
       # --delete keeps the bucket an exact mirror of the built site: a page the AI removed stops
       # being served. The built artifact is the whole of what is published, and nothing else is.

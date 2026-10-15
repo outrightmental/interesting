@@ -4384,6 +4384,92 @@ class AdvertisingTest(unittest.TestCase):
                 self.assertNotIn(f"{signal}: 'granted'", source)
 
 
+def deploy_step(name):
+    """The `run:` script of the step called `name` in deploy.yml, dedented, read as text so the
+    test needs no YAML parser."""
+    workflow = (Path(mi.__file__).resolve().parents[2] / ".github" / "workflows" / "deploy.yml").read_text()
+    start = workflow.index(f"- name: {name}\n")
+    step = workflow[start:]
+    body = step[step.index("run: |\n") + len("run: |\n"):]
+    lines = []
+    for line in body.split("\n"):
+        if line.strip() and not line.startswith(" " * 10):
+            break
+        lines.append(line)
+    return textwrap.dedent("\n".join(lines))
+
+
+class AdZoneInjectionTest(unittest.TestCase):
+    """deploy.yml's own step that writes the Clickadu zones into the built js/analytics.js (issue
+    #110), run with bash on a copy of the committed file. The value is pasted into a string in a
+    script, so what it refuses matters as much as what it writes."""
+
+    BANNER = "https://ads.example/b/1111111?x=1&y=2"
+    IN_PAGE_PUSH = "//ads.example/p/2222222"
+    PLACEHOLDERS = ["__CLICKADU_BANNER_SRC__", "__CLICKADU_IN_PAGE_PUSH_SRC__"]
+
+    def setUp(self):
+        if shutil.which("bash") is None:
+            self.skipTest("bash is not installed")
+        self.script = deploy_step("Inject the Clickadu zones")
+        work = tempfile.TemporaryDirectory()
+        self.addCleanup(work.cleanup)
+        self.build = Path(work.name)
+        (self.build / "js").mkdir()
+        self.analytics = self.build / mi.ANALYTICS_SCRIPT
+        self.committed = (Path(mi.__file__).resolve().parents[2] / "site" / mi.ANALYTICS_SCRIPT).read_text()
+        self.analytics.write_text(self.committed)
+        self.summary = self.build / "summary.md"
+
+    def inject(self, banner="", in_page_push=""):
+        env = dict(os.environ, BUILD_DIR=str(self.build), GITHUB_STEP_SUMMARY=str(self.summary),
+                   CLICKADU_BANNER_SRC=banner, CLICKADU_IN_PAGE_PUSH_SRC=in_page_push)
+        return subprocess.run(["bash", "-c", self.script], env=env, capture_output=True, text=True, timeout=60)
+
+    def test_both_zones_are_written_in_and_nothing_else_changes(self):
+        run = self.inject(self.BANNER, self.IN_PAGE_PUSH)
+        self.assertEqual(run.returncode, 0, run.stdout + run.stderr)
+        written = self.analytics.read_text()
+        self.assertIn(f"banner: '{self.BANNER}'", written, "an & in the address survives sed")
+        self.assertIn(f"inPagePush: '{self.IN_PAGE_PUSH}'", written)
+        for placeholder in self.PLACEHOLDERS:
+            self.assertNotIn(placeholder, written)
+        self.assertIn("__GA_MEASUREMENT_ID__", written, "the measurement ID is the other step's")
+        expected = self.committed.replace(self.PLACEHOLDERS[0], self.BANNER).replace(self.PLACEHOLDERS[1], self.IN_PAGE_PUSH)
+        self.assertEqual(written, expected)
+
+    def test_each_zone_is_optional_on_its_own(self):
+        run = self.inject(banner=self.BANNER)
+        self.assertEqual(run.returncode, 0, run.stdout + run.stderr)
+        written = self.analytics.read_text()
+        self.assertNotIn(self.PLACEHOLDERS[0], written)
+        self.assertIn(self.PLACEHOLDERS[1], written, "an unset zone keeps its placeholder")
+
+    def test_without_a_zone_the_site_is_published_without_ads(self):
+        run = self.inject()
+        self.assertEqual(run.returncode, 0, run.stdout + run.stderr)
+        self.assertEqual(self.analytics.read_text(), self.committed)
+        self.assertIn("Published without ads", self.summary.read_text())
+
+    def test_a_value_that_is_not_an_address_is_refused_and_nothing_is_written(self):
+        for value in ["https://ads.example/a';alert(1)//", "https://ads.example/a\nb",
+                      "http://ads.example/a", "javascript:alert(1)", "https://ads.example/a|b",
+                      "https://ads.example/a b", "https://ads.example/a\\b", "ads.example/a",
+                      "https://ads.example"]:
+            with self.subTest(value=value):
+                run = self.inject(banner=value)
+                self.assertNotEqual(run.returncode, 0)
+                self.assertIn("is not the address of a Clickadu zone's code", run.stdout)
+                self.assertEqual(self.analytics.read_text(), self.committed)
+
+    def test_a_built_file_without_the_placeholders_fails_the_deploy(self):
+        # A copy whose placeholders had gone would publish the site silently without ads.
+        self.analytics.write_text(self.committed.replace(self.PLACEHOLDERS[1], "nothing"))
+        run = self.inject(self.BANNER, self.IN_PAGE_PUSH)
+        self.assertNotEqual(run.returncode, 0)
+        self.assertIn("__CLICKADU_IN_PAGE_PUSH_SRC__", run.stdout)
+
+
 class IssueFormTest(unittest.TestCase):
     """The GitHub side of issue #43: what a visitor lands on once they press the button.
 
@@ -8424,6 +8510,22 @@ class RealSiteTest(unittest.TestCase):
         self.assertIn('analytics="${BUILD_DIR}/js/analytics.js"', deploy)
         self.assertNotIn("analytics='site/js/analytics.js'", deploy,
                          "the deploy injects into the source, which is never published")
+
+    def test_no_ad_zone_is_committed_but_the_deploy_injects_them(self):
+        # Issue #110, the same bargain the measurement ID makes: the zones are placeholders in the
+        # committed file, the deploy writes them into the built copy, and infra owns the secrets.
+        analytics = self.site[mi.ANALYTICS_SCRIPT]
+        deploy = (self.repo / ".github" / "workflows" / "deploy.yml").read_text()
+        github = (self.repo / "infra" / "github.tf").read_text()
+        locals_tf = (self.repo / "infra" / "locals.tf").read_text()
+        for secret, local in [("CLICKADU_BANNER_SRC", "clickadu_banner_src"),
+                              ("CLICKADU_IN_PAGE_PUSH_SRC", "clickadu_in_page_push_src")]:
+            with self.subTest(secret=secret):
+                self.assertIn(f"'__{secret}__'", analytics, "a zone is committed")
+                self.assertIn(secret, deploy, "nothing replaces the placeholder at deploy time")
+                self.assertIn(f"{secret} = local.{local}", re.sub(r" +", " ", github))
+                self.assertRegex(locals_tf, rf'(?m)^\s*{local}\s*=\s*"')
+        self.assertIn('analytics="${BUILD_DIR}/js/analytics.js"', deploy[deploy.index("Inject the Clickadu zones"):])
 
     def test_the_ads_ride_the_analytics_line_and_are_out_of_every_runs_reach(self):
         # No page loads clickadu.js: analytics.js does, behind the visitor's yes, so the line every
