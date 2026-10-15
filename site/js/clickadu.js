@@ -22,9 +22,10 @@
 
   Only on a world: a page the shared shell marks <html data-world>. The threshold (index.html) is
   the landing page and carries none, and neither do the mood atlas, the site map, the fine print or
-  the error page. The site has no accounts; what comes nearest -- the persona sheet, the state menu
-  and the cookie dialog -- opens as a modal dialog, which the browser draws in its top layer, above
-  anything an ad floats, and the slot is never put inside one.
+  the error page. The site has no accounts; what comes nearest -- the persona sheet and the state
+  menu -- opens as a modal dialog, which the browser draws in its top layer, above anything an ad
+  floats, and the cookie dialog is drawn at the highest z-index a page has. The slot is never put
+  inside any of them.
 
   The slot's styles live here rather than in a page or the shared Sass, like the consent button's,
   because every page and every stylesheet of this site may be rewritten by an AI run. This file is
