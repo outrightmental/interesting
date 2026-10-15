@@ -2391,11 +2391,15 @@ const KNOBS = {
     }
     // Pressed: a drag in waiting, until the pointer has travelled far enough to mean one. A finger
     // on the words is a tap, or the page being scrolled past the list, so under a finger only the
-    // grip drags and the rest of the row is left to the browser.
+    // grip drags and the rest of the row is left to the browser. A press that never travelled far
+    // enough to be a drag is not followed past its row, so one let go of off the row it began on
+    // leaves no pointerup behind to end it: the next press takes its place rather than finding the
+    // list still waiting on it, and never sorting again.
     function down(v, ev) {
       swallow = false;
       const r = rows.get(v);
-      if (drag || r.button.disabled) return;
+      if ((drag && drag.live) || r.button.disabled) return;
+      drag = null;
       if (ev.pointerType === 'mouse' && ev.button) return; // the main button only
       if (ev.pointerType === 'touch' && !onGrip(ev.target, r)) return;
       drag = { value: v, id: ev.pointerId, y: Number(ev.clientY) || 0, live: false };

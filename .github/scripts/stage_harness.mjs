@@ -91,7 +91,9 @@
                       it every way a visitor does: a row tapped up and tapped into another's place,
                       picked up by a key and carried by the arrow keys, put back with Escape,
                       dragged by a mouse and by a finger on its grip, and a finger on its words,
-                      which is the page scrolling and must move nothing. Every put-down has to set
+                      which is the page scrolling and must move nothing -- the mouse drag coming
+                      after a press let go of off its row, which must not leave the list waiting
+                      on a pointerup that never comes. Every put-down has to set
                       the knob to the order the rows show, and a pick-up, a drag the browser takes
                       back and a drag put back with Escape have to give no order at all.
 
@@ -1359,9 +1361,13 @@ async function orderSorted(stageDir, worlds, deal, clock) {
     li.box = { left: 0, right: 320, width: 320, top: 100 + k * ROW_PITCH, bottom: 144 + k * ROW_PITCH, height: 44 };
   });
   const press = (extra) => Object.assign({ pointerType: 'mouse', button: 0, pointerId: 1 }, extra);
+  // A press on the last row that hardly moves and is let go of off it, so no pointerup reaches the
+  // row: it must not leave the list waiting on it, or the drag after it goes nowhere.
+  layOut();
+  fire(lis()[n - 1], 'pointerdown', press({ clientY: 100 + ROW_PITCH * (n - 1) + 2 }));
+  fire(lis()[n - 1], 'pointermove', press({ clientY: 100 + ROW_PITCH * (n - 1) }));
   // A mouse drag: the top row, nudged under the threshold, then two rows down, and let go -- and
   // the click a browser sends after it.
-  layOut();
   let li = lis()[0];
   fire(li, 'pointerdown', press({ clientY: 122 }));
   fire(li, 'pointermove', press({ clientY: 124 }));
