@@ -33,10 +33,10 @@ Ten axioms stand over every run, each stated in the prompt and held to in code:
     from index.html and through sitemap.xml. check_reachability() refuses a plan
     that would orphan a page.
   - Every page loads js/analytics.js, the one line that brings the site its
-    cookie consent banner and, once a visitor accepts, its Google Analytics tag.
-    check_analytics() refuses a plan that would leave a page without it, and the
-    three files behind it are never shown to a model and never written or
-    deleted by one.
+    cookie consent banner and, once a visitor accepts, its Google Analytics tag
+    and, on a world's page, Clickadu's ads. check_analytics() refuses a plan that
+    would leave a page without it, and the four files behind it are never shown
+    to a model and never written or deleted by one.
   - Every page is responsive and accessible, to WCAG 2.2 level AA.
     check_accessibility() refuses a plan that would make a page fail the part of
     that which markup alone can settle.
@@ -96,8 +96,9 @@ Ten axioms stand over every run, each stated in the prompt and held to in code:
     or that eases anything by linear, ease, ease-in, ease-out, ease-in-out, a
     cubic-bezier, or the browser's own smooth scrolling.
 
-The files behind the analytics, state and participation axioms (FIXED_FILES) are
-never shown to a model and are refused outright as a write or a delete.
+The files behind the analytics, state and participation axioms and the site's ads
+(FIXED_FILES) are never shown to a model and are refused outright as a write or a
+delete.
 
 An answer that holds to all ten is then held to the repository's own tests, the
 ones deploy.yml runs before every deploy: require_passing_tests() runs test.yml's
@@ -734,6 +735,14 @@ ANALYTICS_TAG = f"<script src='{ANALYTICS_SCRIPT}' defer></script>"
 # a delete. Two of them are a vendored release of orestbida/cookieconsent, which no model should be
 # rewriting from memory in any case.
 ANALYTICS_FILES = {ANALYTICS_SCRIPT, "js/cookieconsent.umd.js", "css/cookieconsent.css"}
+# The site's ads (issue #110): Clickadu's banner and in-page push, on a world's page and nowhere
+# else. No page loads this file: js/analytics.js does, once a visitor accepts the advertising
+# category of its banner, and hands it the zones the deploy wrote into analytics.js. So the line
+# that brings the analytics brings the ads too, and check_analytics holds both in place. Fixed for
+# the same reason the analytics files are, and for one more: an ad tag is exactly the kind of thing
+# a run told to make the site more engaging would rewrite away, move into the way or multiply.
+ADS_SCRIPT = "js/clickadu.js"
+ADS_FILES = {ADS_SCRIPT}
 # The other line every page carries, and the one file behind it (issue #31). js/state.js holds the
 # whole of the site's local state in one JSON document, the shared accessor every page reads and
 # writes through, and the small meta menu that exports, imports and clears that document. It is
@@ -772,7 +781,7 @@ PARTICIPATE_FILES = {PARTICIPATE_SCRIPT}
 # should be shown or allowed to rewrite from memory.
 FONT_SHEET = "css/fonts.css"
 FONT_FILES = {FONT_SHEET}
-FIXED_FILES = ANALYTICS_FILES | STATE_FILES | PARTICIPATE_FILES | FONT_FILES
+FIXED_FILES = ANALYTICS_FILES | ADS_FILES | STATE_FILES | PARTICIPATE_FILES | FONT_FILES
 
 # The files each area of the site is made of, which is what a mode's block of the prompt names and
 # what split_for_prompt shows first (focus_files): a run can only change what it was shown, and
@@ -2717,7 +2726,9 @@ def build_prompt(shown, omitted=(), run=None, budget=None, feedback=""):
         + ", ".join(sorted(ALLOWED_EXTENSIONS)) + ". No external "
         "dependencies that require keys, nothing harmful or deceptive. The site's own analytics, "
         "described below, are the only measurement it carries and the only one it needs: add no "
-        "tracking, telemetry, beacon or third-party script of your own.\n"
+        "tracking, telemetry, beacon or third-party script of your own. Its ads, described with "
+        "them, are the only advertising it carries: add no ad, ad slot or ad network of your own "
+        "either.\n"
         "- Paths are relative to the site root (e.g. \"index.html\", \"css/style.css\"). "
         "Use relative links between pages, so the site works wherever it is published. "
         "File and folder "
@@ -2737,9 +2748,13 @@ def build_prompt(shown, omitted=(), run=None, budget=None, feedback=""):
         "Keep that line on every page you rewrite, exactly as it is, and put it on every page you "
         "add (a page in a sub-folder uses the matching relative src, such as "
         f"\"../{ANALYTICS_SCRIPT}\"). It loads a consent banner and, only once a visitor accepts, "
-        f"Google Analytics. The files behind it ({', '.join(sorted(ANALYTICS_FILES))}) are fixed: they "
-        "are not shown to you, you may not write or delete them, and they need nothing from you. A "
-        "plan that leaves a page of the site without that line is refused.\n"
+        "Google Analytics and, on a world's page (one whose <html> carries data-world), Clickadu's "
+        "ads: a banner in a slot it inserts after #main-content, and a small in-page push card "
+        "Clickadu floats over a corner. The files behind it "
+        f"({', '.join(sorted(ANALYTICS_FILES | ADS_FILES))}) are fixed: they are not shown to you, "
+        "you may not write or delete them, and they need nothing from you -- leave the ad slot and "
+        "the card alone rather than styling, moving, covering or making room for them. A plan that "
+        "leaves a page of the site without that line is refused.\n"
         "- AXIOM, every run: every page is responsive and accessible. It works on a small phone as "
         "well as a wide desktop, and it works for a visitor who cannot see it, cannot use a mouse, "
         "or has asked their system for less motion. Hold to WCAG 2.2 level AA. Concretely, on every "
@@ -4248,9 +4263,9 @@ def validate_plan(plan, unseen=()):
         rel = target.relative_to(SITE_DIR).as_posix()
         if rel in FIXED_FILES:
             raise RejectedChange(f"refusing to rewrite {rel}: the fixed files carry the analytics "
-                                 "tag, the consent banner, the local-state store with its meta "
-                                 "menu and a visitor's way of steering the site, and are not a "
-                                 "model's to change")
+                                 "tag, the consent banner, the ads, the local-state store with its "
+                                 "meta menu and a visitor's way of steering the site, and are not "
+                                 "a model's to change")
         if rel in unseen:
             raise RejectedChange(f"refusing to overwrite {rel}: its content was not shown to the model")
         if target.is_dir():
