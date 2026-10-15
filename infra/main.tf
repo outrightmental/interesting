@@ -17,6 +17,10 @@
 #     at interesting.outright.io, a subdomain of a studio-wide zone this
 #     project could only read; its own apex domain belongs to the same project
 #     as the rest of its stack.
+#   - The domain's mail identity (also dns.tf): the SES identity, its DKIM
+#     and MAIL FROM records, and the inbound MX. The forwarding itself —
+#     webmaster@ and support@ to charneykaye@gmail.com — is Mailbot's
+#     (outrightmental/mailbot), routed by its own config.json.
 #   - The static website: makeitmoreinteresting.com S3 bucket + CloudFront
 #     distribution (modules/website, copied from BoardingFlow/infra).
 #   - The ACM certificate for makeitmoreinteresting.com and
