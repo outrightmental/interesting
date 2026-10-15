@@ -3162,6 +3162,32 @@ class CardVariantTest(unittest.TestCase):
         for light in lights:
             self.assertRegex(light, r"^\d{1,3}% \d{1,3}%$")
 
+    # ---- the nest ----
+
+    def test_every_piece_is_one_piece_of_the_great_work(self):
+        # Issue #102: the place a piece holds -- the gate it is one piece of, the colour that gate is
+        # one gate of, and the great work -- is one more part of the configuration a card and its
+        # piece share, rolled from the seed like the rest. It is a tree, so every larger thing is one
+        # piece of exactly one larger thing; every gate comes round, so the feed reads as pieces of
+        # many workings and not of one; and nothing in it is a figure, so there is never a total for
+        # a visitor to be short of.
+        nests = self.seen["nests"]
+        self.assertIsNotNone(nests, "variant.js places no piece in anything")
+        self.assertTrue(nests["repeatable"], "the same seed was placed in two different places")
+        self.assertEqual(nests["greatWork"], "the great work")
+        colour_of = {}
+        for placed in nests["placed"]:
+            self.assertEqual([scale["is"] for scale in placed], ["piece", "gate", "colour"])
+            self.assertEqual(placed[-1]["of"], "the great work", "a nest stops short of the great work")
+            gate, colour = placed[0]["of"], placed[1]["of"]
+            self.assertIn(gate, nests["gates"])
+            self.assertIn(colour, nests["colours"])
+            self.assertEqual(colour_of.setdefault(gate, colour), colour, f"{gate} is a gate of two colours")
+            for scale in placed:
+                self.assertNotRegex(scale["of"], r"\d", "a nest names a figure")
+        self.assertEqual(set(colour_of), set(nests["gates"]), "a gate never comes round")
+        self.assertEqual(set(colour_of.values()), set(nests["colours"]), "a colour holds no gate")
+
 
 class EngagementTimeTest(unittest.TestCase):
     """Issue #32: "interesting" is not left to a model's taste. It means user engagement time, and
@@ -3322,6 +3348,112 @@ class RitualStandardTest(unittest.TestCase):
         self.assertEqual(sorted(name for name in dir(mi) if name.startswith("check_")),
                          CODED_AXIOMS)
         self.assertNotIn("check_ritual", CODED_AXIOMS)
+
+
+class NestedStandardTest(unittest.TestCase):
+    """Issue #102: every small thing a visitor does is one piece of a larger, unfinished and very
+    important puzzle, every larger thing one piece of a larger one still, and all of it implies the
+    largest, the great work -- with the limit stated in the same breath: the larger working is
+    implied, never owed. A standard stated to the model, like WHOLE, INTERESTING, LEGIBLE and
+    RITUAL, because no check could judge whether a piece feels like one piece of something very
+    important; so these tests hold the prompt. The one form of it the site carries -- the nest a
+    solved piece names, and the gate a dealt card ends on -- is held by StageTest, CardVariantTest
+    and RealSiteTest."""
+
+    HEADING = "A PIECE OF THE GREAT WORK, NEVER A QUOTA"
+    # The heading of the block after it, as a heading: the legibility holds mention it by name first.
+    AFTER = "POWERED DOWN, NEVER BROKEN. Where"
+
+    def prompt(self, mode=None):
+        return mi.build_prompt([("index.html", "<h1>hi</h1>")], run=mi.Run(mode) if mode else None)
+
+    def test_the_standard_names_the_nesting_and_its_limit(self):
+        # Spelled out here rather than imported, so rewording NESTED into something that drops
+        # either half -- the scale, or the limit on it -- fails this test instead of passing quietly.
+        for scale in ["infinitely larger puzzle", "very important", "a larger one still",
+                      "the great work"]:
+            with self.subTest(scale=scale):
+                self.assertIn(scale, mi.NESTED)
+        for limit in ["implied, never owed", "whole on its own legs", "a quota, a meter or a gate",
+                      "never finished"]:
+            with self.subTest(limit=limit):
+                self.assertIn(limit, mi.NESTED)
+
+    def test_the_standard_is_part_of_envisioning_the_whole(self):
+        # Where a run looks before it chooses, the scale is part of the look: the piece in hand,
+        # the working it is one piece of, and the great work.
+        prompt = self.prompt()
+        envision = prompt[prompt.index("ENVISION THE WHOLE FIRST"):prompt.index("THIS RUN ")]
+        self.assertIn("the great work all of it is one piece of", envision)
+        self.assertIn(self.HEADING.split(",")[0], envision)
+
+    def test_the_standard_is_stated_before_the_rules_and_after_the_choice(self):
+        prompt = self.prompt()
+        self.assertIn(self.HEADING, prompt)
+        self.assertIn(mi.NESTED, prompt)
+        self.assertLess(prompt.index("THIS RUN "), prompt.index(self.HEADING))
+        # After the ritual holds, whose dressing it lives in, and before the Rules.
+        self.assertLess(prompt.index("RITUAL, NOT RIDDLE"), prompt.index(self.HEADING))
+        self.assertLess(prompt.index(self.HEADING), prompt.index(self.AFTER))
+        self.assertLess(prompt.index(self.HEADING), prompt.index("Rules:"))
+
+    def test_the_five_holds_are_each_named(self):
+        prompt = self.prompt()
+        for hold in ["A solve places a piece; it does not end it",
+                     "Every larger thing is one piece of a larger one still",
+                     "Implied, never owed", "Very important, never a sermon",
+                     "One nest, everywhere"]:
+            with self.subTest(hold=hold):
+                self.assertIn(hold, prompt)
+        # The holds are concrete: the site's own form of the standard is named by file and id, and
+        # the limit names the gadgets it rules out and the one count the site keeps.
+        for concrete in [f"nest(seed) in \"{mi.VARIANT_SCRIPT}\"", "#stage-nest", ".card-nest",
+                         "no \"the final piece\"", "no \"complete the set\"",
+                         "no piece locked until others are solved",
+                         "nothing is ever out of anything", "never a second nest beside it"]:
+            with self.subTest(concrete=concrete):
+                self.assertIn(concrete, prompt)
+
+    def test_the_note_is_the_flavour_and_never_the_text(self):
+        # Issue #102, open question 2: the passage the note carries is said to the model, as the
+        # flavour of the standard, and kept from the visitor. RealSiteTest holds the site to the
+        # second half.
+        prompt = self.prompt()
+        block = prompt[prompt.index(self.HEADING):prompt.index(self.AFTER)]
+        for flavour in ["matter is energy", "fields we cannot normally perceive",
+                        "guided self-observation", "everyday trivia"]:
+            with self.subTest(flavour=flavour):
+                self.assertIn(flavour, block)
+        self.assertIn("none of it is quoted to a visitor", block)
+        self.assertIn("No doctrine, no scripture", block)
+
+    def test_the_standard_is_in_hand_at_the_end_of_every_run(self):
+        for mode in mi.MODES:
+            with self.subTest(mode=mode):
+                prompt = self.prompt(mode)
+                last = prompt[prompt.index(f"This run's mission: {mi.mission_of(mi.Run(mode))}"):]
+                self.assertIn(f"make all of it {mi.NESTED}", last)
+                self.assertIn("with nothing to collect and nothing held back", last)
+
+    def test_the_modes_that_add_carry_it_into_what_they_add(self):
+        # A world created arrives as one more working of the great work; a world enhanced can end
+        # its pieces as pieces of a working still going on; and the site-wide enhancement may make
+        # a solve say more of the working a piece belongs to.
+        for mode, carried in [("create_item", "one more working of the great work"),
+                              ("enhance_item", "one piece of a working still going on"),
+                              ("enhance_overall", "larger working a piece was one piece of")]:
+            with self.subTest(mode=mode):
+                prompt = self.prompt(mode)
+                block = prompt[prompt.index("THIS RUN "):prompt.index("LEGIBLE TO A STRANGER. Everything")]
+                self.assertIn(carried, block)
+
+    def test_the_standard_is_stated_and_not_a_check(self):
+        # The same reasoning WHOLE, INTERESTING, LEGIBLE and RITUAL are left uncoded for: no check
+        # could tell a piece that feels like one piece of something very important from one that
+        # does not, so the list of coded axioms does not grow for it.
+        self.assertEqual(sorted(name for name in dir(mi) if name.startswith("check_")),
+                         CODED_AXIOMS)
+        self.assertNotIn("check_nested", CODED_AXIOMS)
 
 
 class CadenceAxiomTest(SiteDirTestCase):
@@ -5350,6 +5482,31 @@ class StageTest(unittest.TestCase):
         self.assertTrue(result["onward"]["lit"], "the way on never lit over the solved piece")
         self.assertFalse(result["onward"]["movedOnByItself"])
         self.assertTrue(result["onward"]["movedOn"], "the way on was pressed and nothing followed")
+
+    def test_a_solve_places_the_piece_in_something_larger(self):
+        # Issue #102: a solved piece does not end, it is placed. Under the seal the stage names what
+        # the piece was one piece of -- a gate, of a colour, of the great work -- from the piece's
+        # own seed (nest() in js/variant.js), so the gate a card named in the feed is the gate its
+        # solve names. Every round of the replay reads it off the stage beside what variant.js
+        # places that seed in, and reads it again once the next piece is on, which has named
+        # nothing yet: the nest is the solve's, and it goes with the piece.
+        deal = ["toy.html", "other.html", "toy.html"]
+        for played in self.scenario("rounds", deal=deal)["rounds"]:
+            with self.subTest(world=played["was"]["file"], seed=played["was"]["seed"]):
+                self.assertTrue(played["nestOf"], "variant.js places this piece in nothing")
+                self.assertEqual(played["nest"], played["nestOf"],
+                                 "the solve did not name what this piece was one piece of")
+                self.assertTrue(played["nest"].startswith("one piece of the "))
+                self.assertTrue(played["nest"].endswith(", one colour of the great work"),
+                                "the nest stops short of the great work")
+                self.assertNotRegex(played["nest"], r"\d", "the nest counts at the visitor")
+                self.assertFalse(played["nestOverScene"], "the nest is laid over the picture")
+                self.assertEqual(played["nestOnNext"], "", "the next piece opened under the last one's nest")
+        # Only a solve places a piece: a wrong check names nothing, and the right one names it.
+        puzzle = self.scenario("wrongThenRight", toy=FINISHING_PIECE)
+        self.assertEqual(puzzle["afterWrong"]["nest"], "", "a wrong answer placed the piece")
+        self.assertTrue(puzzle["afterRight"]["nest"].endswith("one colour of the great work"),
+                        "the solve placed the piece in nothing")
 
     def test_a_piece_leaves_nothing_on_the_stage_or_running_behind_it(self):
         # "Components should completely reset between instantiations." A piece part-played, with a
@@ -7406,6 +7563,13 @@ class RealSiteTest(unittest.TestCase):
                 self.assertEqual(played["focusedWhenFinished"], "stage-next",
                                  "the way on lit and the keyboard was left wherever it was")
                 self.assertTrue(played["movedOn"], "the way on was pressed and nothing followed")
+                # A solve places the piece (issue #102): under the seal, what it was one piece of,
+                # out to the great work, and the next piece opens with nothing named yet.
+                self.assertEqual(played["nest"], played["nestOf"],
+                                 "the solve did not name what this piece was one piece of")
+                self.assertTrue(played["nest"].endswith("one colour of the great work"))
+                self.assertFalse(played["nestOverScene"], "the nest is laid over the picture")
+                self.assertEqual(played["nestOnNext"], "", "the next piece opened under the last one's nest")
         # Done is not the End (issue #86), on the site as committed. What can be held of every
         # world's piece without knowing which piece it is, is held: the frames coming back when a
         # knob is worked again or the scene is tapped (a piece at rest asks for none, js/stage.js
@@ -7686,6 +7850,58 @@ class RealSiteTest(unittest.TestCase):
         taps = taps[:taps.index("\n  });")]
         self.assertNotIn("completed", taps, "a tap on the scene stops reaching a finished piece")
         self.assertIn("tapsOpen()", taps, "nothing decides whether a tap reaches the piece")
+
+    def test_a_solved_piece_names_what_it_was_one_piece_of(self):
+        # Issue #102, the nesting axiom's readable half. The standard is stated to the model
+        # (NestedStandardTest holds the prompt), and the site carries one concrete form of it: the
+        # nest a solved piece names under its seal -- the gate it was one piece of, the colour that
+        # gate is one gate of, the great work -- and the gate a dealt card ends on, both from
+        # nest() in js/variant.js. The stage harness plays the nest on the committed stage (see
+        # test_the_stage_plays_the_site_as_committed); these are where the markup, the scripts and
+        # the stylesheets put it, which the harness cannot see.
+        stage = self.source[mi.STAGE_INCLUDE]
+        self.assertIn("id='stage-nest'", stage, "a solved piece names nothing it was one piece of")
+        scene = stage[stage.index("<div class='stage-scene'"):]
+        scene = scene[:scene.index("</div>")]
+        self.assertNotIn("stage-nest", scene, "the nest is inside the scene, over the content")
+        self.assertGreater(stage.index("id='stage-nest'"), stage.index("class='stage-foot'"),
+                           "the nest is not under the seal it follows")
+        variant = self.source[mi.VARIANT_SCRIPT]
+        self.assertIn("export function nest(seed)", variant)
+        self.assertIn("export const GREAT_WORK = 'the great work';", variant)
+        script = self.source[mi.STAGE_SCRIPT]
+        self.assertRegex(script, r"import \{[^}]*\bnest\b[^}]*\} from './variant\.js';")
+        finish = script.split("function finish(say) {", 1)[1].split("\n}", 1)[0]
+        self.assertIn("renderNest(c)", finish, "a solve does not place the piece")
+        close = script.split("function close(keep) {", 1)[1].split("\n}", 1)[0]
+        self.assertIn("ui.nest.hidden = true", close, "the nest outlives its piece")
+        feed = self.source["js/feed.js"]
+        self.assertIn("'card-nest'", feed, "a dealt card does not say what it is one piece of")
+        self.assertIn("nest(seed)", feed)
+        # It is the rite's dressing, so it wears the rite's face.
+        for rel, selector in [(f"{mi.SASS_DIR}/_stage.scss", ".stage-nest {"),
+                              (f"{mi.SASS_DIR}/_feed.scss", ".card-nest {")]:
+            with self.subTest(rel=rel, selector=selector):
+                css = self.source[rel]
+                rule = css[css.index(selector):]
+                rule = rule[:rule.index("}")]
+                self.assertIn("@include type.rite", rule, f"{selector} is not set in the rite's face")
+                for over in ["position: absolute", "position: fixed", "z-index"]:
+                    self.assertNotIn(over, rule, f"{selector} is laid over the content")
+        built = self.site["css/site.css"]
+        for selector in [".stage-nest", ".card-nest"]:
+            with self.subTest(selector=selector):
+                self.assertIn(selector, built)
+        # The great work is named where a visitor first meets the site, in plain words.
+        self.assertIn("Every puzzle you solve is one piece of the great work", self.site["index.html"])
+        # And the note's passage is the prompt's flavour and the README's, never a visitor's to read
+        # (issue #102, open question 2): no page, script or stylesheet of the site carries it.
+        for rel, text in self.site.items():
+            if not isinstance(text, str):
+                continue
+            for words in ["ab initio", "orthodox christianity", "everyday trivia", "spiritual source"]:
+                with self.subTest(rel=rel, words=words):
+                    self.assertNotIn(words, text.lower(), "the note's passage is quoted to a visitor")
 
     def test_every_world_page_is_the_stage(self):
         # A world page is the stage and nothing else, so what a visitor opens is a piece, not a

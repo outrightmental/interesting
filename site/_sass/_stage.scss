@@ -1083,6 +1083,43 @@
   @include type.scale(label-large);
 }
 
+// ---- the nest: what a solved piece was one piece of ----------------------------------------------
+// Under the seal, once the piece is solved: the gate it was one piece of, the colour that gate is
+// one gate of, and the great work that colour is one colour of (README: "Nesting axiom";
+// js/stage.js, renderNest). It is dressing, so it wears the rite's face; it is laid out with the
+// rail like the seal it follows, never over the scene, and each scale stands one step further out
+// than the one inside it, so the lines themselves read as the nesting. The outermost, the great
+// work, is the one lit in the primary. It is cut in by one slice from the top, after the seal has
+// begun to land, so the work opens outward from the piece a line at a time: one edge, in the
+// arrival's treads, and the class comes off once that edge has crossed it.
+.stage-nest {
+  margin: 0;
+  display: grid;
+  gap: 0.1rem;
+  color: var(--md-sys-color-on-surface-variant);
+  @include type.scale(body-medium);
+  @include type.rite;
+}
+
+.stage-nest-scale {
+  display: block;
+}
+
+.stage-nest-scale:nth-child(2) {
+  padding-inline-start: 1.1em;
+}
+
+.stage-nest-scale:nth-child(3) {
+  padding-inline-start: 2.2em;
+  color: var(--md-sys-color-primary);
+}
+
+.stage-nest.is-landing {
+  mask: cut.slice(180deg);
+  @include cut.play(in, nest-open, long, arrive);
+  animation-delay: var(--motion-medium, 340ms);
+}
+
 // ---- the way on ---------------------------------------------------------------------------
 
 // One mark, in the same corner of the screen for every piece: the stage does not move on by
@@ -1292,6 +1329,7 @@
   .knob[data-unwarding]::after,
   .stage-dot.is-set.is-landing::before,
   .stage-done.is-landing,
+  .stage-nest.is-landing,
   .stage-ask.is-landing,
   .stage-status[data-said],
   .stage-wanted[data-said],

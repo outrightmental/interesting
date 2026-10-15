@@ -63,6 +63,11 @@
             <div class='stage-progress' id='stage-progress'></div>
           </div>
         </div>
+        {# The nest: what a solved piece was one piece of, scale by scale out to the great work (README:
+           "Nesting axiom"). js/stage.js writes it on the solve from the piece's own seed and takes it
+           away with the piece. It is in the rail, under the seal, never over the scene, and it counts
+           nothing: the work it names is never finished. #}
+        <p class='stage-nest' id='stage-nest' aria-live='polite' hidden></p>
         {# The difficulty every piece is dealt at, settable where it is a dependency (issue #93).
            js/persona.js keeps the setting and renders the one slider into this host; js/stage.js
            mounts it and deals this piece again whenever it moves, so the visitor does not have to

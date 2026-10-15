@@ -23,6 +23,9 @@
  * times a second with the very same env every time, so it is held to being a function of (w, h,
  * env, t) and nothing else -- see `moving` below, and js/feed.js for the contract itself.
  *
+ * A fifth, since issue #102: what a seed's piece is one piece of (V.nest), scale by scale out to the
+ * great work -- the line a dealt card ends on and the nest its piece names once it is solved.
+ *
  * The third argument is the fifteen mood palettes, read out of _sass/_mood.scss by the caller, so
  * the colour a configuration derives can be checked against the palette it was derived from rather
  * than against a copy of it kept here.
@@ -252,6 +255,21 @@ observed.revived = {
     };
   }),
 };
+
+/* ---- what a piece is one piece of ------------------------------------------------------------- */
+
+// The nest (issue #102): the place a seed's piece holds, from the innermost scale out to the great
+// work, which is one more part of the configuration a card and its piece share. Observed for every
+// seed, so the caller can see that a seed is always placed in the same gate, that every gate comes
+// round, that each gate is always one gate of the same colour, and that nothing in it is a count.
+// Null for a configuration with no nest to give.
+observed.nests = typeof V.nest === "function" ? {
+  repeatable: JSON.stringify(V.nest(SEEDS[5])) === JSON.stringify(V.nest(SEEDS[5])),
+  greatWork: V.GREAT_WORK,
+  gates: V.GATES,
+  colours: V.COLOURS,
+  placed: SEEDS.map((seed) => V.nest(seed)),
+} : null;
 
 /* ---- what it does to colour ------------------------------------------------------------------ */
 

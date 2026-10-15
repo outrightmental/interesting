@@ -60,7 +60,7 @@
    between. Nothing here animates a size: a plate that changes its shape is its new size at once
    while its face is cut away. The engine is optional throughout: without it the classes still go
    on and the clock takes them off. */
-import { roll, PLAIN, recolor, aspect, ratioOf, light, mulberry32, hash, mix, alpha, rite } from './variant.js';
+import { roll, PLAIN, recolor, aspect, ratioOf, light, mulberry32, hash, mix, alpha, rite, nest } from './variant.js';
 
 const persona = window.interestingPersona;
 const root = document.documentElement.getAttribute('data-root') || '';
@@ -923,7 +923,11 @@ function worldCard(world, seed) {
   meta.set(card, { kind: 'world', world, id: world.id, seed, variant, canvas: picture.canvas });
   return card;
 }
-function sparkBody(world, spec) {
+// A card the feed deals is one piece of something larger, and its last line says which (README:
+// "Nesting axiom"): the gate nest() in js/variant.js places its seed in, the very gate the piece it
+// opens as names under its seal once it is solved. Dressing only -- it counts nothing -- and dealt
+// with the face, so "another" cuts in the new card's gate with the rest of it.
+function sparkBody(world, spec, seed) {
   const body = el('div', 'card-body');
   body.appendChild(el('p', 'card-overline', spec.overline || world.name));
   body.appendChild(el('h3', 'card-title', spec.title || world.name));
@@ -931,6 +935,7 @@ function sparkBody(world, spec) {
   if (spec.text) body.appendChild(el('p', 'card-text', spec.text));
   if (spec.mono) body.appendChild(el('p', 'card-mono', spec.mono));
   if (spec.cite) body.appendChild(el('p', 'card-cite', spec.cite));
+  body.appendChild(el('p', 'card-nest', 'of ' + nest(seed)[0].of));
   return body;
 }
 function sparkCard(world, mod, seed) {
@@ -954,7 +959,7 @@ function sparkCard(world, mod, seed) {
     canvas = picture.canvas;
     link.appendChild(picture.box);
   }
-  link.appendChild(sparkBody(world, spec));
+  link.appendChild(sparkBody(world, spec, seed));
   card.appendChild(link);
   const actions = el('div', 'card-actions');
   const again = el('button', 'btn-text', 'another');
@@ -997,7 +1002,7 @@ function reroll(card, keepSeed) {
   m.face = face;
   const change = () => {
     if (meta.get(card) !== m || m.face !== face || !card.isConnected || !link) return;
-    link.replaceChild(sparkBody(m.world, m.spec), link.querySelector('.card-body'));
+    link.replaceChild(sparkBody(m.world, m.spec, m.seed), link.querySelector('.card-body'));
     const plate = link.querySelector('.card-media');
     const ratio = aspect(m.spec.aspect || m.world.aspect, m.variant);
     if (m.spec.paint && !plate) {
