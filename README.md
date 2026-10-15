@@ -12,7 +12,8 @@ iterate a more interesting website
   lives here, and nothing else does: the pages, the shared layout and partials, the Sass, the feed
   with its one module per world and the configuration a content piece wears as a card and again as
   the feature it opens as (see [The feature and the feed](#the-feature-and-the-feed)), the three
-  shared files behind the analytics tag (see [Analytics axiom](#analytics-axiom)), the one behind
+  shared files behind the analytics tag (see [Analytics axiom](#analytics-axiom)) and the one
+  behind the ads it gates (see [Advertising](#advertising)), the one behind
   the local-state store (see [Local state axiom](#local-state-axiom)), the one behind the mood
   flow (see [Mood axiom](#mood-axiom)), the one behind a visitor's way of steering the site (see
   [Participation axiom](#participation-axiom)), the one that rolls every curve the site moves
@@ -24,8 +25,9 @@ iterate a more interesting website
 - **The build** — [`build.mjs`](build.mjs) turns `/site` into the artifact that is published to an
   S3 bucket behind CloudFront at [makeitmoreinteresting.com](https://makeitmoreinteresting.com/),
   in a throwaway folder outside the repository. Nothing generated is ever committed. The deploy
-  changes one thing on the way — the GA4 measurement ID — and copies everything else as the build
-  left it. See [Building the site](#building-the-site).
+  changes one file on the way — `js/analytics.js`, which gets the GA4 measurement ID and the
+  Clickadu zones — and copies everything else as the build left it. See
+  [Building the site](#building-the-site).
 - **`/infra`** — the hosting, as code. [`infra/`](infra) is a self-contained Terraform project
   that owns the bucket, the CloudFront distribution, the certificate, the
   `makeitmoreinteresting.com` hosted zone and the records in it, the deploy IAM user, the Actions
@@ -250,7 +252,7 @@ same destination, the second adopted into the far orbit beside *cookies* and *st
   something and goes when it is forgotten; on that world itself the option says the world's name
   and is marked *you are here* rather than offering a trip to where the visitor already is, as the
   feed's own card does. *cookies* is there only on a copy of the site that has a measurement ID
-  and so draws a consent banner. *state* says how much there is to carry away — *state · 3 kept*.
+  or an ad zone and so draws a consent banner. *state* says how much there is to carry away — *state · 3 kept*.
   And the option for the page a visitor is on carries `aria-current='page'` wherever it appears.
 - **Three options are adopted, not copied.** *change this site*, *cookies* and *state* belong to
   `js/participate.js`, `js/analytics.js` and `js/state.js`, which are fixed files no run may write
@@ -276,7 +278,9 @@ same destination, the second adopted into the far orbit beside *cookies* and *st
   exactly as it always was, so nothing a run writes can leave a visitor without a way to their own
   state.
 - **Which is what makes the two-item rule true.** At rest nothing floats over a page but the logo
-  and the persona: nothing at the bottom edge, nothing beside either mark. `NavTest` holds both
+  and the persona: nothing at the bottom edge, nothing beside either mark. (The one exception is not
+  the site's: on a world whose visitor has accepted ads, Clickadu's in-page push card may float over
+  a corner, see [Advertising](#advertising).) `NavTest` holds both
   halves of it (issue #64) — the site's own stylesheets pin a closed list of things, every one of
   them one of the two marks, a part of one, an overlay only up while something is open, or the
   stage's own way on, which exists only on a page that is a stage and only while a piece is on it
@@ -1228,13 +1232,81 @@ new content for any page it is shown.
 - **Held to in code.** `check_analytics` in
   [`.github/scripts/make_interesting.py`](.github/scripts/make_interesting.py) refuses a plan that
   leaves a page without the line. As with reachability, only what the run itself breaks is refused.
-- **The three files are out of reach.** `FIXED_FILES` — `js/analytics.js` and the two vendored
-  `cookieconsent` files — are never shown to a model and are refused outright as a write or a
-  delete, so no run can quietly gut the tag or the banner. They skip the prompt budget as well, so
-  55 KB of consent library cannot push a page of the site out of the prompt.
+- **The four files are out of reach.** `FIXED_FILES` — `js/analytics.js` and the two vendored
+  `cookieconsent` files, and beside them `js/clickadu.js` (see [Advertising](#advertising)) — are
+  never shown to a model and are refused outright as a write or a delete, so no run can quietly gut
+  the tag, the banner or the ads. They skip the prompt budget as well, so 55 KB of consent library
+  cannot push a page of the site out of the prompt.
 - **True of the site as committed**, checked by `RealSiteTest` on every pull request and before every
-  deploy: every page loads the script, the three files are there, no measurement ID is committed,
-  `deploy.yml` still replaces the placeholder, and the vendored library keeps its license and version.
+  deploy: every page loads the script, the files are there, no measurement ID and no ad zone is
+  committed, `deploy.yml` still replaces every placeholder, and the vendored library keeps its
+  license and version.
+
+### Advertising
+
+The worlds carry ads from [Clickadu](https://www.clickadu.com/) (issue #110), and only the worlds,
+and only once a visitor has said yes to them. Ads are not an axiom — not every page has them, and
+a run is never asked to keep them anywhere — but they ride the analytics line, so they are held in
+place by the same machinery.
+
+- **No line of their own.** No page loads [`site/js/clickadu.js`](site/js/clickadu.js).
+  `js/analytics.js` does, and only once a visitor accepts the new *advertising* category of the
+  consent banner: until then neither that file nor anything of Clickadu's is fetched. So the one
+  line every page already carries, which `check_analytics` holds on every page, brings the ads
+  too, and a run that rewrote the shell could not drop them without dropping the analytics with
+  them and being refused for it.
+- **Two formats, and no others.** A *banner*, in a slot `js/clickadu.js` reserves after
+  `#main-content` — under the world's stage and above the feed — and *in-page push*, the small
+  notification-style card Clickadu floats over a corner of the page. No popunder and no
+  interstitial: nothing that opens a window, takes over a click or covers the page, so an ad never
+  stands between a visitor and the world they came for. Each format is one zone in Clickadu's
+  dashboard; its format is fixed there, when the zone is made, and these two zones are all the site
+  ever asks Clickadu for. The slot is named as an advertisement (an `<aside>` landmark, and a
+  visible label) and stays invisible until Clickadu has put something in it, so an unfilled zone
+  leaves no empty box behind. A zone that asks which element to fill is pointed at
+  `#site-ad-banner`. On a phone, pick a zone 300 pixels wide: 728 is cropped.
+- **On the worlds, and nowhere else.** A page the shell marks `<html data-world>` — every
+  world, the high-traffic content pages behind the threshold — carries ads; the threshold
+  (`index.html`) is the landing page and carries none, and neither do the mood atlas, the site map,
+  the fine print or the error page. The site has no accounts. What comes nearest — the persona
+  sheet, the state menu and the cookie dialog — opens as a modal dialog, which the browser draws in
+  its top layer, above anything an ad floats, and the slot is never put inside one.
+- **Asked for, under its own category.** The banner offers *advertising* beside *analytics*, each
+  declinable on its own, and its words only ever describe what that copy of the site serves: a
+  deploy with no ad zone has no *advertising* category and says nothing about ads, as one with no
+  measurement ID says nothing about analytics. Declining later reloads the page, which is the one
+  way to take a third party's running code back off it; Clickadu's own cookies are set on its own
+  domain, where no page can clear them, and the banner says so. An answer given before the site
+  showed ads was given to a banner that said it measured nothing else, so the banner's `revision`
+  goes up with the first ad zone and asks every returning visitor again. Google's consent-mode ad
+  signals stay denied either way: the Google tag serves no ads here, and Clickadu's are not
+  Google's.
+- **No zone in the repository.** `js/analytics.js` ships two more placeholders, one for each zone:
+  `__CLICKADU_BANNER_SRC__` and `__CLICKADU_IN_PAGE_PUSH_SRC__`. Each zone is the address its code
+  loads — the `src` of the `<script>` Clickadu's *get code* gives, with the zone's ID in it, rather
+  than the bare ID, because Clickadu serves its code from domains of its own choosing.
+  [`deploy.yml`](.github/workflows/deploy.yml) pastes the `CLICKADU_BANNER_SRC` and
+  `CLICKADU_IN_PAGE_PUSH_SRC` repository secrets into the built copy, checking each against
+  `^(https:)?//host/path$` first, beside the measurement ID; analytics.js hands them to
+  `js/clickadu.js` on that file's own script element. The secrets come from
+  [`infra/locals.tf`](infra/locals.tf) (`clickadu_banner_src`, `clickadu_in_page_push_src`) by
+  the same `terraform apply` as the others, and a zone left empty there sets no secret. Each is
+  optional on its own: a placeholder the deploy did not replace switches that format off, and a
+  fork, a local copy or any checkout the deploy has not run over serves no ads at all.
+- **Out of reach**, the same way as the analytics files: `js/clickadu.js` is `ADS_SCRIPT` in
+  `FIXED_FILES`, never shown to a model and refused as a write or a delete, so no run told to make
+  the site more engaging can rewrite the ads away, move them into the way or multiply them. Its
+  styles live in the file rather than in the shared Sass, as the consent button's do. The prompt
+  tells every run that the ads are the only advertising the site carries, that it may add none of
+  its own, and that the slot and the card are not its to style, move, cover or make room for.
+- **The fine print says so.** [`privacy.html`](site/privacy.html) says what the ads are, where they
+  are not, what Clickadu may set and how to take it back, and [`terms.html`](site/terms.html) that
+  nobody here picks or vouches for them.
+- **Tested in a stub browser.** `AdvertisingTest` runs the real `js/analytics.js` — with its
+  placeholders as committed and as the deploy fills them — and `js/clickadu.js` against a stand-in
+  consent banner (`.github/scripts/ads_harness.mjs`): nothing is fetched without a zone or without
+  consent, the banner's words follow what is switched on, and the ads land in the slot on a world
+  and nowhere else. It also runs `deploy.yml`'s own substitution step with bash.
 
 ### Responsive and accessible axiom
 
@@ -1423,7 +1495,7 @@ it stands.
   own markup — not the scripts it loads — has to link to every world.
 - **The shared script is protected, not fixed.** `js/threshold.js` joins `index.html`,
   `error.html` and `sitemap.xml` in `PROTECTED_FILES`: it may be rewritten and is always shown to
-  the model, unlike the six fixed files, but it can never be deleted, because every page leans on
+  the model, unlike the seven fixed files, but it can never be deleted, because every page leans on
   it.
 - **Stated in the prompt and held to in code**, the same arrangement as the others. `check_mood`
   in [`.github/scripts/make_interesting.py`](.github/scripts/make_interesting.py) refuses a plan
@@ -2010,7 +2082,8 @@ files (see [One single experience](#one-single-experience)).
    that is absolute, contains `..`/hidden segments or anything but lowercase letters, digits, `.`,
    `_` and `-`, resolves outside `/site` (including via symlinks) or has a non-static file type.
    It never deletes `index.html`, `error.html`, `sitemap.xml` or `js/threshold.js`, never writes or
-   deletes the six fixed files — the three behind the analytics tag, the one behind the local-state store and its
+   deletes the seven fixed files — the three behind the analytics tag, the one behind the ads it
+   gates, the one behind the local-state store and its
    meta menu, the one behind participation and the font sheet — never touches a file the model was not shown, and applies an answer whole or not at
    all. A file that exists is changed by edits — the passages that change, quoted, and what takes
    their place — and an edit that matches nowhere in the file, or in two places, refuses the whole
@@ -2096,7 +2169,9 @@ Flash tier.
 - **Hosting** — run `terraform apply` in [`infra/`](infra) once, by hand. That creates the bucket,
   the distribution, the certificate, the hosted zone and its records, and sets the five repository
   secrets the deploy reads (`AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_S3_BUCKET`,
-  `AWS_CLOUDFRONT_DISTRIBUTION_ID` and `GA_MEASUREMENT_ID`). No secret is set by hand: they come
+  `AWS_CLOUDFRONT_DISTRIBUTION_ID` and `GA_MEASUREMENT_ID`), and the two Clickadu ones
+  (`CLICKADU_BANNER_SRC` and `CLICKADU_IN_PAGE_PUSH_SRC`) once their zones are written in
+  `infra/locals.tf` (see [Advertising](#advertising)). No secret is set by hand: they come
   from the same apply that creates or names what they point at, so they cannot drift from it.
   [`infra/README.md`](infra/README.md) has the order and the costs — including the one step AWS
   cannot do for itself: pointing `makeitmoreinteresting.com`'s nameservers at the hosted zone, at
@@ -2141,7 +2216,8 @@ Most of the suite stands the build in with the identity, which is exactly what i
 HTML those fixtures are made of. `BuildPipelineTest` and `RealSiteTest` run the real build; without
 the toolchain they skip, except in CI, where a missing toolchain is the thing to find out about.
 `LocalStateStoreTest` and `ParticipateButtonTest` run the two fixed scripts a visitor actually
-operates against a stub browser in Node, for the same reason. `IssueFormTest` reads the issue
+operates against a stub browser in Node, for the same reason, and `AdvertisingTest` runs the
+consent script and the ads it gates the same way. `IssueFormTest` reads the issue
 forms as text, and parses them as YAML when PyYAML is importable.
 
 To try a real run without touching the repository's site, point the script at a copy (this needs a

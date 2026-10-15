@@ -14,7 +14,7 @@ One project owns the whole stack for one property — including the GitHub repos
 | `dns.tf` | `aws_route53_zone.primary`, `aws_route53domains_registered_domain.primary` | The `makeitmoreinteresting.com` hosted zone, and the domain's registration pointed at it. The site used to live at `interesting.outright.io`, a subdomain of a studio-wide zone this project could only read; its own apex domain has nothing in it but this site, so the zone is owned here with the rest of the stack. The domain is registered with Amazon Registrar in this same account, so its nameservers are set from the zone here too, and a registration pointing anywhere else is a plan diff rather than a site nobody can resolve. The registration is adopted, never registered or transferred: a destroy leaves it alone. |
 | `website.tf` + `modules/website` | S3 bucket + CloudFront distribution, ACM certificate + DNS validation, A/AAAA alias records | The static site at https://makeitmoreinteresting.com/, also served at `www.` from the same distribution (one certificate with www as a SAN, both hostnames as CloudFront aliases, four alias records from one `for_each`). The module is copied from BoardingFlow/infra, with the three changes listed under [Notes](#notes). |
 | `iam-deploy.tf` | `makeitmoreinteresting-com-deploy` IAM user + key + policy | Dedicated deploy credentials for the GitHub Actions workflow (S3 sync + CloudFront invalidation), scoped to exactly this bucket and this distribution. |
-| `github.tf` | Repository Actions secrets | `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_S3_BUCKET`, `AWS_CLOUDFRONT_DISTRIBUTION_ID` — set from this project's own resources so the deploy can never drift from the infrastructure. A single apply rotates the deploy credentials end to end. Plus `GA_MEASUREMENT_ID`, the GA4 property the site reports to (`ga_measurement_id` in `locals.tf`): not a credential, since the deploy publishes it in every page, but owned here so the repository itself holds no measurement ID. |
+| `github.tf` | Repository Actions secrets | `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_S3_BUCKET`, `AWS_CLOUDFRONT_DISTRIBUTION_ID` — set from this project's own resources so the deploy can never drift from the infrastructure. A single apply rotates the deploy credentials end to end. Plus `GA_MEASUREMENT_ID`, the GA4 property the site reports to (`ga_measurement_id` in `locals.tf`): not a credential, since the deploy publishes it in every page, but owned here so the repository itself holds no measurement ID. And `CLICKADU_BANNER_SRC` and `CLICKADU_IN_PAGE_PUSH_SRC`, the two Clickadu zones the worlds serve ads from (`clickadu_banner_src` and `clickadu_in_page_push_src` in `locals.tf`, each the `src` of the `<script>` Clickadu's *get code* gives for the zone), for the same reason; a zone left empty there sets no secret, and the site is published without that format. |
 | `data.tf` | *(read-only)* | The AWS account id, read from the caller rather than written down. Nothing else is read from outside this project any more: the hosted zone used to be, back when the site was a subdomain of `outright.io`. |
 
 ## Usage
@@ -172,13 +172,22 @@ mirror) and invalidate `/*`. `site/` is source now, not the finished artifact: `
 the repository's own README for the pipeline), and it is that built folder — never the checkout —
 that is published. The deploy refuses to sync a build with no `index.html` or `error.html`.
 
-One substitution happens on the way, and only one: `js/analytics.js` ships a
+One file is changed on the way, and only one: `js/analytics.js` ships a
 `__GA_MEASUREMENT_ID__` placeholder, and the deploy replaces it with the `GA_MEASUREMENT_ID` secret
 in the built artifact — the build copies the file through verbatim, placeholder and all — after
-checking the value against `^G-[A-Z0-9]+$`. So no measurement ID is committed, and a checkout the
-deploy has not run over keeps the placeholder, which switches that file off: no Google tag, no
-consent banner, no cookies. If the secret is not set the site is published without analytics rather
-than not published at all.
+checking the value against `^G-[A-Z0-9]+$`. The same file ships `__CLICKADU_BANNER_SRC__` and
+`__CLICKADU_IN_PAGE_PUSH_SRC__`, which the next step replaces with the two Clickadu secrets after
+checking each is an `https:` or protocol-relative address and nothing else (issue #110, see the
+repository's own README under *Advertising*). So no measurement ID and no ad zone is committed, and
+a checkout the deploy has not run over keeps every placeholder, which switches that file off: no
+Google tag, no ads, no consent banner, no cookies. If a secret is not set the site is published
+without that part rather than not published at all.
+
+To start serving ads: create a *Banner* zone and an *In-Page Push* zone for the site in Clickadu's
+publisher dashboard (no other format — the site serves no popunder or interstitial), copy the `src`
+of each zone's *get code* `<script>` into `clickadu_banner_src` and `clickadu_in_page_push_src` in
+`locals.tf`, `terraform apply`, and deploy. Either can be left empty. A banner zone that asks which
+element to fill is pointed at `#site-ad-banner`.
 
 Not-found requests are served `site/error.html` by a CloudFront custom error response
 (`modules/website/cloudfront.tf`): a key that is not in the bucket makes the S3 *website*
