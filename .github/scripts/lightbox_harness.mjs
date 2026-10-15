@@ -26,6 +26,14 @@
  * behind a veil that goes up again -- and because this is the one stub browser that runs the real
  * js/persona.js. PersonaHandOffTest makes those assertions.
  *
+ * And, for the same reason -- this is where the real js/persona.js runs -- it drives the difficulty
+ * slider the stage is offered (issue #100): a slider only for a visitor who has never picked a
+ * level, gone the moment one is picked (by pointer, by keys once the slider is left, in the sheet,
+ * at the middle of the dial outright), a footnote in its place from then on that follows the
+ * setting and opens the sheet at its difficulty section, the sheet's own slider kept whatever was
+ * picked, and a browser that keeps nothing offering the slider again on its next visit.
+ * StageDifficultyOfferTest makes those assertions.
+ *
  * LightboxTest in test_make_interesting.py makes every assertion below; the harness only observes.
  * The stub is deliberately the same shape as nav_harness.mjs's -- a tree that can be found by
  * simple selectors, attributes, events that bubble, and a frame loop that can be counted -- with
@@ -73,7 +81,7 @@ class Element {
     this.children = [];
     this.parentNode = null;
     this.listeners = {};
-    this.textContent = "";
+    this.words = "";
     this.clicks = 0;
     this.focused = 0;
     this.width = 0;
@@ -106,6 +114,18 @@ class Element {
 
   get className() {
     return this.attributes.class || "";
+  }
+
+  /* As a browser's: the element's own words and then its children's, and setting it takes every
+     child away -- which is how js/persona.js empties a host before it draws into it. */
+  get textContent() {
+    return this.words + this.children.map((child) => child.textContent).join("");
+  }
+
+  set textContent(value) {
+    for (const child of this.children) child.parentNode = null;
+    this.children = [];
+    this.words = value == null ? "" : String(value);
   }
 
   set className(value) {
@@ -336,6 +356,9 @@ function makeDocument() {
   readingSection.appendChild(make("div", { class: "persona-probe", id: "persona-sheet-probe",
                                            hidden: "" }));
   sheet.appendChild(readingSection);
+  const difficultySection = make("section", { class: "persona-section" });
+  difficultySection.appendChild(make("div", { class: "persona-difficulty", id: "persona-difficulty" }));
+  sheet.appendChild(difficultySection);
   body.appendChild(sheet);
 
   const document_ = {
@@ -381,13 +404,15 @@ class StubCustomEvent {
  *  `calm` is the one media query either file keeps -- (prefers-reduced-motion: reduce) -- read once
  *  when the file is evaluated and kept, so `matches` is a getter over a flag here rather than a
  *  value, exactly as a browser's own list changes under a running page. */
-function load({ stars = [], kept = [], calm = false } = {}) {
+function load({ stars = [], kept = [], calm = false, values = {}, persistent = true } = {}) {
   const document_ = makeDocument();
   const frames = { ran: 0 };
   const observers = [];
   const timers = [];
   const motion = { calm };
   let sky = stars.slice();
+  // Every name but the sky's, as the one local-state document keeps them: the difficulty is one.
+  const saved = Object.assign({}, values);
   const window_ = {
     document: document_,
     innerWidth: 1280,
@@ -396,17 +421,23 @@ function load({ stars = [], kept = [], calm = false } = {}) {
     listeners: {},
     interestingState: {
       keys: () => kept.slice(),
-      read: () => ({ status: "ok", value: sky.slice() }),
+      read: (key, fallback) => {
+        if (key === "constellation") return { status: "ok", value: sky.slice() };
+        if (Object.prototype.hasOwnProperty.call(saved, key)) return { status: "ok", value: saved[key] };
+        return { status: persistent ? "missing" : "unavailable", value: fallback === undefined ? null : fallback };
+      },
       get: () => sky.slice(),
       set: (key, value) => {
-        sky = value.slice();
-        return true;
+        if (key === "constellation") sky = value.slice();
+        else saved[key] = value;
+        return persistent;
       },
-      remove: () => {
-        sky = [];
-        return true;
+      remove: (key) => {
+        if (key === "constellation") sky = [];
+        else delete saved[key];
+        return persistent;
       },
-      persistent: true,
+      persistent,
     },
     performance: { now: () => 1000 },
     addEventListener(type, handler) {
@@ -467,7 +498,7 @@ function load({ stars = [], kept = [], calm = false } = {}) {
   vm.runInContext(personaSource, context);
   vm.runInContext(siteSource, context);
   ready(document_);
-  return { window: window_, document: document_, frames, observers, timers, motion };
+  return { window: window_, document: document_, frames, observers, timers, motion, saved };
 }
 
 /** The document finished parsing: both files build their halves of the shell here. */
@@ -561,6 +592,72 @@ function handedOver(context) {
 }
 
 const STARS = [{ x: 30, y: 40, text: "a door left ajar" }, { x: 60, y: 55, text: "the long way home" }];
+
+/* ---- the difficulty the stage is offered (issue #100) -------------------------------------- */
+
+// What js/stage.js asks the persona for at the foot of the rail: the one slider, offered once.
+const ONCE = { once: true, note: "Every piece on this site is dealt at this setting." };
+
+/** A host where the stage keeps one -- the rail's #stage-difficulty -- inside the page. */
+function stageHost(context, name = "stage-difficulty") {
+  const host = make("div", { class: "stage-difficulty", id: name });
+  context.document.querySelector(".page").appendChild(host);
+  return host;
+}
+
+/** What a difficulty host holds -- the slider, or the footnote in its place -- and where the focus
+ *  is: on the slider, on the footnote's button, or elsewhere, by id. */
+function tuning(context, host) {
+  const slider = host.querySelector("input");
+  const footnote = host.querySelector(".difficulty-footnote-text");
+  const change = host.querySelector(".difficulty-change");
+  const note = host.querySelector(".difficulty-note");
+  const active = context.document.activeElement;
+  return {
+    slider: !!slider,
+    at: slider ? Number(slider.value) : null,
+    note: note ? note.textContent : null,
+    footnote: footnote ? footnote.textContent : null,
+    change: change ? change.textContent : null,
+    changeIsButton: !!change && change.tagName === "BUTTON" && change.type === "button",
+    noted: host.classList.contains("is-noted"),
+    focus: !active ? "" : active === slider ? "slider" : active === change ? "footnote"
+      : (active.getAttribute("id") || active.tagName.toLowerCase()),
+  };
+}
+
+/** The slider in `host` worked to `level` as a visitor works it: by pointer -- pressed, dragged and
+ *  let go -- or by keys, one arrow, with the slider keeping the focus. */
+function pick(host, level, by = "pointer") {
+  const slider = host.querySelector("input");
+  slider.focus();
+  dispatch(slider, { type: by === "pointer" ? "pointerdown" : "keydown", key: "ArrowRight" });
+  slider.value = String(level);
+  dispatch(slider, { type: "input" });
+  dispatch(slider, { type: "change" });
+}
+
+/** The focus taken elsewhere on the page, the way a Tab away from the slider takes it. */
+function leave(context, host) {
+  const slider = host.querySelector("input");
+  id(context, "main-content").focus();
+  if (slider) dispatch(slider, { type: "blur" });
+}
+
+/** The sheet's own difficulty section: whether its slider is there, where it stands, and whether
+ *  it has the focus. */
+function sheetTuning(context) {
+  const slider = id(context, "persona-difficulty").querySelector("input");
+  return { slider: !!slider, level: slider ? Number(slider.value) : null,
+           focused: !!slider && context.document.activeElement === slider };
+}
+
+/** The setting itself, as the persona reads it and as the local-state document keeps it. */
+function picked(context) {
+  const now = context.window.interestingPersona.difficulty();
+  return { set: now.set, setting: now.level,
+           kept: context.saved.difficulty === undefined ? null : context.saved.difficulty };
+}
 
 const scenarios = {
   /* A page at rest: nothing is raised, the veil is down, and nothing of the body is put aside --
@@ -783,6 +880,101 @@ const scenarios = {
     const context = load({ stars: [] });
     context.window.interestingPersona.setStars(STARS, "seeded");
     return { handed: handedOver(context), sheetOpen: id(context, "persona-sheet").open };
+  },
+
+  /* Issue #100: a visitor who has never picked a level is offered the slider beside the piece, and
+     the moment they pick one by pointer it is gone -- a footnote in its place, holding the focus
+     the slider had -- and the next piece shows the footnote and no slider. The footnote opens the
+     sheet at its difficulty section, where the slider stays, and follows the setting changed
+     there; the sheet hands the focus back to it as it closes. */
+  whenANewVisitorPicksADifficulty() {
+    const context = load({ stars: STARS });
+    const persona = context.window.interestingPersona;
+    const host = stageHost(context);
+    persona.tuner(host, ONCE);
+    const offered = Object.assign(picked(context), tuning(context, host));
+    pick(host, 4);
+    const chosen = Object.assign(picked(context), tuning(context, host));
+    const nextHost = stageHost(context, "stage-difficulty-next");
+    persona.tuner(nextHost, ONCE);
+    const next = tuning(context, nextHost);
+    nextHost.querySelector(".difficulty-change").click();
+    const opened = { sheetOpen: id(context, "persona-sheet").open, sheet: sheetTuning(context) };
+    pick(id(context, "persona-difficulty"), 5);
+    const changed = Object.assign(picked(context), { footnote: tuning(context, nextHost).footnote,
+                                                     first: tuning(context, host).footnote,
+                                                     sheet: sheetTuning(context) });
+    id(context, "persona-close").click();
+    const closed = { sheetOpen: id(context, "persona-sheet").open, next: tuning(context, nextHost) };
+    return { offered, chosen, next, opened, changed, closed };
+  },
+
+  /* The middle of the dial picked outright is a pick like any other, though the setting does not
+     move and no piece is dealt again for it: the slider goes all the same. */
+  whenTheMiddleIsPickedOutright() {
+    const context = load({ stars: STARS });
+    const host = stageHost(context);
+    context.window.interestingPersona.tuner(host, ONCE);
+    pick(host, 3);
+    return Object.assign(picked(context), tuning(context, host));
+  },
+
+  /* By keys, every arrow is a pick, so the slider stays while it keeps the focus -- a visitor
+     stepping from fair to fierce is not stopped at keen -- and goes as they leave it, without
+     pulling the focus back from wherever they went. */
+  whenADifficultyIsPickedByKeys() {
+    const context = load({ stars: STARS });
+    const host = stageHost(context);
+    context.window.interestingPersona.tuner(host, ONCE);
+    pick(host, 4, "keys");
+    const stepped = Object.assign(picked(context), tuning(context, host));
+    pick(host, 5, "keys");
+    const again = Object.assign(picked(context), tuning(context, host));
+    leave(context, host);
+    return { stepped, again, left: Object.assign(picked(context), tuning(context, host)) };
+  },
+
+  /* Picked in the sheet instead, while the stage's slider is still offered -- at the middle, so the
+     setting does not even move and no reader is told of a change: the stage's slider goes too. */
+  whenADifficultyIsPickedInTheSheet() {
+    const context = load({ stars: STARS });
+    const host = stageHost(context);
+    context.window.interestingPersona.tuner(host, ONCE);
+    const before = tuning(context, host);
+    context.window.interestingPersona.open("difficulty");
+    const opened = sheetTuning(context);
+    pick(id(context, "persona-difficulty"), 3);
+    const during = Object.assign(picked(context), tuning(context, host));
+    id(context, "persona-close").click();
+    return { before, opened, during, after: tuning(context, host), sheet: sheetTuning(context) };
+  },
+
+  /* A visitor who picked a level on an earlier visit: the stage holds a footnote from the first,
+     and the sheet the whole slider, at the level they picked. Taken away, the footnote leaves the
+     host as it found it. */
+  whenADifficultyWasPickedBefore() {
+    const context = load({ stars: STARS, values: { difficulty: 2 } });
+    const host = stageHost(context);
+    const release = context.window.interestingPersona.tuner(host, ONCE);
+    const seen = Object.assign(picked(context), tuning(context, host));
+    const sheet = sheetTuning(context);
+    release();
+    return { seen, sheet, released: { children: host.children.length, className: host.className } };
+  },
+
+  /* A browser that keeps nothing between visits: the pick holds for the page and the footnote says
+     so, and the next visit -- a fresh load, with nothing kept -- is a new visitor's again. */
+  whenTheBrowserKeepsNothing() {
+    const context = load({ stars: STARS, persistent: false });
+    const host = stageHost(context);
+    context.window.interestingPersona.tuner(host, ONCE);
+    const offered = Object.assign(picked(context), tuning(context, host));
+    pick(host, 4);
+    const chosen = Object.assign(picked(context), tuning(context, host));
+    const later = load({ stars: STARS, persistent: false });
+    const laterHost = stageHost(later);
+    later.window.interestingPersona.tuner(laterHost, ONCE);
+    return { offered, chosen, nextVisit: Object.assign(picked(later), tuning(later, laterHost)) };
   },
 
   /* The sheet opened again while a mark is still in the air takes it away: a mark held still behind
