@@ -5511,6 +5511,9 @@ class StageTest(unittest.TestCase):
         self.assertEqual(result["hosts"], ["stage-difficulty"],
                          "the stage did not ask the persona for one slider in the rail's own host")
         self.assertTrue(result["note"], "the slider stands beside the piece saying nothing about itself")
+        # Issue #100: only until a level is picked, and a footnote after -- which is the persona's
+        # tuner to draw (StageDifficultyOfferTest plays it); the stage has to ask for it that way.
+        self.assertTrue(result["once"], "the stage offers the slider beside every piece for good")
         self.assertIn("[3]", result["before"]["title"],
                       "the piece was made at something other than the persona's difficulty")
         self.assertTrue(any(knob["id"] == "hint" for knob in result["before"]["knobs"]),
@@ -7117,6 +7120,150 @@ class PersonaHandOffTest(unittest.TestCase):
         self.assertEqual(seen["look"]["name"], "persona", "and the sheet is open over where it was")
 
 
+class StageDifficultyOfferTest(unittest.TestCase):
+    """Issue #100: the stage offers the difficulty slider only until a visitor has picked a level.
+
+    From the note: "don't show the difficulty slider on every piece of content after it's been
+    selected- that should only happen for a new user who'se never picked a difficulty, and once they
+    pick it, not a slider anymore, at most a footnote. unless they open the persona, there they can
+    change it". Issue #93 had put the persona's one slider at the foot of the rail beside every
+    piece, for good.
+
+    The rule is the persona's tuner's `once`, which js/stage.js asks for (StageTest and RealSiteTest
+    read that off the stage harness): the slider while difficulty().set is false, and from the
+    moment a level is picked -- by pointer, by keys once the slider is left, in the sheet, or at the
+    middle of the dial outright -- one footnote in its place, on that piece and every piece after
+    it. The sheet keeps the full slider whatever has been picked. The issue's three open questions
+    are answered in js/persona.js and asserted here: the footnote says what the puzzles are set at
+    and its button opens the sheet at the difficulty section; it stands on every piece from then on;
+    and a browser that keeps nothing between visits keeps the pick for the page, so its next visit
+    is a new visitor's. What the persona draws is behaviour, so lightbox_harness.mjs drives the real
+    js/persona.js, the one stub browser that runs it.
+    """
+
+    observed = None
+
+    def setUp(self):
+        self.repo = Path(mi.__file__).resolve().parents[2]
+        if not (self.repo / "site").is_dir():
+            self.skipTest(f"no site directory at {self.repo / 'site'}")
+
+    def seen(self):
+        """What the stub browser saw the real js/persona.js do, run once for the whole class."""
+        needs_node(self)
+        if StageDifficultyOfferTest.observed is None:
+            harness = Path(mi.__file__).resolve().parent / "lightbox_harness.mjs"
+            scripts = [self.repo / "site" / "js" / "site.js",
+                       self.repo / "site" / "js" / "persona.js"]
+            if not harness.is_file() or not all(script.is_file() for script in scripts):
+                self.skipTest("no lightbox harness to run")
+            run = subprocess.run([mi.NODE_BIN, str(harness)] + [str(s) for s in scripts],
+                                 capture_output=True, text=True, timeout=120)
+            self.assertEqual(run.returncode, 0, f"the harness failed: {run.stderr[-2000:]}")
+            StageDifficultyOfferTest.observed = json.loads(run.stdout)
+        for name, got in StageDifficultyOfferTest.observed.items():
+            self.assertTrue(got["ok"], f"the {name} scenario did not run: {got.get('error')}")
+        return {name: got["result"] for name, got in StageDifficultyOfferTest.observed.items()}
+
+    def assertFootnote(self, seen, level, why=""):
+        self.assertFalse(seen["slider"], why or "a slider still stands where a level has been picked")
+        self.assertEqual(seen["footnote"], f"Puzzles are set to {level}.")
+        self.assertTrue(seen["noted"])
+        self.assertTrue(seen["changeIsButton"], "the footnote offers no way to the persona sheet")
+        self.assertIn("persona", seen["change"])
+
+    def test_a_new_visitor_is_offered_the_slider_and_a_pick_puts_a_footnote_in_its_place(self):
+        seen = self.seen()["whenANewVisitorPicksADifficulty"]
+        offered = seen["offered"]
+        self.assertFalse(offered["set"])
+        self.assertTrue(offered["slider"], "a visitor who never picked a level is offered no slider")
+        self.assertTrue(offered["note"], "the slider stands beside the piece saying nothing about itself")
+        self.assertIsNone(offered["footnote"])
+        # Let go of at keen: kept, and the slider gone at once -- no reload, no next piece -- with the
+        # focus it had handed to the footnote rather than dropped.
+        chosen = seen["chosen"]
+        self.assertTrue(chosen["set"])
+        self.assertEqual(chosen["kept"], 4, "the pick was not kept in the local-state document")
+        self.assertFootnote(chosen, "keen", "the slider outlived the pick it was offered for")
+        self.assertEqual(chosen["focus"], "footnote", "the focus the slider had was dropped")
+
+    def test_the_next_piece_shows_the_footnote_and_no_slider(self):
+        seen = self.seen()["whenANewVisitorPicksADifficulty"]
+        self.assertFootnote(seen["next"], "keen", "the slider came back on the next piece")
+
+    def test_the_footnote_opens_the_sheet_where_the_slider_stays(self):
+        seen = self.seen()["whenANewVisitorPicksADifficulty"]
+        opened = seen["opened"]
+        self.assertTrue(opened["sheetOpen"], "the footnote's button did not open the persona sheet")
+        self.assertTrue(opened["sheet"]["slider"], "the sheet lost its slider once a level was picked")
+        self.assertEqual(opened["sheet"]["level"], 4)
+        self.assertTrue(opened["sheet"]["focused"], "the sheet did not open at its difficulty section")
+        # Changed there, the footnotes follow -- every one of them -- and stay footnotes.
+        changed = seen["changed"]
+        self.assertEqual(changed["kept"], 5)
+        self.assertEqual(changed["footnote"], "Puzzles are set to fierce.")
+        self.assertEqual(changed["first"], "Puzzles are set to fierce.")
+        closed = seen["closed"]
+        self.assertFalse(closed["sheetOpen"])
+        self.assertFootnote(closed["next"], "fierce")
+        self.assertEqual(closed["next"]["focus"], "footnote", "the sheet did not hand the focus back")
+
+    def test_the_middle_of_the_dial_picked_outright_is_a_pick(self):
+        seen = self.seen()["whenTheMiddleIsPickedOutright"]
+        self.assertTrue(seen["set"])
+        self.assertEqual(seen["kept"], 3)
+        self.assertFootnote(seen, "fair", "a pick that left the setting where it stood kept the slider")
+
+    def test_a_slider_worked_by_keys_stays_until_the_visitor_leaves_it(self):
+        # Every arrow on a slider is a change, so taking it away at the first one would stop a visitor
+        # stepping from fair to fierce at keen. It stays while it keeps the focus, and goes as it is
+        # left, without pulling the focus back from wherever the visitor went.
+        seen = self.seen()["whenADifficultyIsPickedByKeys"]
+        for when, kept in [("stepped", 4), ("again", 5)]:
+            with self.subTest(when=when):
+                self.assertTrue(seen[when]["slider"], "the slider went from under a visitor still on it")
+                self.assertEqual(seen[when]["kept"], kept)
+                self.assertEqual(seen[when]["focus"], "slider")
+        self.assertFootnote(seen["left"], "fierce", "the slider stayed after the visitor left it")
+        self.assertEqual(seen["left"]["focus"], "main-content", "the footnote took the focus back")
+
+    def test_a_pick_in_the_sheet_takes_the_stage_slider_away_too(self):
+        # At the middle, so the setting does not even move and no reader hears of a change.
+        seen = self.seen()["whenADifficultyIsPickedInTheSheet"]
+        self.assertTrue(seen["before"]["slider"])
+        self.assertTrue(seen["opened"]["focused"], "the sheet did not open at its difficulty section")
+        self.assertEqual(seen["during"]["kept"], 3)
+        self.assertFootnote(seen["during"], "fair", "a level picked in the sheet left the stage's slider up")
+        self.assertFootnote(seen["after"], "fair")
+        self.assertTrue(seen["sheet"]["slider"], "the sheet lost its slider")
+
+    def test_a_visitor_who_picked_before_meets_the_footnote_first(self):
+        seen = self.seen()["whenADifficultyWasPickedBefore"]
+        self.assertTrue(seen["seen"]["set"])
+        self.assertFootnote(seen["seen"], "mild", "a visitor who picked a level is offered the slider again")
+        self.assertTrue(seen["sheet"]["slider"], "the sheet is not where the setting can still be changed")
+        self.assertEqual(seen["sheet"]["level"], 2)
+        # Taken away, the footnote leaves the host as it found it.
+        self.assertEqual(seen["released"], {"children": 0, "className": "stage-difficulty"})
+
+    def test_a_browser_that_keeps_nothing_offers_the_slider_again_next_visit(self):
+        seen = self.seen()["whenTheBrowserKeepsNothing"]
+        self.assertTrue(seen["offered"]["slider"])
+        # Picked, it holds for the page, and the footnote says that is all it holds for...
+        chosen = seen["chosen"]
+        self.assertFalse(chosen["slider"], "the slider outlived the pick on a browser that keeps nothing")
+        self.assertEqual(chosen["footnote"], "Puzzles are set to keen for this page.")
+        # ...because the next visit, with nothing kept, cannot know it was ever picked.
+        self.assertFalse(seen["nextVisit"]["set"])
+        self.assertTrue(seen["nextVisit"]["slider"], "a visit with nothing kept was not offered the slider")
+
+    def test_the_sheet_no_longer_says_the_slider_stands_beside_every_piece(self):
+        layout = (self.repo / "site" / "_includes" / "layout.njk").read_text(encoding="utf-8")
+        section = layout[layout.index("id='persona-difficulty-title'"):layout.index("id='persona-difficulty'>")]
+        self.assertNotIn("beside every piece", section, "the sheet still promises a slider on every piece")
+        self.assertIn("once: true", (self.repo / "site" / mi.STAGE_SCRIPT).read_text(encoding="utf-8"))
+
+
 class RealSiteTest(unittest.TestCase):
     """The site in this repository obeys all ten axioms: every page is reachable from the root,
     every page carries the analytics tag and consent banner, every page is responsive and
@@ -7899,6 +8046,8 @@ class RealSiteTest(unittest.TestCase):
         self.assertEqual(moved["hosts"], ["stage-difficulty"],
                          "the stage did not ask the persona for one slider in the rail's own host")
         self.assertTrue(moved["note"], "the slider stands beside the piece saying nothing about itself")
+        self.assertTrue(moved["once"],
+                        "the stage offers the slider beside every piece for good, not only until it is picked")
         self.assertTrue(moved["firstMatchesModule"],
                         "the piece that opened is not the one the module makes at the setting that stood")
         self.assertTrue(moved["dealtAgain"], "the setting moved and no piece was dealt again")
@@ -8922,6 +9071,100 @@ class ExtensionlessAddressTest(unittest.TestCase):
         self.assertRegex(association.group(1), r'event_type\s*=\s*"viewer-request"')
         self.assertRegex(association.group(1), r"function_arn\s*=\s*aws_cloudfront_function\.extensionless\.arn")
         self.assertNotIn("ordered_cache_behavior", cloudfront, "a path the function would not run on")
+
+
+class MailTest(unittest.TestCase):
+    """Issue #107: webmaster@ and support@ the domain forward to charneykaye@gmail.com.
+
+    The work is split at the zone's edge. Mailbot (outrightmental/mailbot) routes the two addresses
+    from its own config.json and owns the receipt rule that does it; this project owns the zone, so
+    it owns everything mail needs published there -- the SES identity, its DKIM and MAIL FROM
+    records, and the inbound MX. These tests hold this project's half: every record lands in the
+    owned zone, the MX points at SES in the region Mailbot receives in, the MAIL FROM stays off the
+    apex, and no receipt rule is declared here to deliver the same mail twice.
+    """
+
+    DNS = Path(mi.__file__).resolve().parents[2] / "infra" / "dns.tf"
+
+    @classmethod
+    def setUpClass(cls):
+        cls.infra = cls.DNS.parent
+
+    def setUp(self):
+        if not self.DNS.is_file():
+            self.skipTest(f"no dns.tf at {self.DNS}")
+        self.dns = self.DNS.read_text()
+
+    def resources(self, kind):
+        """Each `resource "<kind>" "<name>"` block in dns.tf, by name. `terraform fmt` in CI keeps
+        every block's closing brace alone at column zero, which is where each body ends."""
+        return dict(re.findall(rf'^resource "{kind}" "(\w+)" \{{\n(.*?)^\}}', self.dns, re.M | re.S))
+
+    def argument(self, body, name):
+        match = re.search(rf"^  {name}\s*=\s*(.+)$", body, re.M)
+        self.assertIsNotNone(match, f"no {name} in:\n{body}")
+        return match.group(1).strip()
+
+    def test_the_identity_is_the_domain_and_waits_until_ses_has_verified_it(self):
+        identities = self.resources("aws_ses_domain_identity")
+        self.assertEqual(list(identities), ["primary"])
+        self.assertEqual(self.argument(identities["primary"], "domain"), "local.domain")
+        verification = self.resources("aws_ses_domain_identity_verification")
+        self.assertIn("primary", verification)
+        self.assertIn("aws_route53_record.ses_verification", verification["primary"],
+                      "the wait must follow the record SES resolves, or it can start before it exists")
+
+    def test_every_mail_record_goes_into_the_owned_zone(self):
+        records = self.resources("aws_route53_record")
+        for name in ("ses_verification", "ses_dkim", "ses_mail_from_mx", "ses_mail_from_spf", "mx"):
+            self.assertIn(name, records, f"dns.tf publishes no {name} record")
+        for name, body in records.items():
+            with self.subTest(record=name):
+                self.assertEqual(self.argument(body, "zone_id"), "aws_route53_zone.primary.zone_id")
+
+    def test_the_inbound_mx_is_ses_in_the_region_mailbot_receives_in(self):
+        # Mailbot's receipt rules, and the account's one active rule set, live in us-east-1. An MX
+        # pointed at SES anywhere else delivers to a region with no rule for the domain.
+        mx = self.resources("aws_route53_record")["mx"]
+        self.assertEqual(self.argument(mx, "name"), "local.domain")
+        self.assertEqual(self.argument(mx, "type"), '"MX"')
+        self.assertEqual(self.argument(mx, "records"),
+                         '["10 inbound-smtp.${local.aws_region}.amazonaws.com"]')
+        region = re.search(r'^\s*aws_region\s*=\s*"([^"]*)"', (self.infra / "locals.tf").read_text(), re.M)
+        self.assertIsNotNone(region, "locals.tf declares no aws_region")
+        self.assertEqual(region.group(1), "us-east-1")
+
+    def test_dkim_publishes_one_cname_per_token(self):
+        dkim = self.resources("aws_route53_record")["ses_dkim"]
+        self.assertEqual(self.argument(dkim, "count"), "3", "SES issues three DKIM tokens")
+        self.assertEqual(self.argument(dkim, "type"), '"CNAME"')
+        self.assertIn("._domainkey.${local.domain}", self.argument(dkim, "name"))
+        self.assertIn(".dkim.amazonses.com", self.argument(dkim, "records"))
+
+    def test_the_mail_from_domain_is_a_subdomain_and_the_apex_holds_only_the_mx(self):
+        mail_from = self.resources("aws_ses_domain_mail_from")["primary"]
+        self.assertEqual(self.argument(mail_from, "mail_from_domain"), '"mail.${local.domain}"')
+        records = self.resources("aws_route53_record")
+        for name in ("ses_mail_from_mx", "ses_mail_from_spf"):
+            self.assertEqual(self.argument(records[name], "name"),
+                             "aws_ses_domain_mail_from.primary.mail_from_domain")
+        self.assertIn("feedback-smtp.${local.aws_region}.amazonses.com",
+                      self.argument(records["ses_mail_from_mx"], "records"))
+        self.assertIn("v=spf1 include:amazonses.com", self.argument(records["ses_mail_from_spf"], "records"))
+        # The apex already carries the site's alias records (website.tf). The mail records add the
+        # MX there and nothing else: an SPF or DMARC record at the apex would speak for the whole
+        # domain, which nothing here was asked to do.
+        apex = sorted(name for name, body in records.items() if self.argument(body, "name") == "local.domain")
+        self.assertEqual(apex, ["mx"])
+
+    def test_no_receipt_rule_is_declared_here(self):
+        # The routing is Mailbot's. Two receipt rules matching one recipient both act, so a rule
+        # here would deliver every message twice; and the account's one rule set is Mailbot's to
+        # create and activate (mailbot#60), so no set may be declared here either.
+        for path in sorted(self.infra.rglob("*.tf")):
+            with self.subTest(file=path.name):
+                self.assertNotRegex(path.read_text(), r'resource "aws_ses_(active_)?receipt_rule',
+                                    f"{path} declares receiving that belongs to Mailbot")
 
 
 class SmallModelTest(unittest.TestCase):

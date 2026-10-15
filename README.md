@@ -1096,8 +1096,16 @@ on the stage the gate the helper powered down — a visible, unexposed plate whe
   broken — every puzzle on the site dimmed behind a control nobody had been asked to touch — so
   the component is made at the setting that stands and the control is offered *in place* instead:
   `window.interestingSite.difficulty(host)` (the persona's own `tuner`), which
-  [`site/js/stage.js`](site/js/stage.js) mounts at the foot of the rail beside every piece it
-  deals. The rule is the one sentence: **power down what is missing; offer what is merely set.**
+  [`site/js/stage.js`](site/js/stage.js) mounts at the foot of the rail beside the piece it deals.
+  Offered, and no more than that (issue
+  [#100](https://github.com/outrightmental/interesting/issues/100)): the stage asks for it
+  `{ once: true }`, so the slider stands there only for a visitor who has never picked a level.
+  The moment one is picked — on the stage or in the persona sheet — the slider goes, and the stage
+  shows a footnote in its place on every piece from then on: what the puzzles are set at, and a
+  quiet button that opens the sheet at its difficulty section, which keeps the full slider and is
+  where the setting changes afterwards. A browser that keeps nothing between visits keeps the pick
+  for the page, so its next visit is a new visitor's and is offered the slider again. The rule is
+  the one sentence: **power down what is missing; offer what is merely set.**
 
 ### Persona
 
@@ -1377,9 +1385,9 @@ iteration process rather than a one-off tidy-up.
   shell writes four names and no more: `threshold`, the mood flow's reading, `constellation`,
   which the persona writes when a visitor places a star or asks a powered-down world to seed a
   sky, `difficulty`, which the persona writes when a visitor moves the slider in the sheet or
-  beside a piece, and `puzzles`, which the stage writes when a puzzle is solved; the nine names the
-  shell's retired games once kept (`constellation-relay` and its kin) are taken out of a visitor's
-  document on load, so an export stays an honest account of what the site keeps.
+  picks a level beside a piece, and `puzzles`, which the stage writes when a puzzle is solved;
+  the nine names the shell's retired games once kept (`constellation-relay` and its kin) are taken
+  out of a visitor's document on load, so an export stays an honest account of what the site keeps.
 - **One way in and out.** `window.interestingState` owns the parsing, the defaults and every
   failure path. `read(key, fallback)` hands back `{ status, value }`, where `status` is `ok`,
   `missing`, `unreadable` or `unavailable` — a page can render first and explain afterwards, in its
@@ -1807,9 +1815,9 @@ invariant of the iteration, stated in the prompt and held to in code.
   and the feed](#the-feature-and-the-feed)) — so `paint()` and `spark()` are handed no difficulty
   at all, the feed's cards are the same river at any setting, and a module reads `env.difficulty`
   inside `piece()` and nowhere else, defensively, through a small helper of its own (`asked(env)`
-  in every module), because a card's `env` has none. Moving the slider on the stage deals the same
-  seed again with the same card: the subject a visitor pressed stays the subject and only how hard
-  it is asked moves.
+  in every module), because a card's `env` has none. Changing the setting — a new visitor's pick on
+  the stage, or the slider in the persona sheet — deals the same seed again with the same card: the
+  subject a visitor pressed stays the subject and only how hard it is asked moves.
 - **Settable, in any order, and sayable.** Every knob has to be one the visitor it is put in front
   of can actually set, and a piece has to be finishable whatever order they reach its knobs in:
   nothing makes anyone work down the page. The way that fails is quiet — the visitor sets the last
@@ -1885,8 +1893,12 @@ invariant of the iteration, stated in the prompt and held to in code.
   must open as that card — its own title and line while the module loads, its configuration on the
   piece's `env`, its stretch on the scene's frame, and never the world's generic line (issue #80);
   and the persona's difficulty slider, which the stage must ask the persona for in the rail's own
-  host and which, moved, must deal the same world and the same seed again as the piece the module
-  makes at the new setting, still playable to a solve (issue #93).
+  host, only until a level is picked (issue #100), and which, moved, must deal the same world and
+  the same seed again as the piece the module makes at the new setting, still playable to a solve
+  (issue #93). What the persona draws in that host — the slider for a new visitor, the footnote
+  once a level is picked, by pointer, by keys, in the sheet or at the middle of the dial outright —
+  is played by [`.github/scripts/lightbox_harness.mjs`](.github/scripts/lightbox_harness.mjs),
+  the one stub browser that runs the real `js/persona.js`.
   `StageTest` plays purpose-built pieces through it and `RealSiteTest` plays the site as committed;
   like the piece harness it is outside `/site`, so a run cannot soften it. Deliberately, it holds
   the site as committed rather than refusing a plan: it drives the stage through the stage's own

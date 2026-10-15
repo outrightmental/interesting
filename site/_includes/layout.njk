@@ -224,12 +224,13 @@
       <p class='panel-note'>Your stars do not change this reading. A puzzle you have begun keeps its clues when you change the sky. <a href='{{ siteRoot }}moods.html'>the mood atlas</a> shows where each reading can lead.</p>
     </section>
     {# The third setting, named as plainly as the constellation (issue #93): one slider for how hard
-       every puzzle on the site comes out. js/persona.js renders the control into the host below --
-       the same one js/stage.js puts beside the piece it is dealing, so the setting is settable
-       wherever it is a dependency and there is only ever one slider to learn. #}
+       every puzzle on the site comes out. js/persona.js renders the control into the host below,
+       and it stays here whatever has been picked: this is where a visitor changes it. The stage
+       offers the same slider beside a piece only to a visitor who has never picked a level, and a
+       footnote after that (issue #100), so there is only ever one slider to learn. #}
     <section class='persona-section' aria-labelledby='persona-difficulty-title'>
       <h3 id='persona-difficulty-title' class='panel-label'>difficulty</h3>
-      <p class='panel-note'>One setting for every puzzle on this site: how many hints a piece will give you when you ask, and how close a measured answer has to be. The same slider stands beside every piece, so you can change your mind there.</p>
+      <p class='panel-note'>One setting for every puzzle on this site: how many hints a piece will give you when you ask, and how close a measured answer has to be. Change it here whenever you like; once you have picked one, a piece only notes what it is set at.</p>
       <div class='persona-difficulty' id='persona-difficulty'></div>
     </section>
   </dialog>
