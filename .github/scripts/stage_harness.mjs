@@ -1469,6 +1469,101 @@ async function wrongThenRight(stageDir, worlds, deal, clock) {
   return out;
 }
 
+/* A piece left unsolved, and the way on pressed wherever else it is shown (issue #109). The mark is
+   never disabled now, so a visitor can walk away from a puzzle they would rather not finish -- and
+   walking away is an incomplete attempt, not a finish. So a piece is opened, answered wrong and
+   checked, and then the way on is pressed over it: the next card on the stack has to open, the
+   leaving has to be reported once ('stage:incomplete', with the try it had), and nothing of a finish
+   may happen -- no ceremony, no 'stage:complete', nothing added to the tally of solves the store
+   keeps, and the address replaced rather than pushed, so the back button does not walk back into
+   a piece that was passed over.
+
+   Then a double press: the way on pressed and pressed again while the first press's piece is still
+   leaving, which is one departure and must take one card off the stack, not two. Then the stage's
+   two states with no piece on them that the mark shows in: a world with nothing to play, and a
+   module still loading, which must never land over the card the press opened instead. Each press
+   reads off what the mark looked like as it was pressed. Reports what it saw; judges none of it. */
+async function leftUnsolved(stageDir, worlds, deal, clock) {
+  const nowhere = { file: MISSING_WORLD, name: 'nowhere', orientation: 'lost', mood: 'tender', what: 'No module lives here.' };
+  const page = await load(stageDir, worlds.concat([nowhere]), clock, { store: true });
+  // The stack: the deal, round and round, each card a seed of its own, so every card dealt is one
+  // the stage has not had on it yet and what is on the stage says which card it was.
+  const taken = [];
+  page.win.interestingFeed = {
+    take: () => {
+      const card = deal[taken.length % deal.length];
+      taken.push({ file: card.file, seed: card.seed + 31 * (taken.length + 1), kind: 'world' });
+      return taken[taken.length - 1];
+    },
+    consume() {}
+  };
+  const api = page.win.interestingStage;
+  const count = (type) => page.events.filter((e) => e.type === type).length;
+  const button = page.doc.getElementById('stage-next');
+  // The way on pressed as a visitor presses it -- `again` ms later a second time, if asked -- and
+  // the stage given the time to send away what was there and bring on what the stack dealt next.
+  const press = async (again) => {
+    const before = { opens: count('stage:open'), taken: taken.length, incomplete: count('stage:incomplete'),
+                     addresses: page.addresses.length };
+    const seen = { mode: page.stage.dataset.mode, lit: button.dataset.lit !== undefined, enabled: !button.disabled };
+    if (button.disabled) return Object.assign({ pressed: false }, seen);
+    button.dispatchEvent({ type: 'click' });
+    if (again !== undefined) {
+      await clock.advance(again);
+      seen.secondMode = page.stage.dataset.mode;
+      button.dispatchEvent({ type: 'click' });
+    }
+    for (let i = 0; i < 100 && count('stage:open') === before.opens; i++) await clock.advance(200);
+    await clock.advance(3000); // long enough for a second card to have opened, had one been taken
+    return Object.assign(seen, {
+      pressed: true,
+      opened: count('stage:open') - before.opens,
+      taken: taken.length - before.taken,
+      dealt: taken[taken.length - 1] || null,
+      now: api.current(),
+      incomplete: page.events.filter((e) => e.type === 'stage:incomplete').slice(before.incomplete).map((e) => e.detail),
+      addresses: page.addresses.slice(before.addresses).map((a) => a.how),
+      look: look(page)
+    });
+  };
+
+  api.open(deal[0].file, deal[0].seed, { arriving: true });
+  if (!(await waitForPiece(page, clock))) return { playable: false, world: '', seed: 0, look: look(page) };
+  const was = api.current();
+  // A visitor with solves behind them already, so a tally that moved is a number that changed.
+  page.win.interestingState.set('puzzles', { solved: 3, tries: 5, hints: 1 });
+  const out = { playable: true, world: was.file, seed: was.seed, opened: look(page) };
+  const answers = await answersFor(stageDir, worlds, was.file, was.seed, {});
+  out.unset = await playKnobs(page, clock, 'move', wrongAnswers(answers));
+  out.checked = (await pressCheck(page, clock)).pressed;
+  out.afterWrong = look(page);
+  page.events.length = 0;
+  out.left = await press();
+  out.completes = count('stage:complete');
+  out.tally = page.kept('puzzles');
+
+  // Pressed twice in a row over the piece the stack dealt next, the second while the first one's
+  // piece is still leaving.
+  page.events.length = 0;
+  out.twice = await press(200);
+
+  // A world with nothing to play: no piece, so nothing to leave unsolved, and the way on is what
+  // the stage offers.
+  api.open(MISSING_WORLD, 7, { push: false });
+  await clock.advance(1000);
+  page.events.length = 0;
+  out.empty = await press();
+
+  // A module still loading: open() is awaited by nobody here, which is what catches the stage in
+  // that state, and the press comes before the module has landed.
+  const late = { file: deal[0].file, seed: deal[0].seed + 977 };
+  page.events.length = 0;
+  api.open(late.file, late.seed, { arriving: true });
+  out.loading = Object.assign({ late }, await press());
+  out.loading.lateOpened = page.events.some((e) => e.type === 'stage:open' && e.detail && e.detail.seed === late.seed);
+  return out;
+}
+
 /* The difficulty, offered where it is a dependency (issue #93). Every piece this stage deals is
    made at the persona's difficulty, so the stage asks the persona for the one slider in the host
    _includes/stage.njk leaves at the foot of the rail -- once, only until a level is picked (issue

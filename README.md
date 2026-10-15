@@ -1842,10 +1842,14 @@ invariant of the iteration, stated in the prompt and held to in code.
   (issue #89); a card pressed, which
   must open as that card — its own title and line while the module loads, its configuration on the
   piece's `env`, its stretch on the scene's frame, and never the world's generic line (issue #80);
-  and the persona's difficulty slider, which the stage must ask the persona for in the rail's own
+  the persona's difficulty slider, which the stage must ask the persona for in the rail's own
   host, only until a level is picked (issue #100), and which, moved, must deal the same world and
   the same seed again as the piece the module makes at the new setting, still playable to a solve
-  (issue #93). What the persona draws in that host — the slider for a new visitor, the footnote
+  (issue #93); and a piece answered wrong and then left by the way on, which must open the next
+  card and be reported once as an incomplete attempt — no ceremony, nothing on the tally, the
+  address replaced — with a second press over the same leaving taking no second card, and a press
+  over a world with nothing to play or a module still loading opening the next card all the same
+  (issue #109). What the persona draws in that host — the slider for a new visitor, the footnote
   once a level is picked, by pointer, by keys, in the sheet or at the middle of the dial outright —
   is played by [`.github/scripts/lightbox_harness.mjs`](.github/scripts/lightbox_harness.mjs),
   the one stub browser that runs the real `js/persona.js`.
