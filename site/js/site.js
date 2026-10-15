@@ -85,9 +85,11 @@
   The other half of the same axiom is a dependency that is already met: the persona's difficulty
   (issue #93) always holds a value, so a part that reads it is never powered down -- it is dealt
   at the setting that stands, and the slider that changes it is offered in place instead, through
-  difficulty(host, options) above. Powering every puzzle on the site down behind a slider nobody
-  had been asked to touch is the "never broken" half of the axiom broken, so the rule is: power
-  down what is missing, offer what is merely set.
+  difficulty(host, options) above -- with { once: true } only until a visitor picks a level, and
+  as a footnote pointing to the persona sheet from then on (issue #100), which is how the stage
+  offers it. Powering every puzzle on the site down behind a slider nobody had been asked to
+  touch is the "never broken" half of the axiom broken, so the rule is: power down what is
+  missing, offer what is merely set.
 
   ---------------------------------------------------------------------------------------------
   Caution before a destructive action

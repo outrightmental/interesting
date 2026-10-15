@@ -73,8 +73,10 @@
                       the press is the piece's again and the stage must add nothing of its own;
                       the same press with less motion asked for; and a press on a piece that is
                       taken away under it, which may leave nothing behind.
-    difficultyMoved   The difficulty, settable where it is a dependency (issue #93). Open a piece,
-                      find the slider the stage asked the persona for at the foot of the rail, move
+    difficultyMoved   The difficulty, offered where it is a dependency (issue #93). Open a piece,
+                      find the slider the stage asked the persona for at the foot of the rail --
+                      and whether it asked for it once, only until a level is picked (issue #100),
+                      which the persona's own tuner answers and lightbox_harness.mjs plays -- move
                       it to the fiercest setting, and report what the stage did: the piece has to be
                       dealt again at the same world and the same seed, it has to be the piece the
                       module makes at the new setting, and it has to still play to its end.
@@ -440,9 +442,10 @@ function makePage(worlds, clock, options) {
   make('span', 'stage-done-text', done).textContent = 'done';
   make('div', 'stage-progress', end);
   // The host the difficulty slider is rendered into, at the foot of the rail, as _includes/
-  // stage.njk writes it: the setting every piece is dealt at, settable where it is a dependency
-  // (issue #93). The stub persona below renders nothing into it and only records that it was
-  // asked, because what is being read off here is what the stage does when the setting moves.
+  // stage.njk writes it: the setting every piece is dealt at, offered where it is a dependency
+  // (issue #93) until a level is picked (issue #100). The stub persona below renders nothing into
+  // it and only records how it was asked, because what is being read off here is what the stage
+  // does when the setting moves; what the persona draws there is lightbox_harness.mjs's to play.
   make('div', 'stage-difficulty', side, 'stage-difficulty');
   // The way on, outside the inner the vanish transforms: never disabled (issue #109), and dim until
   // the stage lights it (data-lit).
@@ -456,9 +459,10 @@ function makePage(worlds, clock, options) {
   // here rather than a value, exactly as a browser's own list changes under a running page.
   const motion = { calm: false };
   // The persona's difficulty, as this page holds it: the middle of the dial until a scenario moves
-  // it, `hosts` the elements the stage asked for the slider in, and `listeners` whatever the stage
-  // registered through onDifficulty so a change reaches it however it was made.
-  const tuned = { level: MIDDLE_DIFFICULTY.level, hosts: [], note: '', listeners: [], set: () => {} };
+  // it, `hosts` the elements the stage asked for the slider in, `once` whether it asked for the
+  // slider only until a level is picked, and `listeners` whatever the stage registered through
+  // onDifficulty so a change reaches it however it was made.
+  const tuned = { level: MIDDLE_DIFFICULTY.level, hosts: [], note: '', once: false, listeners: [], set: () => {} };
   const calmQuery = { get matches() { return motion.calm; }, addEventListener() {} };
   const win = {
     document: doc,
@@ -500,6 +504,7 @@ function makePage(worlds, clock, options) {
       tuner(host, options) {
         tuned.hosts.push(host && host.getAttribute ? host.getAttribute('id') || '' : '');
         tuned.note = (options && options.note) || '';
+        tuned.once = !!(options && options.once);
         tuned.set = (level) => {
           tuned.level = Math.max(1, Math.min(5, Math.round(Number(level)) || 3));
           const now = difficultyAt(tuned.level);
@@ -1464,104 +1469,10 @@ async function wrongThenRight(stageDir, worlds, deal, clock) {
   return out;
 }
 
-/* A piece left unsolved, and the way on pressed wherever else it is shown (issue #109). The mark is
-   never disabled now, so a visitor can walk away from a puzzle they would rather not finish -- and
-   walking away is an incomplete attempt, not a finish. So a piece is opened, answered wrong and
-   checked, and then the way on is pressed over it: the next card on the stack has to open, the
-   leaving has to be reported once ('stage:incomplete', with the try it had), and nothing of a finish
-   may happen -- no ceremony, no 'stage:complete', nothing added to the tally of solves the store
-   keeps, and the address replaced rather than pushed, so the back button does not walk back into
-   a piece that was passed over.
-
-   Then a double press: the way on pressed and pressed again while the first press's piece is still
-   leaving, which is one departure and must take one card off the stack, not two. Then the stage's
-   two states with no piece on them that the mark shows in: a world with nothing to play, and a
-   module still loading, which must never land over the card the press opened instead. Each press
-   reads off what the mark looked like as it was pressed. Reports what it saw; judges none of it. */
-async function leftUnsolved(stageDir, worlds, deal, clock) {
-  const nowhere = { file: MISSING_WORLD, name: 'nowhere', orientation: 'lost', mood: 'tender', what: 'No module lives here.' };
-  const page = await load(stageDir, worlds.concat([nowhere]), clock, { store: true });
-  // The stack: the deal, round and round, each card a seed of its own, so every card dealt is one
-  // the stage has not had on it yet and what is on the stage says which card it was.
-  const taken = [];
-  page.win.interestingFeed = {
-    take: () => {
-      const card = deal[taken.length % deal.length];
-      taken.push({ file: card.file, seed: card.seed + 31 * (taken.length + 1), kind: 'world' });
-      return taken[taken.length - 1];
-    },
-    consume() {}
-  };
-  const api = page.win.interestingStage;
-  const count = (type) => page.events.filter((e) => e.type === type).length;
-  const button = page.doc.getElementById('stage-next');
-  // The way on pressed as a visitor presses it -- `again` ms later a second time, if asked -- and
-  // the stage given the time to send away what was there and bring on what the stack dealt next.
-  const press = async (again) => {
-    const before = { opens: count('stage:open'), taken: taken.length, incomplete: count('stage:incomplete'),
-                     addresses: page.addresses.length };
-    const seen = { mode: page.stage.dataset.mode, lit: button.dataset.lit !== undefined, enabled: !button.disabled };
-    if (button.disabled) return Object.assign({ pressed: false }, seen);
-    button.dispatchEvent({ type: 'click' });
-    if (again !== undefined) {
-      await clock.advance(again);
-      seen.secondMode = page.stage.dataset.mode;
-      button.dispatchEvent({ type: 'click' });
-    }
-    for (let i = 0; i < 100 && count('stage:open') === before.opens; i++) await clock.advance(200);
-    await clock.advance(3000); // long enough for a second card to have opened, had one been taken
-    return Object.assign(seen, {
-      pressed: true,
-      opened: count('stage:open') - before.opens,
-      taken: taken.length - before.taken,
-      dealt: taken[taken.length - 1] || null,
-      now: api.current(),
-      incomplete: page.events.filter((e) => e.type === 'stage:incomplete').slice(before.incomplete).map((e) => e.detail),
-      addresses: page.addresses.slice(before.addresses).map((a) => a.how),
-      look: look(page)
-    });
-  };
-
-  api.open(deal[0].file, deal[0].seed, { arriving: true });
-  if (!(await waitForPiece(page, clock))) return { playable: false, world: '', seed: 0, look: look(page) };
-  const was = api.current();
-  // A visitor with solves behind them already, so a tally that moved is a number that changed.
-  page.win.interestingState.set('puzzles', { solved: 3, tries: 5, hints: 1 });
-  const out = { playable: true, world: was.file, seed: was.seed, opened: look(page) };
-  const answers = await answersFor(stageDir, worlds, was.file, was.seed, {});
-  out.unset = await playKnobs(page, clock, 'move', wrongAnswers(answers));
-  out.checked = (await pressCheck(page, clock)).pressed;
-  out.afterWrong = look(page);
-  page.events.length = 0;
-  out.left = await press();
-  out.completes = count('stage:complete');
-  out.tally = page.kept('puzzles');
-
-  // Pressed twice in a row over the piece the stack dealt next, the second while the first one's
-  // piece is still leaving.
-  page.events.length = 0;
-  out.twice = await press(200);
-
-  // A world with nothing to play: no piece, so nothing to leave unsolved, and the way on is what
-  // the stage offers.
-  api.open(MISSING_WORLD, 7, { push: false });
-  await clock.advance(1000);
-  page.events.length = 0;
-  out.empty = await press();
-
-  // A module still loading: open() is awaited by nobody here, which is what catches the stage in
-  // that state, and the press comes before the module has landed.
-  const late = { file: deal[0].file, seed: deal[0].seed + 977 };
-  page.events.length = 0;
-  api.open(late.file, late.seed, { arriving: true });
-  out.loading = Object.assign({ late }, await press());
-  out.loading.lateOpened = page.events.some((e) => e.type === 'stage:open' && e.detail && e.detail.seed === late.seed);
-  return out;
-}
-
-/* The difficulty, settable where it is a dependency (issue #93). Every piece this stage deals is
+/* The difficulty, offered where it is a dependency (issue #93). Every piece this stage deals is
    made at the persona's difficulty, so the stage asks the persona for the one slider in the host
-   _includes/stage.njk leaves at the foot of the rail, and moving it has to deal the piece again --
+   _includes/stage.njk leaves at the foot of the rail -- once, only until a level is picked (issue
+   #100), which is the persona's to honour -- and moving it has to deal the piece again --
    the same world and the same seed, because the subject a visitor pressed is still the subject and
    only how hard it is asked has moved. Reports where the slider was asked for, what the piece was
    before and after, and whether the piece the stage then opened is the piece the module makes at
@@ -1570,7 +1481,8 @@ async function difficultyMoved(stageDir, worlds, deal, clock) {
   const page = await load(stageDir, worlds, clock);
   page.win.interestingFeed = { take: () => null, consume() {} };
   const api = page.win.interestingStage;
-  const out = { hosts: page.tuned.hosts.slice(), note: page.tuned.note, level: page.tuned.level };
+  const out = { hosts: page.tuned.hosts.slice(), note: page.tuned.note, once: page.tuned.once,
+                level: page.tuned.level };
   api.open(deal[0].file, deal[0].seed, { arriving: true });
   if (!(await waitForPiece(page, clock))) return Object.assign(out, { playable: false });
   out.playable = true;
