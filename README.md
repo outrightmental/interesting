@@ -1793,7 +1793,7 @@ invariant of the iteration, stated in the prompt and held to in code.
   scenario steps by hand so a 1.8-second hold costs nothing, a canvas that records nothing, and a
   feed that deals the worlds it is told to. It plays every piece the way a visitor who knows the
   answer would — the helpers worked, the answers set to the module's own solution, read by asking
-  the module for the very piece the stage opened — and presses the check. Ten scenarios: a world
+  the module for the very piece the stage opened — and presses the check. Eleven scenarios: a world
   played, another played, and the first dealt again, each round solving, sitting out six seconds
   of its own clock to prove the stage does not see itself out, and then opening the next when the
   way on is pressed; every answer set wrong and checked, which must be refused, counted, said on
@@ -1809,9 +1809,13 @@ invariant of the iteration, stated in the prompt and held to in code.
   (issue #89); a card pressed, which
   must open as that card — its own title and line while the module loads, its configuration on the
   piece's `env`, its stretch on the scene's frame, and never the world's generic line (issue #80);
-  and the persona's difficulty slider, which the stage must ask the persona for in the rail's own
+  the persona's difficulty slider, which the stage must ask the persona for in the rail's own
   host and which, moved, must deal the same world and the same seed again as the piece the module
-  makes at the new setting, still playable to a solve (issue #93).
+  makes at the new setting, still playable to a solve (issue #93); and an order sorted every way a
+  visitor sorts one — tapped, carried by the keyboard and put back with Escape, dragged by a mouse
+  and by a finger on its handle, a finger on its words that must move nothing, and drags the
+  browser takes back or Escape puts back — which must have no control beside its rows, and must
+  give the piece the order the rows show at every put-down and at nothing else (issue #104).
   `StageTest` plays purpose-built pieces through it and `RealSiteTest` plays the site as committed;
   like the piece harness it is outside `/site`, so a run cannot soften it. Deliberately, it holds
   the site as committed rather than refusing a plan: it drives the stage through the stage's own
@@ -1846,7 +1850,7 @@ invariant of the iteration, stated in the prompt and held to in code.
   on the committed site rather than on a plan, for the reason given above.
 - **True of the site as committed**: `RealSiteTest` builds `/site` and plays every world's piece
   through the law on every pull request and before every deploy, plays the stage itself through the
-  ten scenarios above, checks that every world page is the stage and that the threshold hosts the
+  eleven scenarios above, checks that every world page is the stage and that the threshold hosts the
   question on it, checks that every world's module reads `env.difficulty` inside its pieces, and
   checks that the limits the prompt states are the harness's own.
 

@@ -165,9 +165,10 @@
     word     a short typed answer: length (the most letters), placeholder, upper (true to
              capitalise as typed); set once something is typed; apply(id, string). The verifier
              compares how it likes (case, spaces); solution gives the string
-    order    items ({ label, value }) the visitor arranges with up and down; value is the array
-             of item values in their current order, set at the first move; solution gives the
-             array that solves
+    order    items ({ label, value }) the visitor sorts by hand: a row dragged into place, or
+             picked up by a tap or a key and put down in its place (never a pair of up and down
+             buttons beside each item: issue #104); value is the array of item values in their
+             current order, set at the first move; solution gives the array that solves
     pick     items ({ label, value }) with `count` to choose; value is the array of chosen item
              values in item order, set once exactly `count` are chosen (any number, if `count` is
              left out); solution gives the array
@@ -2134,13 +2135,22 @@ const KNOBS = {
     };
     knob.appendChild(input);
   },
-  // Items to put in order, with up and down beside each. Any move is the visitor giving an order
-  // -- a move at an end that goes nowhere included -- and "keep this order" says the order it
-  // opened in is the answer, the way a slider left where it stands is one.
+  // Items to put in order, sorted by hand (issue #104): a row is picked up and put down where it
+  // goes, and nothing else moves it. There are three ways to do that, and they are one gesture. A
+  // pointer drags a row -- a mouse or a pen from anywhere on it, a finger by the grip at its end,
+  // so a thumb on the list still scrolls the page -- and the rows it passes step aside to open the
+  // gap it will land in. A tap picks a row up and a tap on another puts it down in that one's
+  // place: one pointer and no dragging (WCAG 2.5.7). And the keyboard picks the focused row up with
+  // Enter or Space, carries it with the arrow keys (Home and End take it to either end), puts it
+  // down with Enter or Space and puts it back with Escape; with nothing in hand the arrow keys walk
+  // the rows. Each pick-up, carry and put-down is said out loud as it happens. There is no move
+  // button beside an item and there never will be again: an up and a down by every row had a
+  // visitor press a thing along one place at a time, which is not how anybody sorts anything. Every
+  // row put down is the visitor giving an order -- one put down where it was picked up included --
+  // and "keep this order" says the order it opened in is the answer, the way a slider left where it
+  // stands is one.
   order(step, knob, askId) {
     const items = (Array.isArray(step.items) ? step.items : []).slice(0, 8).filter((i) => i && typeof i === 'object');
-    const list = el('ol', 'knob-order');
-    list.setAttribute('aria-labelledby', askId);
     let values = Array.isArray(step.value) && step.value.length === items.length
       && step.value.every((v) => items.some((i) => i.value === v)) ? step.value.slice() : items.map((i) => i.value);
     const state = current.state.get(step.id);
@@ -2149,77 +2159,360 @@ const KNOBS = {
       const item = items.find((i) => i.value === v);
       return item && item.label != null ? String(item.label) : String(v);
     };
+    const list = el('ol', 'knob-order');
+    list.setAttribute('aria-labelledby', askId);
+    // What to do, under the list and kept to whatever is in hand. The keys are told to a screen
+    // reader with every row, and what happens is said on a line of its own as it happens.
+    const IDLE = 'drag a row into place by its handle, or tap it and then its place';
+    const how = el('p', 'knob-note knob-order-how', IDLE);
+    how.id = 'knob-order-how-' + step.id;
+    const keys = hidden('Enter picks a row up, the arrow keys carry it, Enter puts it down and Escape puts it back.');
+    keys.id = 'knob-order-keys-' + step.id;
+    const told = hidden('');
+    told.setAttribute('aria-live', 'polite');
+    const rows = new Map(); // value -> its row, made once and moved, so the focus and its rites go with it
+    const byButton = new Map(); // a row's button -> its value
+    let held = null; // the row picked up by a tap or a key: { value, from }
+    let drag = null; // a press that may become a drag: { value, id, y, live } and, live, what it read
+    let swallow = false; // the click a drag ends on is not a tap
+    const placeOf = (v) => values.indexOf(v);
+    const where = (v) => 'place ' + (placeOf(v) + 1) + ' of ' + values.length;
+    const tell = (text) => {
+      told.textContent = text;
+    };
     function give() {
       const v = values.slice();
       apply(step.id, v);
       markSet(step.id, v, 'knob');
     }
-    // Where each row stands, by its value, so a swap can be played from the old place to the new.
+    // A row is one button: its place, its name and the grip a finger drags it by.
+    values.forEach((v) => {
+      const li = el('li', 'knob-order-item');
+      const button = el('button', 'knob-order-row');
+      button.type = 'button';
+      button.setAttribute('aria-describedby', how.id + ' ' + keys.id);
+      const place = el('span', 'knob-order-place');
+      place.setAttribute('aria-hidden', 'true');
+      const grip = el('span', 'knob-order-grip');
+      grip.setAttribute('aria-hidden', 'true');
+      button.appendChild(place);
+      button.appendChild(el('span', 'knob-order-label', labelOf(v)));
+      button.appendChild(grip);
+      li.appendChild(button);
+      rows.set(v, { li, button, place, grip, turn: '' });
+      byButton.set(button, v);
+      button.addEventListener('click', (ev) => pressed(v, ev));
+      li.addEventListener('pointerdown', (ev) => down(v, ev));
+      li.addEventListener('pointermove', (ev) => moved(v, ev));
+      li.addEventListener('pointerup', (ev) => up(v, ev));
+      li.addEventListener('pointercancel', () => cancel(v));
+    });
+    // Where every row stands on the screen, translated or not, by its value.
     function tops() {
       const out = new Map();
-      Array.from(list.children || []).forEach((row, k) => {
-        if (typeof row.getBoundingClientRect === 'function') out.set(values[k], row.getBoundingClientRect().top);
-      });
+      for (const [v, r] of rows) {
+        if (typeof r.li.getBoundingClientRect === 'function') out.set(v, r.li.getBoundingClientRect().top);
+      }
       return out;
     }
-    function move(i, d, refocus) {
-      const j = i + d;
-      if (j >= 0 && j < values.length) {
-        const before = calm.matches ? null : tops();
-        const held = values[i];
-        values[i] = values[j];
-        values[j] = held;
-        draw();
-        // The swap in a step series (README: "Motion axiom"): the two rows that changed places are
-        // handed the distance back to where they were (--dy) and the stylesheet's row-swap steps
-        // them from there to here in landing treads, one way only. The DOM order is rebuilt at
-        // once and is the truth. Every place is read before anything is written, so the move costs
-        // one layout and not one a row.
-        if (before) {
-          const after = tops();
-          Array.from(list.children || []).forEach((row, k) => {
-            const was = before.get(values[k]);
-            const is = after.get(values[k]);
-            if (was === undefined || is === undefined || Math.abs(was - is) < 0.5) return;
-            row.style.setProperty('--dy', (was - is).toFixed(1) + 'px');
-            row.setAttribute('data-flip', '');
-          });
+    // The row after `node` in the list, or null.
+    function rowAfter(node) {
+      const all = list.children;
+      const at = Array.prototype.indexOf.call(all, node);
+      return at < 0 ? null : all[at + 1] || null;
+    }
+    // The rows put in the order of `values`, each named by where it now stands. The DOM is the
+    // truth from the first moment, and the row with the keyboard never leaves it -- a row taken
+    // out of the document drops the focus -- so the rest are put round it: the rows above it
+    // chained up from it, the rows below chained down, each moved only where its neighbour is not
+    // already the right one. With `before` (tops(), read before anything moved), every row that
+    // changed places steps there from where it stood in one stair (README: "Motion axiom": things
+    // that change places move there): it is handed the distance back (--dy) and the stylesheet's
+    // row-swap carries it home in landing treads rolled for this move, one way only. A landing
+    // still in flight is overtaken from where it stands, under the other of the two names
+    // (data-flip a and b), so it starts again rather than jumping.
+    function lay(before) {
+      if (list.children.length !== values.length) {
+        values.forEach((v) => list.appendChild(rows.get(v).li));
+      } else {
+        const had = document.activeElement;
+        const pinned = had && byButton.has(had) ? byButton.get(had) : values[0];
+        const pin = rows.get(pinned).li;
+        const at = values.indexOf(pinned);
+        let anchor = pin;
+        for (let k = at - 1; k >= 0; k--) {
+          const li = rows.get(values[k]).li;
+          if (rowAfter(li) !== anchor) list.insertBefore(li, anchor);
+          anchor = li;
         }
-        const row = list.children[j];
-        const again = row && row.querySelectorAll('button')[refocus];
-        if (again && typeof again.focus === 'function') again.focus();
+        anchor = pin;
+        for (let k = at + 1; k < values.length; k++) {
+          const li = rows.get(values[k]).li;
+          if (rowAfter(anchor) !== li) list.insertBefore(li, rowAfter(anchor));
+          anchor = li;
+        }
+      }
+      for (const [v, r] of rows) {
+        r.button.setAttribute('aria-label', labelOf(v) + ', ' + where(v));
+        r.place.textContent = String(placeOf(v) + 1);
+      }
+      if (!before || calm.matches) return;
+      for (const r of rows.values()) r.li.removeAttribute('data-flip');
+      const after = tops(); // every place read before any is written: one layout, not one a row
+      for (const [v, r] of rows) {
+        const was = before.get(v);
+        const is = after.get(v);
+        if (was === undefined || is === undefined || Math.abs(was - is) < 0.5) continue;
+        const turn = r.turn === 'a' ? 'b' : 'a';
+        r.turn = turn;
+        const ms = cutOn(r.li, 'row-swap', { family: 'arrive', duration: 'medium', alias: 'row-swap-b' });
+        r.li.style.setProperty('--dy', (was - is).toFixed(1) + 'px');
+        r.li.setAttribute('data-flip', turn);
+        whenEnded(r.li, turn === 'a' ? 'row-swap' : 'row-swap-b', '', (ms || riteMs('medium', 340)) * 2 + 200, () => {
+          if (r.li.getAttribute('data-flip') === turn) r.li.removeAttribute('data-flip');
+        }, true);
+      }
+    }
+    // One row taken from its place to another, the rows between closing up behind it.
+    function carry(v, to) {
+      const from = placeOf(v);
+      if (to < 0 || to >= values.length || to === from) return false;
+      const before = tops();
+      values.splice(to, 0, values.splice(from, 1)[0]);
+      lay(before);
+      if (held) sides();
+      return true;
+    }
+    // While a row is in hand every other row is a place it can go: above that row, for one above
+    // the row in hand, and below it for one below, which is where the stylesheet draws the line
+    // a pointer over it would put it down at.
+    function sides() {
+      const from = held ? placeOf(held.value) : -1;
+      for (const [v, r] of rows) {
+        if (!held || v === held.value) r.li.removeAttribute('data-side');
+        else r.li.setAttribute('data-side', placeOf(v) < from ? 'before' : 'after');
+      }
+    }
+    // Picked up by a tap or a key: the row reads as pressed -- sealed round where it was pressed,
+    // as every pressed control is -- the rest become the places it can go, and the line under the
+    // list says what to do with it.
+    function hold(v, keyed) {
+      held = { value: v, from: placeOf(v) };
+      rows.get(v).button.setAttribute('aria-pressed', 'true');
+      list.classList.add('is-holding');
+      sides();
+      inscribe(how, keyed ? 'the arrow keys carry ' + labelOf(v) + '; Enter puts it down, Escape puts it back'
+        : 'now tap where ' + labelOf(v) + ' goes, or tap it again to leave it there');
+      tell(labelOf(v) + ' picked up, ' + where(v));
+    }
+    // Nothing in hand any more, whether it was put down, put back or let go of.
+    function release() {
+      if (!held) return;
+      const r = rows.get(held.value);
+      held = null;
+      r.button.removeAttribute('aria-pressed');
+      list.classList.remove('is-holding');
+      sides();
+      inscribe(how, IDLE);
+    }
+    // A row pressed: picked up, or -- with one in hand -- the place it goes. Pressed on itself the
+    // row in hand is put down where it stands, and that is an order given as much as a move is.
+    function pressed(v, ev) {
+      const keyed = !!ev && ev.detail === 0; // a click with no clicks counted is a key's
+      if (swallow && !keyed) {
+        swallow = false;
+        return;
+      }
+      if (drag && drag.live) return;
+      if (!held) {
+        hold(v, keyed);
+        return;
+      }
+      const what = held.value;
+      release();
+      if (what !== v) carry(what, placeOf(v));
+      give();
+      tell(labelOf(what) + ' put down in ' + where(what));
+    }
+    // The keyboard. With a row in hand the arrow keys carry it a place at a time, Home and End take
+    // it to either end, and Escape puts it back where it was picked up; with nothing in hand they
+    // walk the rows. Enter and Space are the button's own press, which picks up and puts down.
+    list.addEventListener('keydown', (ev) => {
+      if (!byButton.has(ev.target)) return;
+      if (drag && drag.live) {
+        if (ev.key === 'Escape') {
+          ev.preventDefault();
+          settle(false);
+        }
+        return;
+      }
+      if (held && ev.key === 'Escape') {
+        ev.preventDefault();
+        const { value, from } = held;
+        release();
+        if (carry(value, from)) give();
+        tell(labelOf(value) + ' put back in ' + where(value));
+        return;
+      }
+      const at = placeOf(held ? held.value : byButton.get(ev.target));
+      const last = values.length - 1;
+      const to = ev.key === 'ArrowUp' ? at - 1 : ev.key === 'ArrowDown' ? at + 1 : ev.key === 'Home' ? 0 : ev.key === 'End' ? last : null;
+      if (to === null) return;
+      ev.preventDefault(); // the page does not scroll under a list being sorted
+      if (!held) {
+        const there = rows.get(values[Math.max(0, Math.min(last, to))]);
+        if (there) there.button.focus();
+        return;
+      }
+      if (carry(held.value, to)) {
+        give();
+        tell(labelOf(held.value) + ', ' + where(held.value));
+      }
+    });
+    // The focus gone from the list with a row still in hand lets go of it where it stands: a
+    // visitor who tabs away or presses something else has put it down.
+    list.addEventListener('focusout', (ev) => {
+      if (!held || byButton.has(ev.relatedTarget)) return;
+      const what = held.value;
+      const carried = placeOf(what) !== held.from;
+      release();
+      if (carried) tell(labelOf(what) + ' put down in ' + where(what));
+    });
+    // The grip, or anything inside it: where a finger has to start a drag.
+    function onGrip(node, r) {
+      for (let at = node; at && at !== r.li; at = at.parentNode) if (at === r.grip) return true;
+      return false;
+    }
+    // Pressed: a drag in waiting, until the pointer has travelled far enough to mean one. A finger
+    // on the words is a tap, or the page being scrolled past the list, so under a finger only the
+    // grip drags and the rest of the row is left to the browser.
+    function down(v, ev) {
+      swallow = false;
+      const r = rows.get(v);
+      if (drag || r.button.disabled) return;
+      if (ev.pointerType === 'mouse' && ev.button) return; // the main button only
+      if (ev.pointerType === 'touch' && !onGrip(ev.target, r)) return;
+      drag = { value: v, id: ev.pointerId, y: Number(ev.clientY) || 0, live: false };
+    }
+    function moved(v, ev) {
+      if (!drag || drag.value !== v || ev.pointerId !== drag.id) return;
+      const dy = (Number(ev.clientY) || 0) - drag.y;
+      if (!drag.live) {
+        if (Math.abs(dy) < 4) return;
+        lift();
+      }
+      follow(dy);
+    }
+    // The press becomes a drag: the row is in hand and raised over the rest, the rest stand ready
+    // to step aside, and where every row stands is read once, so following the pointer reads
+    // nothing off the page. Whatever was in hand by a tap is let go of first.
+    function lift() {
+      release();
+      const r = rows.get(drag.value);
+      for (const row of rows.values()) row.li.removeAttribute('data-flip');
+      const order = values.slice();
+      const boxes = order.map((v) => {
+        const box = rows.get(v).li.getBoundingClientRect();
+        return { top: box.top, bottom: box.bottom };
+      });
+      const from = order.indexOf(drag.value);
+      Object.assign(drag, { live: true, order, boxes, from, to: from, gap: boxes.length > 1 ? boxes[1].top - boxes[0].bottom : 0 });
+      if (typeof r.li.setPointerCapture === 'function') {
+        try {
+          r.li.setPointerCapture(drag.id);
+        } catch (e) {
+          /* followed while the pointer is over it */
+        }
+      }
+      cutOn(list, 'make-way', { family: 'arrive', duration: 'short' });
+      list.classList.add('is-sorting');
+      r.li.classList.add('is-dragging');
+      tell(labelOf(drag.value) + ' picked up, ' + where(drag.value));
+    }
+    // The row in hand follows the pointer, kept inside the list -- the hand is the motion, so
+    // nothing eases it -- and the rows it has passed step aside by its own height: the gap that
+    // opens is where it will land. A row is passed once the edge of the one in hand leading the
+    // way is over its middle, so half a row's travel is enough, and either end of the list is
+    // reached with the row pressed against it.
+    function follow(dy) {
+      const { boxes, from, order } = drag;
+      const y = Math.max(boxes[0].top - boxes[from].top, Math.min(boxes[boxes.length - 1].bottom - boxes[from].bottom, dy));
+      rows.get(drag.value).li.style.setProperty('--drag-y', y.toFixed(1) + 'px');
+      let to = from;
+      boxes.forEach((box, k) => {
+        const middle = (box.top + box.bottom) / 2;
+        if (k > from && boxes[from].bottom + y > middle) to += 1;
+        else if (k < from && boxes[from].top + y < middle) to -= 1;
+      });
+      if (to === drag.to) return;
+      drag.to = to;
+      // Every figure says the place its row would have if the one in hand were let go of now.
+      const by = boxes[from].bottom - boxes[from].top + drag.gap;
+      order.forEach((v, k) => {
+        const r = rows.get(v);
+        if (k === from) {
+          r.place.textContent = String(to + 1);
+          return;
+        }
+        const moves = k > from && k <= to ? -1 : k < from && k >= to ? 1 : 0;
+        r.li.style.setProperty('--shift', (moves * by).toFixed(1) + 'px');
+        r.place.textContent = String(k + moves + 1);
+      });
+      tell(labelOf(drag.value) + ', place ' + (to + 1) + ' of ' + order.length);
+    }
+    // The drag over, either way: the row put down in its gap (`keep`) or put back where it was. The
+    // rows that stepped aside already stand where the new order puts them and stay still; the one
+    // in hand steps from where the pointer left it into its place.
+    function settle(keep) {
+      const { value, from, to } = drag;
+      const before = tops();
+      drag = null;
+      swallow = true;
+      list.classList.remove('is-sorting');
+      rows.get(value).li.classList.remove('is-dragging');
+      rows.get(value).li.style.removeProperty('--drag-y');
+      for (const r of rows.values()) r.li.style.removeProperty('--shift');
+      if (keep && to !== from) values.splice(to, 0, values.splice(from, 1)[0]);
+      lay(before);
+      if (!keep) {
+        tell(labelOf(value) + ' put back in ' + where(value));
+        return;
       }
       give();
+      tell(labelOf(value) + ' put down in ' + where(value));
     }
-    function draw() {
-      list.textContent = '';
-      values.forEach((v, i) => {
-        const row = el('li', 'knob-order-item');
-        row.appendChild(el('span', 'knob-order-label', labelOf(v)));
-        const up = el('button', 'knob-order-move', '▲');
-        up.type = 'button';
-        up.setAttribute('aria-label', 'move ' + labelOf(v) + ' up');
-        up.addEventListener('click', () => move(i, -1, 0));
-        const down = el('button', 'knob-order-move', '▼');
-        down.type = 'button';
-        down.setAttribute('aria-label', 'move ' + labelOf(v) + ' down');
-        down.addEventListener('click', () => move(i, 1, 1));
-        row.appendChild(up);
-        row.appendChild(down);
-        list.appendChild(row);
-      });
+    function up(v, ev) {
+      if (!drag || drag.value !== v || ev.pointerId !== drag.id) return;
+      if (drag.live) settle(true);
+      else drag = null; // a press that never travelled: the click that follows is a tap
     }
+    function cancel(v) {
+      if (!drag || drag.value !== v) return;
+      if (drag.live) settle(false);
+      else drag = null;
+    }
+    // The scene as the control (ctx.set): whatever is in hand is let go of, and the rows step to
+    // the order the piece was given.
     state.update = (v) => {
-      if (Array.isArray(v) && v.length === values.length) {
-        values = v.slice();
-        draw();
-      }
+      if (!Array.isArray(v) || v.length !== values.length || !v.every((x) => rows.has(x))) return;
+      if (drag && drag.live) settle(false);
+      drag = null;
+      release();
+      const before = tops();
+      values = v.slice();
+      lay(before);
     };
-    draw();
+    lay();
     knob.appendChild(list);
+    knob.appendChild(how);
+    knob.appendChild(keys);
+    knob.appendChild(told);
     const keep = el('button', 'btn-text knob-alt', 'keep this order');
     keep.type = 'button';
-    keep.addEventListener('click', give);
+    keep.addEventListener('click', () => {
+      release();
+      give();
+    });
     knob.appendChild(keep);
   },
   // Some of these, chosen: chips that press in. With `count` the knob is set once exactly that
