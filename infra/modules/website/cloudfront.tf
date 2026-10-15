@@ -1,6 +1,21 @@
 # CloudFront distribution in front of the S3 website endpoint — mirrored from
 # BoardingFlow/infra/modules/website, plus the custom error response that serves
-# the error document for not-found requests.
+# the error document for not-found requests, and the function that serves a page
+# at its address without the .html.
+
+# /terms answers with terms.html, as /terms.html does (issue #108). Rewritten at
+# the edge rather than built as terms/index.html: the S3 website endpoint answers
+# /terms for a folder with a redirect to /terms/, and every relative link the
+# site is written with would then resolve one folder too deep. The rule itself,
+# and why it reads the address's shape rather than a list of pages, is in
+# extensionless.js.
+resource "aws_cloudfront_function" "extensionless" {
+  name    = "${replace(var.bucket, ".", "-")}-extensionless"
+  runtime = "cloudfront-js-2.0"
+  comment = "Serve /page with page.html"
+  publish = true
+  code    = file("${path.module}/extensionless.js")
+}
 
 resource "aws_cloudfront_distribution" "distribution" {
   enabled             = true
@@ -51,6 +66,12 @@ resource "aws_cloudfront_distribution" "distribution" {
     min_ttl                = 0
     default_ttl            = 3600
     max_ttl                = 86400
+
+    # Before the cache, so /terms and /terms.html share one cached copy.
+    function_association {
+      event_type   = "viewer-request"
+      function_arn = aws_cloudfront_function.extensionless.arn
+    }
   }
 
   # The not-found page. A request for a key that is not in the bucket gets a 404

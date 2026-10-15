@@ -71,8 +71,10 @@
                       the press is the piece's again and the stage must add nothing of its own;
                       the same press with less motion asked for; and a press on a piece that is
                       taken away under it, which may leave nothing behind.
-    difficultyMoved   The difficulty, settable where it is a dependency (issue #93). Open a piece,
-                      find the slider the stage asked the persona for at the foot of the rail, move
+    difficultyMoved   The difficulty, offered where it is a dependency (issue #93). Open a piece,
+                      find the slider the stage asked the persona for at the foot of the rail --
+                      and whether it asked for it once, only until a level is picked (issue #100),
+                      which the persona's own tuner answers and lightbox_harness.mjs plays -- move
                       it to the fiercest setting, and report what the stage did: the piece has to be
                       dealt again at the same world and the same seed, it has to be the piece the
                       module makes at the new setting, and it has to still play to its end.
@@ -437,9 +439,10 @@ function makePage(worlds, clock) {
   make('span', 'stage-done-text', done).textContent = 'done';
   make('div', 'stage-progress', end);
   // The host the difficulty slider is rendered into, at the foot of the rail, as _includes/
-  // stage.njk writes it: the setting every piece is dealt at, settable where it is a dependency
-  // (issue #93). The stub persona below renders nothing into it and only records that it was
-  // asked, because what is being read off here is what the stage does when the setting moves.
+  // stage.njk writes it: the setting every piece is dealt at, offered where it is a dependency
+  // (issue #93) until a level is picked (issue #100). The stub persona below renders nothing into
+  // it and only records how it was asked, because what is being read off here is what the stage
+  // does when the setting moves; what the persona draws there is lightbox_harness.mjs's to play.
   make('div', 'stage-difficulty', side, 'stage-difficulty');
   // The way on, outside the inner the vanish transforms, and dim until the stage lights it.
   make('button', 'stage-next', stage, 'stage-next').disabled = true;
@@ -452,9 +455,10 @@ function makePage(worlds, clock) {
   // here rather than a value, exactly as a browser's own list changes under a running page.
   const motion = { calm: false };
   // The persona's difficulty, as this page holds it: the middle of the dial until a scenario moves
-  // it, `hosts` the elements the stage asked for the slider in, and `listeners` whatever the stage
-  // registered through onDifficulty so a change reaches it however it was made.
-  const tuned = { level: MIDDLE_DIFFICULTY.level, hosts: [], note: '', listeners: [], set: () => {} };
+  // it, `hosts` the elements the stage asked for the slider in, `once` whether it asked for the
+  // slider only until a level is picked, and `listeners` whatever the stage registered through
+  // onDifficulty so a change reaches it however it was made.
+  const tuned = { level: MIDDLE_DIFFICULTY.level, hosts: [], note: '', once: false, listeners: [], set: () => {} };
   const calmQuery = { get matches() { return motion.calm; }, addEventListener() {} };
   const win = {
     document: doc,
@@ -496,6 +500,7 @@ function makePage(worlds, clock) {
       tuner(host, options) {
         tuned.hosts.push(host && host.getAttribute ? host.getAttribute('id') || '' : '');
         tuned.note = (options && options.note) || '';
+        tuned.once = !!(options && options.once);
         tuned.set = (level) => {
           tuned.level = Math.max(1, Math.min(5, Math.round(Number(level)) || 3));
           const now = difficultyAt(tuned.level);
@@ -1622,9 +1627,10 @@ async function wrongThenRight(stageDir, worlds, deal, clock) {
   return out;
 }
 
-/* The difficulty, settable where it is a dependency (issue #93). Every piece this stage deals is
+/* The difficulty, offered where it is a dependency (issue #93). Every piece this stage deals is
    made at the persona's difficulty, so the stage asks the persona for the one slider in the host
-   _includes/stage.njk leaves at the foot of the rail, and moving it has to deal the piece again --
+   _includes/stage.njk leaves at the foot of the rail -- once, only until a level is picked (issue
+   #100), which is the persona's to honour -- and moving it has to deal the piece again --
    the same world and the same seed, because the subject a visitor pressed is still the subject and
    only how hard it is asked has moved. Reports where the slider was asked for, what the piece was
    before and after, and whether the piece the stage then opened is the piece the module makes at
@@ -1633,7 +1639,8 @@ async function difficultyMoved(stageDir, worlds, deal, clock) {
   const page = await load(stageDir, worlds, clock);
   page.win.interestingFeed = { take: () => null, consume() {} };
   const api = page.win.interestingStage;
-  const out = { hosts: page.tuned.hosts.slice(), note: page.tuned.note, level: page.tuned.level };
+  const out = { hosts: page.tuned.hosts.slice(), note: page.tuned.note, once: page.tuned.once,
+                level: page.tuned.level };
   api.open(deal[0].file, deal[0].seed, { arriving: true });
   if (!(await waitForPiece(page, clock))) return Object.assign(out, { playable: false });
   out.playable = true;
