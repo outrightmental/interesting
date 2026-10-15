@@ -5462,6 +5462,22 @@ class StageTest(unittest.TestCase):
                 self.assertEqual(got["incomplete"], [], "a stage with no piece on it reported one left unsolved")
         self.assertFalse(result["loading"]["lateOpened"], "the module still loading landed over the next card")
 
+    def test_a_piece_left_is_not_finished_on_its_way_out(self):
+        # The piece stays on the stage while it vanishes, and its check with it: a visitor who sets
+        # the answer, presses the way on and then the check has still left the piece unsolved. A
+        # finish then would be a ceremony over a piece already gone, a solve on the tally after an
+        # incomplete attempt was reported, and a way on lit again for a second card.
+        caught = self.scenario("leftUnsolved", toy=FINISHING_PIECE)["checkedLeaving"]
+        self.assertTrue(caught["offered"], "the right answer was set and no check was offered")
+        self.assertEqual(caught["modeAtCheck"], "vanishing", "the check did not land while the piece was leaving")
+        self.assertIn(caught["modeAtSecond"], ["vanishing", "loading"], "the second press did not land during the leaving")
+        self.assertEqual(caught["completes"], 0, "a piece left unsolved was finished on its way out")
+        self.assertEqual(caught["incomplete"], 1, "the piece left was not reported once as an incomplete attempt")
+        self.assertEqual(caught["tally"], {"solved": 3, "tries": 5, "hints": 1},
+                         "a piece left unsolved was counted on the tally of solves on its way out")
+        self.assertEqual(caught["taken"], 1, "a check on the leaving piece let the way on take a second card")
+        self.assertEqual(caught["opened"], 1, "a check on the leaving piece let the way on open a second piece")
+
     def test_every_press_on_the_scene_does_something(self):
         # Issue #89: unresponsiveness is uninteresting. A press on the picture that lands on nothing
         # at all is the one answer this site does not give, so where the piece has nothing to do

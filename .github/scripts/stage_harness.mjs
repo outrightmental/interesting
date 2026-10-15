@@ -94,7 +94,9 @@
                       tally of solves and the address replaced rather than pushed. Then the way on
                       pressed twice over one leaving, which must take one card and not two, and
                       pressed over a world with nothing to play and over a module still loading,
-                      each of which must open the next card from the stack.
+                      each of which must open the next card from the stack. Last, the way on
+                      pressed over a piece whose answer is set and the check pressed as it leaves,
+                      which must not finish a piece that was left.
 
   Every scenario reports what it observed and makes no judgements: StageTest in
   test_make_interesting.py makes the assertions, as ParticipateButtonTest does for the button.
@@ -1561,6 +1563,34 @@ async function leftUnsolved(stageDir, worlds, deal, clock) {
   api.open(late.file, late.seed, { arriving: true });
   out.loading = Object.assign({ late }, await press());
   out.loading.lateOpened = page.events.some((e) => e.type === 'stage:open' && e.detail && e.detail.seed === late.seed);
+
+  // The way on pressed over a piece with its right answer set and the check not yet pressed, and
+  // the check pressed while the piece is still leaving: it was left unsolved, and a piece on its
+  // way out is not finished by a press that lands on it as it goes. Then the way on pressed again
+  // while it is still leaving, which a finish would have answered as a press over a new piece.
+  await waitForPiece(page, clock);
+  const last = api.current();
+  if (last) {
+    await playKnobs(page, clock, 'move', await answersFor(stageDir, worlds, last.file, last.seed, {}));
+    page.events.length = 0;
+    const before = { opens: count('stage:open'), taken: taken.length };
+    const caught = { offered: look(page).checkEnabled };
+    button.dispatchEvent({ type: 'click' });
+    await clock.advance(100);
+    caught.modeAtCheck = page.stage.dataset.mode;
+    caught.checked = (await pressCheck(page, clock)).pressed;
+    caught.modeAtSecond = page.stage.dataset.mode;
+    button.dispatchEvent({ type: 'click' });
+    for (let i = 0; i < 100 && count('stage:open') === before.opens; i++) await clock.advance(200);
+    await clock.advance(3000);
+    out.checkedLeaving = Object.assign(caught, {
+      completes: count('stage:complete'),
+      incomplete: count('stage:incomplete'),
+      taken: taken.length - before.taken,
+      opened: count('stage:open') - before.opens,
+      tally: page.kept('puzzles')
+    });
+  }
   return out;
 }
 

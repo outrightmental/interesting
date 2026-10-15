@@ -1369,6 +1369,7 @@ function begin(opened) {
     steps,
     state: new Map(steps.map((s) => [s.id, { step: s, set: false, value: undefined, knob: null }])),
     completed: false,
+    left: false, // the way on pressed over it: on its way out, and never finished after that
     touched: false,
     tries: 0, // checks pressed: a wrong answer costs one, and the solve is reported on one
     hints: 0, // hints the piece has given, through ctx.hint()
@@ -2642,7 +2643,9 @@ if (ui) {
    piece's own apply(), which is where fidgeting with a finished toy belongs. */
 function finish(say) {
   const c = current;
-  if (!c || c.completed) return;
+  // A piece the way on was pressed over is leaving unfinished (issue #109): a check pressed while
+  // it vanishes does not turn that into a solve, a ceremony, a tally or a second way on.
+  if (!c || c.completed || c.left) return;
   c.completed = true;
   for (const s of c.state.values()) {
     if (!s.set) {
@@ -2741,6 +2744,7 @@ function goOn() {
   dimTheWayOn();
   const piece = current; // null where there was nothing to finish: a module loading or missing, a gate
   const finished = !!(piece && piece.completed);
+  if (piece) piece.left = true; // and so it stays as it was pressed: see finish()
   if (piece && !finished) {
     try {
       window.dispatchEvent(new CustomEvent('stage:incomplete', {
