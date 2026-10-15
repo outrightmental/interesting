@@ -114,7 +114,10 @@ is deliberately small: a foundation to build a more holistic experience on, not 
 - **Output paths mirror source paths.** `site/index.html` becomes `index.html` and
   `site/css/site.scss` becomes `css/site.css`. Eleventy's "pretty" permalinks would turn
   `about.html` into `about/index.html`, which would break every relative link the site is written
-  with.
+  with. The short address is the edge's job instead: CloudFront serves `/terms` with `terms.html`,
+  `/privacy` with `privacy.html` and any other page the same way (issue #108, see
+  [`infra/README.md`](infra/README.md#publishing)), as a rewrite in the same folder, so the site
+  keeps linking by `.html` and nothing in `/site` changes for it.
 - **The output is throwaway.** `npm run build` writes to a temp folder outside the repository and
   prints the path as its last line, so a caller can read it without parsing anything else; the
   deploy builds into `$RUNNER_TEMP` and syncs that. Nothing generated is committed, and

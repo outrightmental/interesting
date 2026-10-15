@@ -12,7 +12,8 @@ One project owns the whole stack for one property — including the GitHub repos
 | `repo.tf` | `github_repository.interesting` | The repository itself — `outrightmental/interesting` is repo-as-code: name, visibility, merge settings, all here. It pre-existed this configuration, so the first apply **adopts** it via an import block; `archive_on_destroy` means a destroy archives rather than deletes it. There is no `pages` block, which is how GitHub Pages stays retired. |
 | `issue-labels.tf` | `github_issue_label.steer`, `github_issue_label.broken` | The two labels the issue forms in [`.github/ISSUE_TEMPLATE/`](../.github/ISSUE_TEMPLATE) ask for, so the way a visitor steers the site is owned here with the repository rather than created by hand. A form naming a label the repository lacks is not an error — GitHub files the issue without it — so the forms work before this is applied and the labels stick once it has been. |
 | `dns.tf` | `aws_route53_zone.primary`, `aws_route53domains_registered_domain.primary` | The `makeitmoreinteresting.com` hosted zone, and the domain's registration pointed at it. The site used to live at `interesting.outright.io`, a subdomain of a studio-wide zone this project could only read; its own apex domain has nothing in it but this site, so the zone is owned here with the rest of the stack. The domain is registered with Amazon Registrar in this same account, so its nameservers are set from the zone here too, and a registration pointing anywhere else is a plan diff rather than a site nobody can resolve. The registration is adopted, never registered or transferred: a destroy leaves it alone. |
-| `website.tf` + `modules/website` | S3 bucket + CloudFront distribution, ACM certificate + DNS validation, A/AAAA alias records | The static site at https://makeitmoreinteresting.com/, also served at `www.` from the same distribution (one certificate with www as a SAN, both hostnames as CloudFront aliases, four alias records from one `for_each`). The module is copied from BoardingFlow/infra, with the two changes listed under [Notes](#notes). |
+| `dns.tf` (mail) | `aws_ses_domain_identity.primary` + verification, DKIM, MAIL FROM; `aws_route53_record.mx` | The domain's half of its mail: the SES identity that lets SES receive for `makeitmoreinteresting.com`, the DKIM and MAIL FROM records Mailbot publishes for the domains it manages, and the inbound MX. The routing — `webmaster@` and `support@` to `charneykaye@gmail.com` — is [Mailbot](https://github.com/outrightmental/mailbot)'s; see [Mail](#mail). |
+| `website.tf` + `modules/website` | S3 bucket + CloudFront distribution, ACM certificate + DNS validation, A/AAAA alias records | The static site at https://makeitmoreinteresting.com/, also served at `www.` from the same distribution (one certificate with www as a SAN, both hostnames as CloudFront aliases, four alias records from one `for_each`). The module is copied from BoardingFlow/infra, with the three changes listed under [Notes](#notes). |
 | `iam-deploy.tf` | `makeitmoreinteresting-com-deploy` IAM user + key + policy | Dedicated deploy credentials for the GitHub Actions workflow (S3 sync + CloudFront invalidation), scoped to exactly this bucket and this distribution. |
 | `github.tf` | Repository Actions secrets | `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_S3_BUCKET`, `AWS_CLOUDFRONT_DISTRIBUTION_ID` — set from this project's own resources so the deploy can never drift from the infrastructure. A single apply rotates the deploy credentials end to end. Plus `GA_MEASUREMENT_ID`, the GA4 property the site reports to (`ga_measurement_id` in `locals.tf`): not a credential, since the deploy publishes it in every page, but owned here so the repository itself holds no measurement ID. |
 | `data.tf` | *(read-only)* | The AWS account id, read from the caller rather than written down. Nothing else is read from outside this project any more: the hosted zone used to be, back when the site was a subdomain of `outright.io`. |
@@ -163,6 +164,113 @@ Run it with the token exported, as in [Usage](#usage): `export GITHUB_TOKEN=$(gh
   page (every link in `/site` is relative, and `sitemap.xml` uses relative `<loc>` values), so it
   has no absolute address to disagree with.
 
+## Mail
+
+`webmaster@makeitmoreinteresting.com` and `support@makeitmoreinteresting.com` forward to
+`charneykaye@gmail.com`. No other address on the domain receives anything: mail to one matches no
+SES receipt rule in the account and bounces as *address does not exist*.
+
+Two projects share the work, split at the zone's edge:
+
+- **This project owns everything published in the zone** (`dns.tf`): the SES domain identity and
+  its `_amazonses` verification `TXT`, the three Easy DKIM `CNAME`s, the custom MAIL FROM
+  (`mail.makeitmoreinteresting.com`, its `MX` to `feedback-smtp.us-east-1.amazonses.com` and its
+  SPF `TXT`), and the apex `MX`, `10 inbound-smtp.us-east-1.amazonaws.com`. Apart from the
+  verification wait, they are the same records Mailbot writes for the domains it manages itself,
+  so a domain looks the same whichever state verified it.
+- **[Mailbot](https://github.com/outrightmental/mailbot) owns the routing.** Its
+  `src/forwarder/config.json` lists `webmaster@` in its existing *Operations* mailbox and
+  `support@` in its existing *Support* mailbox, both of which deliver to `charneykaye@gmail.com`.
+  Its Terraform derives the receipt rule (`mailbot-makeitmoreinteresting-com`) and the forwarder's
+  send permission from that file, so the two addresses are the whole of Mailbot's change. Mailbot
+  must **not** also list the domain in `mx_enabled_domains` or `managed_identity_domains`: the MX
+  and the identity are owned here, and two states writing one record fight over it on every
+  apply.
+
+Forwarded mail arrives From a `relay.outright.io` address Mailbot derives per sender, shown as
+`<sender> via Operations` or `<sender> via Support`, with `Reply-To` set to the original sender.
+
+### Turning it on
+
+Once, by hand, in this order. Run it with `GITHUB_TOKEN` exported as in [Usage](#usage).
+
+1. **Apply here.**
+
+   ```bash
+   terraform -chdir=infra apply
+   ```
+
+   This creates the identity and its records and publishes the MX, then waits in
+   `aws_ses_domain_identity_verification` until SES has resolved the verification record. That
+   takes minutes in a zone that is already delegated, which this one is once
+   [Moving the domain](#moving-the-domain) is done. DKIM verifies on its own clock afterwards:
+
+   ```bash
+   aws sesv2 get-email-identity --email-identity makeitmoreinteresting.com \
+     --query '{verified: VerifiedForSendingStatus, dkim: DkimAttributes.Status}'
+   dig +short MX makeitmoreinteresting.com @1.1.1.1
+   ```
+
+   Until step 3, mail for the domain reaches SES, matches no rule and bounces. Before this change
+   the domain had no MX at all, so senders got a failure then too.
+
+2. **Check there is exactly one zone named `makeitmoreinteresting.com`.** Mailbot reads every
+   receiving domain's zone by name (`data "aws_route53_zone" "domain"` in its `infra/data.tf`),
+   and that lookup fails if two public zones answer to the name. The second one is the zone the
+   registrar made, which step 6 of [Moving the domain](#moving-the-domain) deletes:
+
+   ```bash
+   aws route53 list-hosted-zones-by-name --dns-name makeitmoreinteresting.com \
+     --query "HostedZones[?Name=='makeitmoreinteresting.com.'].[Id, Config.Comment]" --output text
+   ```
+
+   This should print one line, the zone commented `owned by outrightmental/interesting`.
+
+3. **Route the addresses in Mailbot.** In a Mailbot checkout, add the two addresses to
+   `src/forwarder/config.json`, run its tests, and apply:
+
+   ```diff
+          {
+            "id": "operations",
+            "name": "Operations",
+            "inbound": [
+              …
+   -        "press@auth.outrightmental.com"
+   +        "press@auth.outrightmental.com",
+   +        "webmaster@makeitmoreinteresting.com"
+            ],
+   …
+          {
+            "id": "support",
+            "name": "Support",
+            "inbound": [
+              …
+   -        "hiya@auth.outrightmental.com"
+   +        "hiya@auth.outrightmental.com",
+   +        "support@makeitmoreinteresting.com"
+            ],
+   ```
+
+   ```bash
+   node --test src/*/ tools/
+   terraform -chdir=infra apply
+   ```
+
+   The plan should add exactly one receipt rule, `mailbot-makeitmoreinteresting-com`, listing the
+   two addresses. It should also update the forwarder's code (it bundles `config.json`) and its
+   IAM policy, and change nothing else.
+
+4. **Verify end to end.** Send a message to each address from a mailbox other than
+   `charneykaye@gmail.com`. Gmail can file a message you sent yourself under *Sent* rather than
+   *Inbox*, so a test from that mailbox proves nothing. Then check each message:
+
+   - lands in Mailbot's archive bucket, under `inbound/`;
+   - is logged by the forwarder in `/aws/lambda/mailbot-forwarder`, with mailbox `operations`
+     (webmaster@) or `support` (support@);
+   - arrives at `charneykaye@gmail.com`, and replying to it addresses the original sender.
+
+   A message to any other address on the domain should bounce.
+
 ## Publishing
 
 [`.github/workflows/deploy.yml`](../.github/workflows/deploy.yml) is the pipeline for `main`:
@@ -186,15 +294,32 @@ endpoint answer 404 — 403 if an object is there but unreadable — and the dis
 to `/error.html`, kept as a 404 status so caches and crawlers are never told the page exists.
 That replaces the `site/404.html` copy the GitHub Pages deploy made.
 
+A page is also served at its address without the extension: `/terms` answers with `terms.html`
+and `/privacy` with `privacy.html` (issue #108), as does `/quiet-room` or any other page. A
+CloudFront Function on viewer-request (`modules/website/extensionless.js`) rewrites any request
+whose last segment has no dot to that name plus `.html`, before the cache, so both addresses share
+one cached copy. It is a rewrite, not a redirect: the browser stays at `/terms`, which sits in the
+same folder as `/terms.html`, so every relative link on the page resolves the same either way, and
+the `.html` addresses the nav, the sitemap and every cross-link name keep working untouched. The
+rule reads the shape of the address rather than a list of pages, so a page the hourly run adds has
+its short address on its first deploy, with no apply; a name no page has still gets `error.html`
+with a 404. Building `terms/index.html` instead would not do: the S3 website endpoint answers
+`/terms` for a folder with a redirect to `/terms/`, and from there every relative link the site is
+written with resolves one folder too deep. After an apply that changes the function, check that
+`https://makeitmoreinteresting.com/terms` and `/privacy` answer 200 with those pages, and that
+`/terms.html` still does.
+
 GitHub Pages is retired: no `pages` job in `deploy.yml`, no `pages` block in `repo.tf`, and
 CloudFront is the site's only publisher.
 
 ## Notes
 
-- `modules/website` is BoardingFlow's module with two changes, both in `cloudfront.tf`:
+- `modules/website` is BoardingFlow's module with three changes, all in `cloudfront.tf`:
   the `custom_error_response` blocks that serve the error document (BoardingFlow has none —
-  its site has no equivalent of `error.html`), and an empty `blacklist_locations` now meaning
-  no geo restriction rather than an apply CloudFront must reject. `_inputs.tf` and `_outputs.tf`
+  its site has no equivalent of `error.html`), an empty `blacklist_locations` now meaning
+  no geo restriction rather than an apply CloudFront must reject, and the `extensionless`
+  CloudFront Function that serves `/terms` with `terms.html`, whose code is the one file the
+  module adds (`extensionless.js`). `_inputs.tf` and `_outputs.tf`
   are byte-identical and `s3.tf` differs only in its header comment, so a fix in either property
   ports to the other.
 - The distribution geo-blocks `CN`, the studio default inherited with the module
@@ -224,6 +349,10 @@ property's own (`dns.tf`), so its bill is too. The domain registration is a year
 Registrar charge: `dns.tf` adopts the registration to set its nameservers, but never registers
 or pays for the domain.
 
+Mail adds nothing here: an SES identity and its records cost nothing to hold, and the per-message
+charges for receiving and forwarding are billed to Mailbot's resources, which do that work.
+
 The hourly AI iteration makes this busier than a normal property: roughly 720 deploys a month,
 each one an `aws s3 sync` and an invalidation. An invalidation of `/*` counts as one path, so
-that stays inside CloudFront's 1,000 free paths a month.
+that stays inside CloudFront's 1,000 free paths a month. The extensionless-address function runs
+once per request, and CloudFront Functions' first two million invocations a month are free.
