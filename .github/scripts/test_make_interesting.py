@@ -8446,6 +8446,100 @@ class DomainTest(unittest.TestCase):
             self.assertNotRegex(loc.strip(), r"^[a-z]+://", "a <loc> pins the site to one origin")
 
 
+class MailTest(unittest.TestCase):
+    """Issue #107: webmaster@ and support@ the domain forward to charneykaye@gmail.com.
+
+    The work is split at the zone's edge. Mailbot (outrightmental/mailbot) routes the two addresses
+    from its own config.json and owns the receipt rule that does it; this project owns the zone, so
+    it owns everything mail needs published there -- the SES identity, its DKIM and MAIL FROM
+    records, and the inbound MX. These tests hold this project's half: every record lands in the
+    owned zone, the MX points at SES in the region Mailbot receives in, the MAIL FROM stays off the
+    apex, and no receipt rule is declared here to deliver the same mail twice.
+    """
+
+    DNS = Path(mi.__file__).resolve().parents[2] / "infra" / "dns.tf"
+
+    @classmethod
+    def setUpClass(cls):
+        cls.infra = cls.DNS.parent
+
+    def setUp(self):
+        if not self.DNS.is_file():
+            self.skipTest(f"no dns.tf at {self.DNS}")
+        self.dns = self.DNS.read_text()
+
+    def resources(self, kind):
+        """Each `resource "<kind>" "<name>"` block in dns.tf, by name. `terraform fmt` in CI keeps
+        every block's closing brace alone at column zero, which is where each body ends."""
+        return dict(re.findall(rf'^resource "{kind}" "(\w+)" \{{\n(.*?)^\}}', self.dns, re.M | re.S))
+
+    def argument(self, body, name):
+        match = re.search(rf"^  {name}\s*=\s*(.+)$", body, re.M)
+        self.assertIsNotNone(match, f"no {name} in:\n{body}")
+        return match.group(1).strip()
+
+    def test_the_identity_is_the_domain_and_waits_until_ses_has_verified_it(self):
+        identities = self.resources("aws_ses_domain_identity")
+        self.assertEqual(list(identities), ["primary"])
+        self.assertEqual(self.argument(identities["primary"], "domain"), "local.domain")
+        verification = self.resources("aws_ses_domain_identity_verification")
+        self.assertIn("primary", verification)
+        self.assertIn("aws_route53_record.ses_verification", verification["primary"],
+                      "the wait must follow the record SES resolves, or it can start before it exists")
+
+    def test_every_mail_record_goes_into_the_owned_zone(self):
+        records = self.resources("aws_route53_record")
+        for name in ("ses_verification", "ses_dkim", "ses_mail_from_mx", "ses_mail_from_spf", "mx"):
+            self.assertIn(name, records, f"dns.tf publishes no {name} record")
+        for name, body in records.items():
+            with self.subTest(record=name):
+                self.assertEqual(self.argument(body, "zone_id"), "aws_route53_zone.primary.zone_id")
+
+    def test_the_inbound_mx_is_ses_in_the_region_mailbot_receives_in(self):
+        # Mailbot's receipt rules, and the account's one active rule set, live in us-east-1. An MX
+        # pointed at SES anywhere else delivers to a region with no rule for the domain.
+        mx = self.resources("aws_route53_record")["mx"]
+        self.assertEqual(self.argument(mx, "name"), "local.domain")
+        self.assertEqual(self.argument(mx, "type"), '"MX"')
+        self.assertEqual(self.argument(mx, "records"),
+                         '["10 inbound-smtp.${local.aws_region}.amazonaws.com"]')
+        region = re.search(r'^\s*aws_region\s*=\s*"([^"]*)"', (self.infra / "locals.tf").read_text(), re.M)
+        self.assertIsNotNone(region, "locals.tf declares no aws_region")
+        self.assertEqual(region.group(1), "us-east-1")
+
+    def test_dkim_publishes_one_cname_per_token(self):
+        dkim = self.resources("aws_route53_record")["ses_dkim"]
+        self.assertEqual(self.argument(dkim, "count"), "3", "SES issues three DKIM tokens")
+        self.assertEqual(self.argument(dkim, "type"), '"CNAME"')
+        self.assertIn("._domainkey.${local.domain}", self.argument(dkim, "name"))
+        self.assertIn(".dkim.amazonses.com", self.argument(dkim, "records"))
+
+    def test_the_mail_from_domain_is_a_subdomain_and_the_apex_holds_only_the_mx(self):
+        mail_from = self.resources("aws_ses_domain_mail_from")["primary"]
+        self.assertEqual(self.argument(mail_from, "mail_from_domain"), '"mail.${local.domain}"')
+        records = self.resources("aws_route53_record")
+        for name in ("ses_mail_from_mx", "ses_mail_from_spf"):
+            self.assertEqual(self.argument(records[name], "name"),
+                             "aws_ses_domain_mail_from.primary.mail_from_domain")
+        self.assertIn("feedback-smtp.${local.aws_region}.amazonses.com",
+                      self.argument(records["ses_mail_from_mx"], "records"))
+        self.assertIn("v=spf1 include:amazonses.com", self.argument(records["ses_mail_from_spf"], "records"))
+        # The apex already carries the site's alias records (website.tf). The mail records add the
+        # MX there and nothing else: an SPF or DMARC record at the apex would speak for the whole
+        # domain, which nothing here was asked to do.
+        apex = sorted(name for name, body in records.items() if self.argument(body, "name") == "local.domain")
+        self.assertEqual(apex, ["mx"])
+
+    def test_no_receipt_rule_is_declared_here(self):
+        # The routing is Mailbot's. Two receipt rules matching one recipient both act, so a rule
+        # here would deliver every message twice; and the account's one rule set is Mailbot's to
+        # create and activate (mailbot#60), so no set may be declared here either.
+        for path in sorted(self.infra.rglob("*.tf")):
+            with self.subTest(file=path.name):
+                self.assertNotRegex(path.read_text(), r'resource "aws_ses_(active_)?receipt_rule',
+                                    f"{path} declares receiving that belongs to Mailbot")
+
+
 class SmallModelTest(unittest.TestCase):
     """Issue #2: small models must never be picked at random."""
 
