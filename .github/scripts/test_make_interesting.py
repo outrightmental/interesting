@@ -4848,6 +4848,11 @@ class CompletionAxiomTest(SiteDirTestCase):
                      "Solved plays its ceremony and lights up the way on",
                      "the stage never moves on by itself",
                      "opens the next card in the feed in its place",
+                     # Issue #109: dim is not off, and leaving unsolved is not finishing.
+                     "The way on is never disabled",
+                     "a visitor may press it over a piece they have not solved",
+                     "reported as an incomplete attempt",
+                     "never as a finish, never on the tally of solves",
                      "Not solved writes `say` on the live line, counts the try, and changes nothing else",
                      "every listed world's module exports piece(env)",
                      mi.STAGE_SCRIPT,
@@ -4882,6 +4887,8 @@ class CompletionAxiomTest(SiteDirTestCase):
                      "a knob nobody set is named rather than silently holding the check shut",
                      "a hold knob is set the moment its bar fills rather than when the visitor lets go",
                      "a solved piece stays on the stage with the way on lit",
+                     "the way on can be pressed over a piece nobody solved",
+                     "one card for one press",
                      "leaves nothing of itself on the stage or still running",
                      # Issue #86: Done is not the End, stated to the run that writes the pieces and
                      # to the run that rewrites the stage, and held by the same stage harness.
@@ -5140,13 +5147,17 @@ class StageTest(unittest.TestCase):
         # ends by lighting the way on in the lower right and the stage stops there. Each round of
         # the scenario waits six seconds of its own clock, five times that linger, and the piece it
         # finished is still on the stage; what moves the stage on is the press and nothing else.
+        # Lit is emphasis and not permission (issue #109): the way on is dim while the piece is
+        # being played, and could have been pressed all along.
         deal = ["toy.html", "other.html", "toy.html"]
         for played in self.scenario("rounds", deal=deal)["rounds"]:
             with self.subTest(world=played["was"]["file"], seed=played["was"]["seed"]):
                 self.assertFalse(played["litWhilePlaying"], "the way on was lit before the piece was over")
+                self.assertTrue(played["enabledWhilePlaying"], "the way on could not be pressed over an unsolved piece")
                 self.assertFalse(played["movedOnByItself"],
                                  "the stage opened the next piece with nobody pressing anything")
                 self.assertTrue(played["litWhenFinished"], "the ceremony ended and the way on never lit")
+                self.assertTrue(played["enabledWhenFinished"], "the way on lit and could not be pressed")
                 # And it takes the keyboard, so the visitor who finished the piece with a key can
                 # go on with one: a mark pinned in a corner is no use to someone who cannot see it.
                 self.assertEqual(played["focusedWhenFinished"], "stage-next",
@@ -5258,6 +5269,7 @@ class StageTest(unittest.TestCase):
         self.assertFalse(result["finished"], "a wrong answer finished the piece")
         self.assertIn(result["look"]["mode"], ["live", "arriving"], "an unsolved piece left its mode")
         self.assertFalse(result["look"]["nextLit"], "the way on lit over an unsolved piece")
+        self.assertTrue(result["look"]["nextEnabled"], "the way on could not be pressed over an unsolved piece")
         self.assertIn("one try", result["look"]["tries"], "the try was not counted")
 
     def test_a_knob_nobody_set_is_named_rather_than_left_a_mystery(self):
@@ -5272,9 +5284,11 @@ class StageTest(unittest.TestCase):
         self.assertTrue(result["wanted"], "the stage said nothing about the knob it was waiting on")
         self.assertIn("the pace", result["wanted"])
         self.assertNotIn("done", result["modes"])
-        # The way on is there the whole time and dim the whole time: an unfinished piece is not a
-        # piece to be let out of, and the mark that says so never moves (issue #78).
+        # The way on is there the whole time and dim the whole time, and the mark never moves
+        # (issue #78) -- and it can be pressed the whole time too (issue #109): dim says the piece
+        # is not finished, not that the visitor is held in it until it is.
         self.assertFalse(result["look"]["nextLit"], "the way on lit over a piece nobody had finished")
+        self.assertTrue(result["look"]["nextEnabled"], "the way on could not be pressed over an unfinished piece")
 
     def test_a_hold_is_set_when_its_bar_fills_and_not_when_the_visitor_lets_go(self):
         # Issue #74: the holding is the answer, so a visitor who presses the knob, watches the bar
@@ -5332,6 +5346,7 @@ class StageTest(unittest.TestCase):
         self.assertEqual(wrong["tries"], "one try so far", "the try was not counted")
         self.assertEqual(wrong["status"], "not that many", "the piece's own word on a wrong answer was not said")
         self.assertFalse(wrong["nextLit"], "the way on lit over an unsolved piece")
+        self.assertTrue(wrong["nextEnabled"], "the way on could not be pressed over an unsolved piece")
         self.assertFalse(wrong["doneShown"], "the done mark showed over an unsolved piece")
         self.assertTrue(all(knob["live"] for knob in wrong["knobs"]), "a wrong answer put a knob out of action")
         self.assertTrue(all(knob["set"] for knob in wrong["knobs"]), "a wrong answer unset a knob")
@@ -5374,6 +5389,74 @@ class StageTest(unittest.TestCase):
         # end, which is the job "skip this one" used to do before the way on took it over.
         self.assertEqual(left["mode"], "empty")
         self.assertTrue(left["nextLit"], "a world with nothing to play offered no way on")
+        self.assertTrue(left["nextEnabled"], "a world with nothing to play offered a way on nobody could press")
+
+    def test_a_piece_can_be_left_unsolved_and_is_not_counted_as_finished(self):
+        # Issue #109, reverting the half of issue #78 that held a visitor in a piece: the way on was
+        # disabled until the piece was solved, so a puzzle someone would rather not finish left them
+        # nowhere to go but down into the feed. Now it can be pressed whenever it is shown -- dim
+        # over an unsolved piece and lit only once it is finished -- and leaving a piece unsolved
+        # opens the next card like any press. It is an incomplete attempt and not a finish: it is
+        # reported once, with the try it had, and nothing of a finish happens -- no ceremony, no
+        # 'stage:complete', nothing added to the tally of solves the store already held, and the
+        # address replaced rather than pushed, so the back button does not walk back into it.
+        result = self.scenario("leftUnsolved", toy=FINISHING_PIECE)
+        self.assertTrue(result["playable"], "the piece never became playable")
+        self.assertEqual(result["unset"], [], "a knob the visitor worked was not set")
+        self.assertTrue(result["checked"], "the wrong answer could not be checked")
+        for when in ["opened", "afterWrong"]:
+            with self.subTest(when=when):
+                self.assertTrue(result[when]["nextEnabled"], "the way on could not be pressed over an unsolved piece")
+                self.assertFalse(result[when]["nextLit"], "the way on lit over an unsolved piece")
+        self.assertEqual(result["afterWrong"]["tries"], "one try so far", "the wrong answer was not counted")
+        left = result["left"]
+        self.assertTrue(left["pressed"], "the way on could not be pressed over an unsolved piece")
+        self.assertFalse(left["lit"], "the way on was lit over the unsolved piece it left")
+        self.assertEqual(left["opened"], 1, "leaving an unsolved piece did not open exactly one card")
+        self.assertEqual(left["now"], {"file": left["dealt"]["file"], "seed": left["dealt"]["seed"]},
+                         "what opened is not the next card on the stack")
+        self.assertEqual(left["incomplete"], [{"file": result["world"], "seed": result["seed"],
+                                               "tries": 1, "hints": 0, "touched": True}],
+                         "leaving the piece unsolved was not reported once as an incomplete attempt")
+        self.assertEqual(result["completes"], 0, "a piece left unsolved was reported as finished")
+        self.assertEqual(result["tally"], {"solved": 3, "tries": 5, "hints": 1},
+                         "a piece left unsolved was counted on the tally of solves")
+        self.assertEqual(left["addresses"], ["replace"],
+                         "the piece left unsolved was kept in the history rather than replaced")
+        self.assertIn(left["look"]["mode"], ["live", "arriving"], "the next card never became playable")
+
+    def test_one_press_of_the_way_on_is_one_card(self):
+        # Never disabled means nothing stops a second press -- a double click, an impatient key --
+        # landing while the first one's piece is still leaving. That press is answered already, by
+        # the card on its way in: it must not take a second card off the stack after the first, or
+        # report the piece as left twice.
+        twice = self.scenario("leftUnsolved", toy=FINISHING_PIECE)["twice"]
+        self.assertTrue(twice["pressed"])
+        self.assertEqual(twice["secondMode"], "vanishing", "the second press did not land during the leaving")
+        self.assertEqual(twice["taken"], 1, "two presses over one leaving took two cards off the stack")
+        self.assertEqual(twice["opened"], 1, "two presses over one leaving opened two pieces")
+        self.assertEqual(twice["now"], {"file": twice["dealt"]["file"], "seed": twice["dealt"]["seed"]})
+        self.assertEqual(len(twice["incomplete"]), 1, "one piece was reported as left more than once")
+
+    def test_the_way_on_opens_the_next_card_where_there_is_no_piece(self):
+        # The stage's states with no piece on them that the mark still shows in (issue #109): a
+        # world with nothing to play, where it is lit because it is the whole of what the stage
+        # offers, and a module still loading, where it is dim. A press in either opens the next
+        # card from the stack, and nothing is reported left unsolved, because nothing was on. The
+        # module that was loading is never let land over the card the press opened instead.
+        result = self.scenario("leftUnsolved", toy=FINISHING_PIECE)
+        for state, lit in [("empty", True), ("loading", False)]:
+            with self.subTest(state=state):
+                got = result[state]
+                self.assertEqual(got["mode"], state, f"the press did not land while the stage was {state}")
+                self.assertEqual(got["lit"], lit)
+                self.assertTrue(got["pressed"], f"the way on could not be pressed while the stage was {state}")
+                self.assertEqual(got["taken"], 1, "the press did not take exactly one card off the stack")
+                self.assertEqual(got["opened"], 1, "the press did not open exactly one piece")
+                self.assertEqual(got["now"], {"file": got["dealt"]["file"], "seed": got["dealt"]["seed"]},
+                                 "what is on the stage is not the card the press took")
+                self.assertEqual(got["incomplete"], [], "a stage with no piece on it reported one left unsolved")
+        self.assertFalse(result["loading"]["lateOpened"], "the module still loading landed over the next card")
 
     def test_every_press_on_the_scene_does_something(self):
         # Issue #89: unresponsiveness is uninteresting. A press on the picture that lands on nothing
@@ -7402,10 +7485,33 @@ class RealSiteTest(unittest.TestCase):
                 self.assertEqual(played["doneText"], "solved")
                 self.assertFalse(played["movedOnByItself"],
                                  "the stage opened the next piece with nobody pressing anything")
+                self.assertTrue(played["enabledWhilePlaying"], "the way on could not be pressed over an unsolved piece")
+                self.assertFalse(played["litWhilePlaying"], "the way on was lit before the piece was over")
                 self.assertTrue(played["litWhenFinished"], "the ceremony ended and the way on never lit")
                 self.assertEqual(played["focusedWhenFinished"], "stage-next",
                                  "the way on lit and the keyboard was left wherever it was")
                 self.assertTrue(played["movedOn"], "the way on was pressed and nothing followed")
+        # A piece left unsolved (issue #109), on the site as committed: the way on can be pressed
+        # over it, opens the next card, and the leaving is an incomplete attempt and not a finish.
+        unsolved = report["leftUnsolved"]["result"]
+        self.assertTrue(unsolved["playable"], f"{unsolved['world']}: the piece never became playable")
+        self.assertTrue(unsolved["afterWrong"]["nextEnabled"],
+                        f"{unsolved['world']}: the way on could not be pressed over an unsolved piece")
+        self.assertFalse(unsolved["afterWrong"]["nextLit"], f"{unsolved['world']}: the way on lit over an unsolved piece")
+        self.assertTrue(unsolved["left"]["pressed"])
+        self.assertEqual(unsolved["left"]["opened"], 1, f"{unsolved['world']}: leaving it unsolved opened no next card")
+        self.assertEqual([d["file"] for d in unsolved["left"]["incomplete"]], [unsolved["world"]],
+                         f"{unsolved['world']}: leaving it unsolved was not reported once as an incomplete attempt")
+        self.assertEqual(unsolved["completes"], 0, f"{unsolved['world']}: a piece left unsolved was reported as finished")
+        self.assertEqual(unsolved["tally"], {"solved": 3, "tries": 5, "hints": 1},
+                         f"{unsolved['world']}: a piece left unsolved was counted on the tally of solves")
+        self.assertEqual(unsolved["left"]["addresses"], ["replace"])
+        self.assertEqual(unsolved["twice"]["taken"], 1, "two presses over one leaving took two cards off the stack")
+        for state in ["empty", "loading"]:
+            with self.subTest(state=state):
+                self.assertEqual(unsolved[state]["mode"], state)
+                self.assertEqual(unsolved[state]["opened"], 1, f"a press while the stage was {state} opened no next card")
+        self.assertFalse(unsolved["loading"]["lateOpened"], "the module still loading landed over the next card")
         # Done is not the End (issue #86), on the site as committed. What can be held of every
         # world's piece without knowing which piece it is, is held: the frames coming back when a
         # knob is worked again or the scene is tapped (a piece at rest asks for none, js/stage.js
@@ -7617,7 +7723,8 @@ class RealSiteTest(unittest.TestCase):
         # Issue #78: nothing moves on by itself, so every piece ends on one mark the visitor
         # presses. Four things make that trustworthy, and all four are read off the site as
         # committed. It is in the stage's own markup, so every world page and the threshold have
-        # it, and it starts out dim; it is not inside #stage-inner, whose transform during the
+        # it, and it is never disabled -- dim until a piece is finished, but a visitor may leave a
+        # piece unsolved (issue #109); it is not inside #stage-inner, whose transform during the
         # vanish is what a fixed child would be positioned against, so it cannot drift as the
         # piece scales away; the stylesheet pins it to one corner of the viewport rather than
         # laying it out with the knobs, so it is in the same place whatever shape the piece is;
@@ -7627,7 +7734,7 @@ class RealSiteTest(unittest.TestCase):
         self.assertIn("id='stage-next'", stage, "the stage writes no way on")
         mark = stage[stage.index("<button type='button' class='stage-next'"):]
         mark = mark[:mark.index("</button>")]
-        self.assertIn("disabled", mark, "the way on starts out lit")
+        self.assertNotIn("disabled", mark, "the way on starts out disabled, and it is never to be")
         self.assertIn("aria-label=", mark, "a mark with no words needs a name")
         self.assertNotIn(">Next<", mark, "the mark is a double caret, not a word")
         inner = stage[stage.index("<div class='stage-inner'"):stage.index("id='stage-next'")]
@@ -7644,11 +7751,20 @@ class RealSiteTest(unittest.TestCase):
                 with self.subTest(rel=rel):
                     self.assertNotIn("stage-skip", content, "'skip this one' is still here")
                     self.assertNotIn("skip this one", content, "'skip this one' is still here")
-        # And the stage runs it: lit when the ceremony is over, and dim again with every teardown.
+        # Dim and lit are the one flag the stage sets, data-lit, and not :disabled, which would take
+        # the mark out of the visitor's reach while a piece is unsolved.
+        for rule in [".stage-next[data-lit] {", ".stage-next[data-lit]:focus-visible {"]:
+            with self.subTest(rule=rule):
+                self.assertIn(rule, css, "the way on is not lit off data-lit")
+        self.assertNotIn(".stage-next:disabled", css, "the way on is still dimmed as a disabled control")
+        self.assertNotIn(".stage-next:enabled", css, "the way on is still lit as an enabled control")
+        # And the stage runs it: lit when the ceremony is over, dim again with every teardown, and
+        # never disabled at all.
         script = self.source[mi.STAGE_SCRIPT]
         self.assertIn("lightTheWayOn(true)", script, "nothing lights the way on when a piece is over")
         self.assertIn("dimTheWayOn()", script, "nothing dims it again")
         self.assertIn("ui.onward.focus(", script, "the way on never takes the keyboard")
+        self.assertNotRegex(script, r"onward\.disabled\s*=", "the stage disables the way on")
         finish = script.split("function finish(say) {", 1)[1].split("\n}", 1)[0]
         self.assertNotIn("next()", finish, "the stage still shows itself out when a piece is finished")
 
@@ -8209,6 +8325,68 @@ class RealSiteTest(unittest.TestCase):
         self.assertIn('analytics="${BUILD_DIR}/js/analytics.js"', deploy)
         self.assertNotIn("analytics='site/js/analytics.js'", deploy,
                          "the deploy injects into the source, which is never published")
+
+    def test_a_puzzle_left_unsolved_is_counted_as_incomplete_and_only_with_consent(self):
+        # Issue #109: a piece left by the way on before it was solved is announced by the stage
+        # ('stage:incomplete') and counted by js/analytics.js as an incomplete attempt -- but only
+        # once a visitor has accepted analytics, which is when the tag is loaded, and never after
+        # they withdraw. Played in Node against the committed file, with a measurement ID put in
+        # place of the placeholder as the deploy does and a consent banner whose answers the test
+        # gives, reading what reaches the tag's queue.
+        needs_node(self)
+        script = r"""
+          const fs = require('fs'), vm = require('vm');
+          const source = fs.readFileSync(process.argv[1], 'utf8').replace(process.argv[2], 'G-TEST109');
+          const handlers = {};
+          const appended = [];
+          let accepted = false;
+          let banner = null;
+          const node = (tag) => ({ tag, style: {}, setAttribute() {}, addEventListener() {} });
+          const document = {
+            currentScript: { src: 'https://example.test/js/analytics.js' },
+            getElementsByTagName: () => [],
+            createElement: node,
+            head: { appendChild: (n) => appended.push(n) },
+            body: { appendChild() {} },
+            documentElement: { classList: { add() {} } },
+            addEventListener() {}
+          };
+          const window = {
+            document,
+            addEventListener: (type, fn) => { (handlers[type] = handlers[type] || []).push(fn); },
+            CookieConsent: { run: (options) => { banner = options; }, acceptedCategory: () => accepted, showPreferences() {} }
+          };
+          vm.runInNewContext(source, { window, document });
+          const consent = appended.find((n) => n.tag === 'script' && /cookieconsent\.umd\.js$/.test(n.src || ''));
+          if (consent && consent.onload) consent.onload();
+          const fire = (type, detail) => (handlers[type] || []).forEach((fn) => fn({ type, detail }));
+          const counted = () => (window.dataLayer || []).map((a) => Array.from(a))
+            .filter((a) => a[0] === 'event').map((a) => [a[1], a[2]]);
+          const left = { file: 'quiet-room.html', seed: 4242, tries: 2, hints: 1, touched: true };
+          const out = {};
+          fire('stage:incomplete', left);
+          out.beforeConsent = counted();
+          accepted = true;
+          if (banner) banner.onConsent();
+          fire('stage:incomplete', left);
+          fire('stage:complete', { file: 'quiet-room.html', seed: 4243 });
+          out.accepted = counted();
+          accepted = false;
+          if (banner) banner.onChange();
+          fire('stage:incomplete', left);
+          out.withdrawn = counted();
+          process.stdout.write(JSON.stringify(out));
+        """
+        path = self.repo / "site" / mi.ANALYTICS_SCRIPT
+        run = subprocess.run([mi.NODE_BIN, "-e", script, "--", str(path), self.GA_PLACEHOLDER],
+                             capture_output=True, text=True, timeout=60)
+        self.assertEqual(run.returncode, 0, run.stderr)
+        out = json.loads(run.stdout)
+        self.assertEqual(out["beforeConsent"], [], "a puzzle left unsolved was counted before anyone accepted analytics")
+        attempt = ["puzzle_incomplete", {"world": "quiet-room", "seed": 4242, "tries": 2, "hints": 1, "touched": 1}]
+        self.assertEqual(out["accepted"], [attempt],
+                         "a puzzle left unsolved was not counted once as an incomplete attempt, and only that")
+        self.assertEqual(out["withdrawn"], [attempt], "a puzzle left unsolved was counted after consent was withdrawn")
 
     def test_every_page_loads_the_local_state_store_and_its_meta_menu(self):
         self.assertIn(mi.STATE_SCRIPT, self.site, "the file behind the line has to be there")

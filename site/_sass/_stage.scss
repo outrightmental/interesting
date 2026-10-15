@@ -1096,12 +1096,15 @@
 // all on a page that has a stage with something on it: before a piece is on, the rules below
 // take it away entirely, the way they take the piece's other parts away.
 //
-// Dim for the whole piece and lit when it is over: `disabled` is the state, so the dimming is the
-// same treatment every disabled control on the site wears (_controls.scss), a keyboard cannot
-// reach it before there is anywhere to go, and js/stage.js has one flag to set rather than a
-// class to keep in step with it. Unlit it is the dark plate and lit it is the primary raised off
-// the page; it steps between the two along the stair, both ways (the colour transition every
-// control carries), and a press stamps it as it stamps every control.
+// Never disabled, and lit only when the piece is over (issue #109). A visitor may leave a puzzle
+// unsolved whenever they like, so the mark takes the pointer, the focus and the press in every
+// mode it is shown in; what it says is how much it is asking to be pressed. Dim, it is the dark
+// plate it always was, its caret in the faded ink (which still stands better than 3:1 on the
+// plate under every mood, as an enabled control's has to), and lit, the primary raised off the
+// page, the one filled control on the screen. `data-lit` (js/stage.js) is the state, one flag the
+// script sets and nothing else to keep in step with it. It steps between the two along the stair,
+// both ways (the colour transition every control carries), and a press stamps it as it stamps
+// every control.
 .stage-next {
   position: fixed;
   right: var(--nav-inset);
@@ -1115,6 +1118,8 @@
   height: 64px;
   min-height: 64px;
   padding: 0;
+  background: var(--md-sys-color-surface-container-low);
+  color: color-mix(in oklab, var(--md-sys-color-on-surface) 45%, transparent);
 }
 
 .stage-next .icon {
@@ -1122,24 +1127,21 @@
   height: 32px;
 }
 
-.stage-next:disabled {
-  background: var(--md-sys-color-surface-container-low);
-  color: color-mix(in oklab, var(--md-sys-color-on-surface) 45%, transparent);
-}
-
 // Lit: the one filled control on the screen, raised off the page.
-.stage-next:enabled {
+.stage-next[data-lit] {
   background: var(--md-sys-color-primary);
   color: var(--md-sys-color-on-primary);
   box-shadow: var(--md-sys-elevation-level3);
 }
 
-.stage-next:enabled:focus-visible {
+.stage-next[data-lit]:focus-visible {
   outline-color: var(--md-sys-color-on-surface);
 }
 
-// Before a piece is on -- the threshold waiting or asking, a world page without scripting -- there
-// is nowhere for it to go, so it is not there.
+// Before a piece is on -- the threshold waiting or asking, a world page without scripting -- it is
+// not there. The threshold at rest floats nothing but the logo and the persona (issue #64) and has
+// its own way to the first card, skipping the question; a page without scripting has nothing to
+// answer a press with.
 .stage[data-mode='idle'] .stage-next,
 .stage[data-mode='quiet'] .stage-next,
 .stage[data-mode='asking'] .stage-next {
