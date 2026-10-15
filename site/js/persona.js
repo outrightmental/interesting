@@ -36,15 +36,20 @@
    The guide remains usable after the shape is found and keeps nothing between pages. The portrait
    fits the sky's 2:1 geometry without stretching it, so a found shape travels recognisably.
 
-   The difficulty is advertised as specifically as the sky and settable from everywhere it is a
-   dependency (issue #93), which is every piece on the site: `tuner(host)` below renders the one
-   slider, the sheet puts it in its own section, and js/stage.js puts the same control on the
-   stage beside the piece it is dealing. Only an effective level change notifies readers; choosing
-   the default explicitly can still be saved without announcing a different difficulty. As with
-   the sky, each subscriber receives an independent snapshot, and subscription changes apply to
-   the next notification. Unlike the sky it always holds a value -- the middle of
-   the dial until a visitor moves it -- so nothing is ever powered down waiting for one: a piece
-   is dealt at the setting that stands and the slider is offered in place.
+   The difficulty is advertised as specifically as the sky (issue #93): `tuner(host)` below
+   renders the one slider, and the sheet keeps it in its own section for good -- the sheet is
+   where a visitor changes it. The stage offers the same slider beside the piece it is dealing
+   only to a visitor who has never picked a level (issue #100, tuner's `once`): the moment one is
+   picked, on the stage or in the sheet, the stage's slider gives way to a footnote that says what
+   the puzzles are set at and opens the sheet at its difficulty section, and every piece after that
+   shows the footnote and no slider. A browser that keeps nothing between visits keeps the pick for
+   the page, so its next visit is a new visitor's and is offered the slider again. Only an
+   effective level change notifies readers; choosing the default explicitly can still be saved
+   without announcing a different difficulty, though it is a pick all the same. As with the sky,
+   each subscriber receives an independent snapshot, and subscription changes apply to the next
+   notification. Unlike the sky it always holds a value -- the middle of the dial until a visitor
+   picks one -- so nothing is ever powered down waiting for one: a piece is dealt at the setting
+   that stands, and a visitor who has not picked is offered the slider in place.
 */
 (function () {
   'use strict';
@@ -775,6 +780,8 @@
       says: LEVEL_SAYS[saved.level - 1], set: saved.set };
   }
   var tuned = [];
+  // The controls offered only until a level is picked (tuner's `once`), told when the first one is.
+  var picked = [];
   function onDifficulty(fn) { return subscribe(tuned, fn); }
   function setDifficulty(level) {
     var want = levelOf(level);
@@ -789,9 +796,17 @@
       noteSet('difficulty', sheet.tune && sheet.tune.querySelector('input'));
     }
     refresh();
-    if (before.level === now.level) return kept;
-    var failures = tellEach(tuned, function () { return [Object.assign({}, now), kept]; });
-    broadcast('persona:difficulty', { difficulty: now, kept: kept });
+    var failures = [];
+    if (before.level !== now.level) {
+      failures = tellEach(tuned, function () { return [Object.assign({}, now), kept]; });
+      broadcast('persona:difficulty', { difficulty: now, kept: kept });
+    }
+    // A first pick, at any level and from any control -- the middle of the dial chosen outright
+    // included -- is what a control offered only until then is waiting on. Told after the readers
+    // above, so a piece is dealt at the new setting before the slider beside it goes.
+    if (!before.set && now.set) {
+      failures = failures.concat(tellEach(picked, function () { return [Object.assign({}, now), kept]; }));
+    }
     if (failures.length) throw failures[0];
     return kept;
   }
@@ -809,19 +824,64 @@
     if (text) node.textContent = text;
     return node;
   }
+  // The footnote's one line: what the puzzles are set at, and for how long where nothing is kept.
+  function noteLine(at) {
+    return 'Puzzles are set to ' + LEVELS[at - 1]
+      + (store && store.persistent === false ? ' for this page' : '') + '.';
+  }
+  /* What a control offered only until a level is picked leaves in its place once one is (issue
+     #100): one line saying what the puzzles are set at, and a quiet button that opens the persona
+     sheet at its difficulty section, where the slider stays. A footnote, not a control -- it moves
+     nothing itself -- so it follows the setting however it changes. Hands back the button, to be
+     given the focus the slider had, and the release. */
+  function footnote(host) {
+    host.textContent = '';
+    host.classList.add('difficulty');
+    host.classList.add('is-noted');
+    var line = element('p', 'panel-note difficulty-footnote');
+    var words = element('span', 'difficulty-footnote-text');
+    var change = element('button', 'btn-text difficulty-change', 'change it in your persona');
+    change.type = 'button';
+    change.addEventListener('click', function () { openSheet('difficulty', change); });
+    line.appendChild(words);
+    line.appendChild(change);
+    host.appendChild(line);
+    say(words, noteLine(difficulty().level), true);
+    var release = onDifficulty(function (now) { say(words, noteLine(now.level)); });
+    return {
+      button: change,
+      release: function () {
+        release();
+        if (line.parentNode === host) {
+          host.textContent = '';
+          host.classList.remove('difficulty');
+          host.classList.remove('is-noted');
+        }
+      }
+    };
+  }
   var tunerCount = 0;
   /* The one difficulty control, rendered into `host` wherever a part depends on the setting: the
-     sheet's own section, and the stage beside the piece it is dealing. The M3 slider the rest of
-     the site uses (input[type=range] in a .row, _sass/_controls.scss), named by a real <label>,
-     read out by name rather than by number (aria-valuetext) and operated by the keyboard the way
-     every slider on this site is -- the browser's own arrows, Home and End.
+     sheet's own section, and the stage beside the piece it is dealing for a visitor who has not
+     picked a level yet. The M3 slider the rest of the site uses (input[type=range] in a .row,
+     _sass/_controls.scss), named by a real <label>, read out by name rather than by number
+     (aria-valuetext) and operated by the keyboard the way every slider on this site is -- the
+     browser's own arrows, Home and End.
 
      options, all optional: label (the words beside it), note (one line under it, for a host that
-     has not said what the setting is), onChange(difficulty, kept) once a new level is kept.
-     Hands back a function that takes the control away again. */
+     has not said what the setting is), onChange(difficulty, kept) once a new level is kept, and
+     once -- offered only until a level is picked (issue #100): the slider while difficulty().set
+     is false, and the footnote above in its place from the moment it is true, whichever control
+     picked it. Picked by pointer, the slider goes as it is let go and its focus passes to the
+     footnote; picked by keys, it stays while it keeps the focus, so a visitor stepping from fair to
+     fierce is not stopped at keen, and goes as they leave it. A browser that keeps nothing between
+     visits keeps the pick for the page, so a later visit is a new visitor's and is offered the
+     slider again: nothing remembers that it was ever picked.
+     Hands back a function that takes the control -- or the footnote -- away again. */
   function tuner(host, options) {
     if (!host || typeof host.appendChild !== 'function') return function () {};
     var opts = options || {};
+    if (opts.once && difficulty().set) return footnote(host).release;
     tunerCount += 1;
     var id = 'difficulty-' + tunerCount;
     host.textContent = '';
@@ -891,9 +951,37 @@
       paint(now.level);
       tell(now.level, kept);
     });
+    var unpick = function () {};
+    var noted = null;
+    if (opts.once) {
+      var keyed = false; // worked by its keys last, rather than by a pointer
+      var waiting = false; // picked by keys, and still being worked
+      var settle = function () {
+        if (noted) return;
+        if (keyed && document.activeElement === input) { waiting = true; return; }
+        var had = document.activeElement === input;
+        release();
+        unpick();
+        noted = footnote(host);
+        if (had && typeof noted.button.focus === 'function') noted.button.focus();
+      };
+      input.addEventListener('keydown', function () { keyed = true; });
+      input.addEventListener('pointerdown', function () { keyed = false; });
+      input.addEventListener('blur', function () {
+        if (!waiting) return;
+        waiting = false;
+        keyed = false;
+        settle();
+      });
+      unpick = subscribe(picked, settle);
+    }
     return function () {
       release();
-      if (row.parentNode === host) {
+      unpick();
+      if (noted) {
+        noted.release();
+        noted = null;
+      } else if (row.parentNode === host) {
         host.textContent = '';
         host.classList.remove('difficulty');
       }
@@ -2500,8 +2588,9 @@
     // (renderName), so the first star does not push the controls under it down.
     if (sheet.name) sheet.name.hidden = false;
     buildFigures();
-    // The third setting, in its own section: the same control the stage puts beside a piece, so a
-    // visitor meets one slider wherever they meet the setting.
+    // The third setting, in its own section: the same control the stage offers a new visitor beside
+    // a piece, so there is only ever one slider to learn -- and here it stays, whether or not a
+    // level has been picked, because this is where a visitor changes it afterwards.
     if (sheet.tune) tuner(sheet.tune, { label: 'difficulty' });
     var shell = window.interestingSite;
     if (shell && typeof shell.lightbox === 'function') {
