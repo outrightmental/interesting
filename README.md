@@ -1310,9 +1310,9 @@ iteration process rather than a one-off tidy-up.
   shell writes four names and no more: `threshold`, the mood flow's reading, `constellation`,
   which the persona writes when a visitor places a star or asks a powered-down world to seed a
   sky, `difficulty`, which the persona writes when a visitor moves the slider in the sheet or
-  picks a level beside a piece, and `puzzles`, which the stage writes when a puzzle is solved; the nine names the
-  shell's retired games once kept (`constellation-relay` and its kin) are taken out of a visitor's
-  document on load, so an export stays an honest account of what the site keeps.
+  picks a level beside a piece, and `puzzles`, which the stage writes when a puzzle is solved;
+  the nine names the shell's retired games once kept (`constellation-relay` and its kin) are taken
+  out of a visitor's document on load, so an export stays an honest account of what the site keeps.
 - **One way in and out.** `window.interestingState` owns the parsing, the defaults and every
   failure path. `read(key, fallback)` hands back `{ status, value }`, where `status` is `ok`,
   `missing`, `unreadable` or `unavailable` — a page can render first and explain afterwards, in its
