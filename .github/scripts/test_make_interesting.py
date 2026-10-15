@@ -4998,6 +4998,14 @@ class CompletionAxiomTest(SiteDirTestCase):
                      # rewriting the stage knows it.
                      "Every knob must be one its visitor can actually set",
                      "solvable whatever order they reach its knobs in",
+                     # Issue #104: sorting is always excellent, and never a list with a move button
+                     # beside each item -- said to the run that writes a piece, to the run that
+                     # rewrites the stage, and held by the stage harness.
+                     "Sorting is always excellent",
+                     "an order knob is a list sorted by hand",
+                     "never a list with up and down buttons, or arrows of any kind, beside each item",
+                     "the same goes for anything else on the site a visitor puts in order",
+                     "an order knob is one row per item and nothing beside them",
                      "A piece is one instantiation and keeps nothing between them",
                      mi.STAGE_HARNESS_REL,
                      "a wrong answer checked is refused and counted and leaves every knob live",

@@ -1744,6 +1744,26 @@ invariant of the iteration, stated in the prompt and held to in code.
   [#60](https://github.com/outrightmental/interesting/issues/60)): it opens with an answer already
   on it, which is why `ctx.value(id)` is the piece's from the first frame, so pressing it and
   letting go where it stands is giving that answer and the stage takes it as set.
+- **Sorted by hand, never by arrows** (issue
+  [#104](https://github.com/outrightmental/interesting/issues/104)). Sorting is always excellent.
+  An `order` knob is an M3 list, one row per item — its place, its name, and a drag handle at its
+  end — and nothing else stands beside an item. A row is picked up and put down where it goes,
+  three ways that are one gesture: dragged, by a mouse or a pen from anywhere on it and by a finger
+  from its handle (so a thumb on the list still scrolls the page), while the rows it passes step
+  aside in one stair to open the gap it will land in and every figure says where its row would be;
+  tapped and then tapped into another row's place, which is one pointer and no dragging (WCAG
+  2.2's 2.5.7); or picked up by Enter or Space, carried by the arrow keys (Home and End to either
+  end) and put down by Enter or Space, with Escape putting it back. Each pick-up, carry and
+  put-down is said on a live line, every row is named by its place, the one focus ring stays on
+  the row being carried, and for a visitor who asked for less motion the rows are simply in their
+  new places. The knob's contract is unchanged — `ctx.value(id)` is the array of item values in
+  their current order, set at the first put-down, and `solution` gives the array that solves — so
+  the light table's filter order and every other order on the site play exactly as they did. A
+  list with an up and a down button beside each item, moving one thing along one place at a time,
+  is the pattern this replaced, and it does not come back: the prompt says so, for the stage and
+  for anything else on the site a visitor puts in order, and the stage harness's `orderSorted`
+  scenario reads the knob's buttons — one per row, whose words are exactly its place and its name,
+  and *keep this order* — so `StageTest` fails a stage that puts anything beside a row.
 - **One instantiation, then nothing.** A piece is its turn on the stage and no part of it outlives
   that turn — and that turn runs to the press of the way on, not to the finish. The stage has one
   teardown, and it takes the whole piece apart — the frame loop, the
@@ -1820,7 +1840,7 @@ invariant of the iteration, stated in the prompt and held to in code.
   like the piece harness it is outside `/site`, so a run cannot soften it. Deliberately, it holds
   the site as committed rather than refusing a plan: it drives the stage through the stage's own
   elements, and those are a run's to rewrite, so gating plans on it would pin markup the silo leaves
-  open. The prompt says so, and says to keep all eleven true when rewriting the stage.
+  open. The prompt says so, and says to keep all twelve true when rewriting the stage.
 - **Held to in code.** `check_completion` in
   [`.github/scripts/make_interesting.py`](.github/scripts/make_interesting.py) reads the one list
   of worlds off the built home page (the `#site-worlds` JSON the layout writes from
