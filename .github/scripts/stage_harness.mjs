@@ -104,7 +104,8 @@
                       dragged by a mouse and by a finger on its grip, and a finger on its words,
                       which is the page scrolling and must move nothing -- the mouse drag coming
                       after a press let go of off its row, which must not leave the list waiting
-                      on a pointerup that never comes. Every put-down has to set
+                      on a pointerup that never comes, nor make the mouse passing back over the
+                      list with no button down a drag. Every put-down has to set
                       the knob to the order the rows show, and a pick-up, a drag the browser takes
                       back and a drag put back with Escape have to give no order at all.
 
@@ -1400,7 +1401,7 @@ async function orderSorted(stageDir, worlds, deal, clock) {
   const layOut = () => lis().forEach((li, k) => {
     li.box = { left: 0, right: 320, width: 320, top: 100 + k * ROW_PITCH, bottom: 144 + k * ROW_PITCH, height: 44 };
   });
-  const press = (extra) => Object.assign({ pointerType: 'mouse', button: 0, pointerId: 1 }, extra);
+  const press = (extra) => Object.assign({ pointerType: 'mouse', button: 0, buttons: 1, pointerId: 1 }, extra);
   // A press on the last row that hardly moves and is let go of off it, so no pointerup reaches the
   // row: it must not leave the list waiting on it, or the drag after it goes nowhere.
   layOut();
@@ -1419,10 +1420,18 @@ async function orderSorted(stageDir, worlds, deal, clock) {
   fire(li.querySelector('.knob-order-row'), 'click', { detail: 1 });
   await clock.advance(120);
   seen.dropped = read();
+  // A press slid off the side of the list and let go of there, so no pointerup reaches the row, and
+  // then the mouse brought back over the list with no button down: hovering is not a drag.
+  layOut();
+  fire(lis()[0], 'pointerdown', press({ clientY: 122 }));
+  fire(lis()[0], 'pointermove', press({ clientY: 123 }));
+  fire(lis()[Math.min(2, n - 1)], 'pointermove', press({ clientY: 122 + ROW_PITCH * 2, buttons: 0 }));
+  await clock.advance(120);
+  seen.hovered = read();
   // A finger on the words, travelling a row up: the page scrolling past the list, not a drag.
   layOut();
   li = lis()[n - 1];
-  const finger = (extra) => Object.assign({ pointerType: 'touch', button: 0, pointerId: 2 }, extra);
+  const finger = (extra) => Object.assign({ pointerType: 'touch', button: 0, buttons: 1, pointerId: 2 }, extra);
   const bottom = 122 + ROW_PITCH * (n - 1);
   fire(li, 'pointerdown', finger({ clientY: bottom, target: li.querySelector('.knob-order-label') }));
   fire(li, 'pointermove', finger({ clientY: bottom - ROW_PITCH }));

@@ -4733,7 +4733,8 @@ def assert_sorted_by_hand(test, result, where=""):
     order". There is nothing beside an item to press, so an up and a down by every row cannot come
     back without failing here, whatever the items are called. Then every gesture: a row put down
     sets the knob to the order the rows show, and a pick-up, a finger on the words, a drag the
-    browser takes back and one put back with Escape change nothing.
+    browser takes back, one put back with Escape and a mouse hovering with no button down change
+    nothing.
     """
     made, seen = result["made"], result["seen"]
     at = f"{where}: " if where else ""
@@ -4805,6 +4806,9 @@ def assert_sorted_by_hand(test, result, where=""):
     test.assertEqual(seen["dropped"]["shifts"], [""] * n, f"{at}a row was left standing aside")
     test.assertEqual(seen["dropped"]["dragY"], [""] * n)
     test.assertEqual(seen["dropped"]["held"], [], f"{at}the click a drag ends on picked a row up")
+    test.assertFalse(seen["hovered"]["sorting"], f"{at}a mouse hovering with no button down dragged a row")
+    test.assertEqual(seen["hovered"]["order"], dropped)
+    test.assertEqual(seen["hovered"]["dragY"], [""] * n)
     # A finger: on the words it is the page scrolling; on the grip it is a drag.
     test.assertEqual(seen["fingerOnWords"]["order"], dropped, f"{at}a finger on the words dragged the row")
     gripped = moved(dropped, n - 1, n - 2)
@@ -5478,14 +5482,15 @@ class StageTest(unittest.TestCase):
         # the array of item values in their current order, and the knob is set at the first move.
         # ORDER_PIECE's apply() says how many orders it has been given and the last one, so every
         # gesture can be held to it: a put-down -- a tap, a key, a drag, a row put down where it
-        # stood -- gives the order the rows show, and a pick-up, a walk of the arrow keys, a finger
-        # on the words, a drag the browser takes back and one put back with Escape give nothing.
+        # stood -- gives the order the rows show, and a pick-up, a walk of the arrow keys, a mouse
+        # hovering with no button down, a finger on the words, a drag the browser takes back and one put back with Escape give nothing.
         seen = self.scenario("orderSorted", toy=ORDER_PIECE)["seen"]
         # How many orders each gesture gives. A key carries the row a place at a time and the scene
         # follows it, so each carry gives the order as it goes, and the put-down gives it once more.
         gives = {"tappedDown": 1, "tappedInPlace": 1, "keyDown": 1, "keyEnd": 1, "keyBack": 1, "keyPutDown": 2,
                  "dropped": 1, "fingerOnGrip": 1}
-        quiet = ["tappedUp", "letGo", "keyUp", "walked", "nudged", "dragging", "fingerOnWords", "cancelled", "escaped"]
+        quiet = ["tappedUp", "letGo", "keyUp", "walked", "nudged", "dragging", "hovered", "fingerOnWords", "cancelled",
+                 "escaped"]
         self.assertNotIn("given", seen["opened"]["status"], "the piece was given an order nobody gave")
         self.assertNotIn("given", seen["tappedUp"]["status"], "picking a row up gave the piece an order")
         count = 0

@@ -2418,6 +2418,11 @@ const KNOBS = {
     }
     function moved(ev) {
       if (!drag || ev.pointerId !== drag.id) return;
+      // No button down: a press let go of off the list, and the mouse only passing over it now.
+      if (!drag.live && ev.buttons === 0) {
+        drag = null;
+        return;
+      }
       const dy = (Number(ev.clientY) || 0) - drag.y;
       if (!drag.live) {
         if (Math.abs(dy) < 4) return;
