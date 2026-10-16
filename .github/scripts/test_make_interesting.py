@@ -949,6 +949,7 @@ class SingleExperienceTest(SiteDirTestCase):
         self.assertEqual(mi.WHOLE, "a single functioning excellent experience")
         self.assertIn("single coherent whole", mi.MISSION)
         self.assertIn("single coherent whole", mi.CONSOLIDATION_MISSION)
+        self.assertIn("single coherent whole", mi.DEEPENING_MISSION)
         self.assertTrue(mi.MISSION.startswith("make the website more interesting"))
 
     def test_every_run_envisions_the_whole_before_it_chooses_anything(self):
@@ -1104,7 +1105,7 @@ class MarbleBagTest(SiteDirTestCase):
         self.assertEqual(mi.MODE_MARBLES, {
             "create_item": 1, "enhance_item": 14, "enhance_nav": 5, "enhance_persona": 4,
             "enhance_overall": 5, "consolidate_item": 4, "consolidate_nav": 2,
-            "consolidate_persona": 3, "consolidate_overall": 4})
+            "consolidate_persona": 3, "consolidate_overall": 4, "deepen_overall": 4})
         self.assertEqual(mi.MODES, tuple(mi.MODE_MARBLES))
         for mode in mi.MODES:
             work, area = mode.split("_", 1)
@@ -1114,7 +1115,7 @@ class MarbleBagTest(SiteDirTestCase):
 
     def test_the_bag_holds_one_marble_per_unit_of_weight(self):
         bag = mi.marble_bag(mi.MODE_MARBLES)
-        self.assertEqual(len(bag), 42)
+        self.assertEqual(len(bag), 46)
         for mode, weight in mi.MODE_MARBLES.items():
             with self.subTest(mode=mode):
                 self.assertEqual(bag.count(mode), weight)
@@ -1130,13 +1131,14 @@ class MarbleBagTest(SiteDirTestCase):
             return bag[-1]
 
         with mock.patch.object(mi.random, "choice", choice):
-            self.assertEqual(self.mode(), ("consolidate_overall", ""))
-            self.assertEqual(self.mode(RUN_MODE="auto"), ("consolidate_overall", ""))
+            self.assertEqual(self.mode(), ("deepen_overall", ""))
+            self.assertEqual(self.mode(RUN_MODE="auto"), ("deepen_overall", ""))
         self.assertEqual(bags, [mi.marble_bag(mi.MODE_MARBLES)] * 2)
 
     def test_the_draw_follows_the_weights(self):
         random.seed(20261008)
-        drawn = [mi.draw_marble(mi.MODE_MARBLES) for _ in range(4200)]
+        # A hundred draws per marble, so a mode's count over a hundred is its weight.
+        drawn = [mi.draw_marble(mi.MODE_MARBLES) for _ in range(100 * sum(mi.MODE_MARBLES.values()))]
         for mode, weight in mi.MODE_MARBLES.items():
             with self.subTest(mode=mode):
                 self.assertAlmostEqual(drawn.count(mode) / 100, weight, delta=max(1.5, weight / 4))
@@ -1159,8 +1161,10 @@ class MarbleBagTest(SiteDirTestCase):
             self.assertEqual(self.mode(RUN_MODE="consolidate"), ("consolidate_item", ""))
             self.assertEqual(self.mode(RUN_MODE="enhance"), ("enhance_item", ""))
             self.assertEqual(self.mode(RUN_MODE="create"), ("create_item", ""))
-            # The old name for the runs that grow the site: everything but consolidating.
+            # The old name for the runs that grow the site: the creating and the enhancing modes,
+            # and neither the consolidating ones nor the deepening one, which came after the name.
             self.assertEqual(self.mode(RUN_MODE="interesting"), ("create_item", ""))
+            self.assertEqual(self.mode(RUN_MODE="deepen"), ("deepen_overall", ""))
         self.assertEqual(sorted(set(bags[0])), ["consolidate_item", "consolidate_nav",
                                                 "consolidate_overall", "consolidate_persona"])
         self.assertEqual(bags[0].count("consolidate_item"), 4)
@@ -1168,6 +1172,7 @@ class MarbleBagTest(SiteDirTestCase):
         self.assertEqual(bags[2], ["create_item"])
         self.assertEqual(sorted(set(bags[3])), ["create_item", "enhance_item", "enhance_nav",
                                                 "enhance_overall", "enhance_persona"])
+        self.assertEqual(bags[4], ["deepen_overall"] * 4)
 
     def test_an_unknown_mode_is_warned_about_and_the_bag_decides(self):
         mode, log = self.mode(RUN_MODE="tidy")
@@ -1205,7 +1210,7 @@ class MarbleBagTest(SiteDirTestCase):
         self.assertEqual(run.mode, "enhance_item")
         self.assertTrue(1 <= len(run.items) <= 3)
         self.assertTrue(all(world in self.WORLDS for world in run.items))
-        for mode in ["create_item", "enhance_nav", "consolidate_overall"]:
+        for mode in ["create_item", "enhance_nav", "consolidate_overall", "deepen_overall"]:
             with mock.patch.object(mi, "chosen_mode", return_value=mode):
                 with self.subTest(mode=mode):
                     self.assertEqual(mi.deal_run(files), mi.Run(mode))
@@ -1217,6 +1222,9 @@ class MarbleBagTest(SiteDirTestCase):
         self.assertEqual((run.work, run.area, run.items), ("consolidate", "item", self.WORLDS[:2]))
         self.assertEqual(mi.Run("create_item", self.WORLDS).items, [], "a creating run makes its own world")
         self.assertEqual(mi.Run("enhance_nav", self.WORLDS).items, [])
+        self.assertEqual((mi.Run("deepen_overall", self.WORLDS).work, mi.Run("deepen_overall").area),
+                         ("deepen", "overall"))
+        self.assertEqual(mi.Run("deepen_overall", self.WORLDS).items, [], "a deepening run draws no world")
         self.assertEqual(mi.Run("enhance_item", ["junk", self.WORLDS[0]]).items, self.WORLDS[:1])
         with self.assertRaises(ValueError):
             mi.Run("tidy")
@@ -1248,19 +1256,22 @@ class MarbleBagTest(SiteDirTestCase):
             "consolidate_nav": ("Consolidate the navigation", "cleaning up the code and logic of the navigation"),
             "consolidate_persona": ("Consolidate the persona", "cleaning up the code and logic of the persona"),
             "consolidate_overall": ("Consolidate the site", "cleaning up the code and logic of the site-wide experience"),
+            "deepen_overall": ("Fit the site together", "deepening what the site adds up to, one step further than it stands"),
         }
+        self.assertEqual(set(expected), set(mi.MODES))
         for mode, (headline, aim) in expected.items():
             with self.subTest(mode=mode):
                 run = mi.Run(mode, quiet)
                 self.assertEqual(mi.headline_of(run), headline)
                 mission = mi.mission_of(run)
-                base = mi.CONSOLIDATION_MISSION if run.work == "consolidate" else mi.MISSION
+                base = {"consolidate": mi.CONSOLIDATION_MISSION, "deepen": mi.DEEPENING_MISSION}.get(run.work, mi.MISSION)
                 self.assertTrue(mission.startswith(base + ", by "), mission)
                 self.assertIn(aim, mission)
         self.assertEqual(mi.headline_of(mi.Run("enhance_item")), "Enhance a world")
         self.assertEqual(mi.headline_of(mi.Run("enhance_item", self.WORLDS[:2])), "Enhance the quiet room and loam")
         self.assertIn("by enhancing one world", mi.mission_of(mi.Run("enhance_item")))
         self.assertEqual(mi.clean_summary("", mi.CONSOLIDATION_MISSION), mi.CONSOLIDATION_MISSION)
+        self.assertEqual(mi.clean_summary("", mi.DEEPENING_MISSION), mi.DEEPENING_MISSION)
         self.assertEqual(mi.clean_summary(None), mi.MISSION)
 
     def test_the_modes_differ_in_one_block_of_the_prompt(self):
@@ -1284,7 +1295,9 @@ class MarbleBagTest(SiteDirTestCase):
             with self.subTest(mode=mode):
                 prompt = self.prompt(mode)
                 block = prompt[prompt.index("THIS RUN "):prompt.index("LEGIBLE TO A STRANGER. Everything")]
-                for part in ["THE BAG OF MARBLES", f"this run drew {mode}", "enhance_item 14", "of 42",
+                for part in ["THE BAG OF MARBLES", f"this run drew {mode}", "enhance_item 14",
+                             "deepen_overall 4", "of 46",
+                             "create, enhance, consolidate or deepen",
                              "leave the rest to the runs that draw them",
                              "WHAT THE DEPLOY'S TESTS HOLD IN PLACE", "harnesses a run cannot change",
                              "complete and successful run", "do not add for the sake of adding",
@@ -1315,7 +1328,11 @@ class MarbleBagTest(SiteDirTestCase):
             "consolidate_overall": ["THIS RUN CONSOLIDATES THE WHOLE SITE", "It adds nothing",
                                     "RE-FEDERATE", "REFACTOR AND CLEAN UP",
                                     "overdue rather than the one that is merely easy"],
+            "deepen_overall": ["THIS RUN MAKES IT ALL FIT TOGETHER BETTER", "Where the site says what a piece is one piece of",
+                               "FURTHER EVERY TIME", "DEEPER, NEVER HEAVIER",
+                               "It may add what the fitting needs"],
         }
+        self.assertEqual(set(said), set(mi.MODES))
         for mode, parts in said.items():
             prompt = self.prompt(mode, quiet)
             for part in parts:
@@ -1370,6 +1387,11 @@ class MarbleBagTest(SiteDirTestCase):
                     self.assertIn("and add nothing", last)
                     self.assertIn("by edits that leave what the deploy's tests hold in place where it is", last)
                     self.assertNotIn("ADD one world", prompt)
+                elif mode.startswith("deepen_"):
+                    # The whole is a deepening run's area, so there is no "other area" to leave.
+                    self.assertIn("leave the consolidating, the new worlds and the enhancing to the runs that draw them", last)
+                    self.assertIn("Tidy nothing that is not in the way", prompt)
+                    self.assertNotIn("It adds nothing", prompt)
                 else:
                     self.assertIn("leave the consolidating, and every other area, to the runs that draw them", last)
                     self.assertNotIn("It adds nothing", prompt)
@@ -1427,6 +1449,10 @@ class MarbleBagTest(SiteDirTestCase):
         persona = mi.focus_files(mi.Run("enhance_persona"), files)
         self.assertEqual(persona[:3], ["js/persona.js", "_includes/layout.njk", "_sass/_persona.scss"])
         self.assertEqual(mi.focus_files(mi.Run("enhance_overall"), files), framework)
+        # A deepening run sees the nest's own files first, in their order, then the framework.
+        deepen = mi.focus_files(mi.Run("deepen_overall"), files)
+        self.assertEqual(deepen[:2], ["_data/worlds.json", "js/stage.js"])
+        self.assertEqual(sorted(deepen), framework)
         # A creating run has no world yet; the data and the palette its lines go in come first.
         created = mi.focus_files(mi.Run("create_item"), files)
         self.assertEqual(created[:2], ["_data/worlds.json", "_sass/_mood.scss"])
@@ -1447,12 +1473,13 @@ class MarbleBagTest(SiteDirTestCase):
         self.assertEqual(mi.strays(mi.Run("enhance_persona"), {"files": [{"path": "index.html"}, {"path": "js/threshold.js"}, {"path": "_sass/_nav.scss"}]}, existing),
                          ["_sass/_nav.scss"])
         self.assertEqual(mi.strays(mi.Run("consolidate_overall"), plan, existing), [])
+        self.assertEqual(mi.strays(mi.Run("deepen_overall"), plan, existing), [])
         self.assertEqual(mi.strays(item, {"files": "x", "delete": None}, existing), [])
 
     def test_the_workflow_offers_every_mode_and_reads_the_draw_back(self):
         workflow = (mi.REPO_ROOT / ".github" / "workflows" / "make-interesting.yml").read_text()
         self.assertIn("RUN_MODE: ${{ inputs.mode }}", workflow)
-        for option in ["auto", "create", "enhance", "consolidate", *mi.MODES]:
+        for option in ["auto", *mi.WORKS, *mi.MODES]:
             with self.subTest(option=option):
                 self.assertIn(f"\n          - {option}\n", workflow)
         self.assertIn("MODE: ${{ steps.ai.outputs.mode }}", workflow)
@@ -3442,7 +3469,8 @@ class NestedStandardTest(unittest.TestCase):
         # a solve say more of the working a piece belongs to.
         for mode, carried in [("create_item", "one more working of the great work"),
                               ("enhance_item", "one piece of a working still going on"),
-                              ("enhance_overall", "larger working a piece was one piece of")]:
+                              ("enhance_overall", "larger working a piece was one piece of"),
+                              ("deepen_overall", "one step further than the site carries it now")]:
             with self.subTest(mode=mode):
                 prompt = self.prompt(mode)
                 block = prompt[prompt.index("THIS RUN "):prompt.index("LEGIBLE TO A STRANGER. Everything")]
@@ -3455,6 +3483,175 @@ class NestedStandardTest(unittest.TestCase):
         self.assertEqual(sorted(name for name in dir(mi) if name.startswith("check_")),
                          CODED_AXIOMS)
         self.assertNotIn("check_nested", CODED_AXIOMS)
+
+
+class FitTogetherModeTest(unittest.TestCase):
+    """Issue #103: the "make it all fit together better" job, deepen_overall, with four marbles in
+    the bag. It deepens NESTED (issue #102) further and further, run after run: not tidying, as a
+    consolidating run does, and not one area's reason to stay, as an enhancing run is, but what the
+    site adds up to. MarbleBagTest holds it alongside every other mode; these hold what is its own.
+    """
+
+    MODE = "deepen_overall"
+
+    def prompt(self, mode=MODE):
+        return mi.build_prompt([("index.html", "<h1>hi</h1>")], run=mi.Run(mode))
+
+    def block(self, mode=MODE):
+        prompt = self.prompt(mode)
+        return prompt[prompt.index("THIS RUN "):prompt.index("LEGIBLE TO A STRANGER. Everything")]
+
+    def last(self, mode=MODE):
+        prompt = self.prompt(mode)
+        return prompt[prompt.index("This run's mission:"):]
+
+    def test_four_marbles_go_in_on_top_of_the_bag(self):
+        # Open question 2: on top, so every other mode keeps its weight and gives up its share of
+        # the hours in proportion -- 4 of every 46 runs fit the site together.
+        self.assertEqual(mi.MODE_MARBLES[self.MODE], 4)
+        others = {mode: n for mode, n in mi.MODE_MARBLES.items() if mode != self.MODE}
+        self.assertEqual(sum(others.values()), 42, "another mode's weight came down to make room")
+        self.assertEqual(sum(mi.MODE_MARBLES.values()), 46)
+
+    def test_its_name_keeps_the_work_area_shape(self):
+        # Open question 1: a fourth kind of work on the one area it can be done on, the whole, so
+        # everything that splits a mode on "_" reads it without a special case.
+        run = mi.Run(self.MODE)
+        self.assertEqual((run.work, run.area, run.items), ("deepen", "overall", []))
+        self.assertIn("deepen", mi.WORKS)
+        self.assertEqual([mode for mode in mi.MODES if mode.startswith("deepen_")], [self.MODE])
+        with mock.patch.dict(os.environ, {"RUN_MODE": "deepen"}):
+            self.assertEqual(mi.chosen_mode(), self.MODE)
+        with mock.patch.dict(os.environ, {"RUN_MODE": "Deepen-Overall"}):
+            self.assertEqual(mi.chosen_mode(), self.MODE)
+        # (The old "interesting" does not draw it: MarbleBagTest holds that bag to the creating and
+        # the enhancing modes.) All of the site is its own, so nothing it touches is a stray...
+        plan = {"files": [{"path": "loam.html"}, {"path": "js/modules/loam.js"}, {"path": "js/site.js"}]}
+        self.assertEqual(mi.strays(run, plan, {"loam.html", "js/modules/loam.js", "js/site.js"}), [])
+        # ...and what it is shown first is the nest, then the framework every mode is shown.
+        files = [(rel, "x") for rel in ["index.html", "js/modules/loam.js", "js/site.js", "_sass/_nav.scss",
+                                        *mi.NEST_FILES]]
+        focus = mi.focus_files(run, files)
+        self.assertEqual(focus[:len(mi.NEST_FILES)], list(mi.NEST_FILES))
+        self.assertEqual(sorted(focus[len(mi.NEST_FILES):]), ["_sass/_nav.scss", "js/site.js"])
+        self.assertEqual(mi.NEST_FILES[0], mi.VARIANT_SCRIPT, "the nest itself is not shown first")
+        for rel in [mi.WORLDS_DATA, mi.STAGE_INCLUDE, mi.STAGE_SCRIPT, "js/feed.js"]:
+            with self.subTest(rel=rel):
+                self.assertIn(rel, mi.NEST_FILES)
+                self.assertTrue(mi.is_framework(rel), "a deepening run's files are the shared ones")
+
+    def test_it_serves_its_own_mission_and_heads_its_own_commits(self):
+        # Spelled out rather than imported: the job's name, NESTED's scale, and the single
+        # coherent whole every mission carries.
+        for part in ["make it all fit together better", "one piece of a single coherent whole",
+                     "one piece of something larger still"]:
+            with self.subTest(part=part):
+                self.assertIn(part, mi.DEEPENING_MISSION)
+        run = mi.Run(self.MODE)
+        self.assertEqual(mi.mission_of(run), mi.DEEPENING_MISSION + ", by deepening what the site adds "
+                         "up to, one step further than it stands")
+        prompt = self.prompt()
+        self.assertIn(f"Your mission this run: {mi.mission_of(run)}.", prompt)
+        self.assertIn(f"This run's mission: {mi.mission_of(run)}, measured in {mi.INTERESTING}", prompt)
+        for mode in mi.MODES:
+            if mode != self.MODE:
+                with self.subTest(mode=mode):
+                    self.assertNotIn(mi.DEEPENING_MISSION, self.prompt(mode))
+        # Its own headline, and not one an enhancing run's own sentence could be mistaken for.
+        self.assertEqual(mi.headline_of(run), "Fit the site together")
+        self.assertEqual(len({mi.headline_of(mi.Run(mode)) for mode in mi.MODES}), len(mi.MODES))
+
+    def test_its_block_stands_between_envisioning_and_legibility(self):
+        prompt = self.prompt()
+        start = prompt.index("THIS RUN MAKES IT ALL FIT TOGETHER BETTER")
+        self.assertLess(prompt.index("ENVISION THE WHOLE FIRST"), start)
+        self.assertLess(start, prompt.index("LEGIBLE TO A STRANGER. Everything"))
+        self.assertIn("this run drew deepen_overall", self.block())
+        for mode in mi.MODES:
+            if mode != self.MODE:
+                with self.subTest(mode=mode):
+                    self.assertNotIn("FIT TOGETHER BETTER", self.prompt(mode))
+        # Unlike a consolidating run it is not merely tidying, and it is not an enhancement either.
+        block = self.block()
+        self.assertIn("It is not tidying, which is the consolidating modes' work", block)
+        self.assertIn("it asks what all of it adds up to and makes the pieces fit into that larger whole", block)
+        self.assertIn("A PIECE OF THE GREAT WORK, below, is the standard", block)
+
+    def test_it_names_every_place_the_site_says_what_a_piece_belongs_to(self):
+        block = self.block()
+        for place in [f"nest(seed) in \"{mi.VARIANT_SCRIPT}\"", f"\"{mi.STAGE_SCRIPT}\"", "renderNest",
+                      "#stage-nest", f"\"{mi.STAGE_INCLUDE}\"", "\"js/feed.js\"", ".card-nest",
+                      f"\"{mi.WORLDS_DATA}\"", "the threshold's line"]:
+            with self.subTest(place=place):
+                self.assertIn(place, block)
+
+    def test_it_goes_further_every_time_from_the_site_as_it_stands(self):
+        # Open question 3: a run remembers nothing, and needs nothing -- the site is the record of
+        # how far the fitting together has gone, so it reads the site and takes the next step.
+        block = self.block()
+        for further in ["FURTHER EVERY TIME", "remembers nothing of the runs before it",
+                        "the site as it stands is the record of how far the fitting together has gone",
+                        "read it for that first", "take the next step from there",
+                        "never one it has already taken", "never a step back from one it has",
+                        "never round in a circle"]:
+            with self.subTest(further=further):
+                self.assertIn(further, block)
+        self.assertLess(block.index("read it for that first"), block.index("take the next step from there"))
+        self.assertIn("take what the site adds up to one step further than it stands", self.last())
+
+    def test_deeper_is_never_heavier(self):
+        # "Further and further" is exactly where NESTED's limit would wear through, so the block
+        # restates it: the five holds, and nothing that counts, collects, locks or lectures.
+        block = self.block()
+        for limit in ["DEEPER, NEVER HEAVIER", "the five holds under A PIECE OF THE GREAT WORK",
+                      "nothing counts a visitor towards a total", "nothing is collected or locked",
+                      "says the work is done", "a quota, a meter, a lock or a sermon goes backwards",
+                      "costs a visitor a moment of clarity"]:
+            with self.subTest(limit=limit):
+                self.assertIn(limit, block)
+        self.assertIn(f"make all of it {mi.NESTED}", self.last())
+        # The nest's own shape is what the tests hold, so the block steers past changing it, and
+        # what the deploy's tests hold in place for the framework says so too.
+        self.assertIn("not how many scales nest() returns", block)
+        self.assertIn("three scales from the innermost out", mi.held_in_place(mi.Run(self.MODE)))
+        self.assertEqual(mi.held_in_place(mi.Run(self.MODE)), mi.held_in_place(mi.Run("enhance_overall")))
+
+    def test_it_may_add_what_the_fitting_needs_and_nothing_beside(self):
+        # Open question 4: neither restricted to re-working as a consolidating run is, nor free to
+        # add a world or a page: a line, a word, the name of a scale -- what fitting together takes.
+        block = self.block()
+        self.assertIn("It may add what the fitting needs -- a line, a word, the name of a scale", block)
+        self.assertIn("not a new world (create_item's run), a new page, a new piece or a new knob", block)
+        self.assertIn("not one world's own module (enhance_item's)", block)
+        self.assertIn("Tidy nothing that is not in the way", block)
+        self.assertNotIn("It adds nothing", block)
+        self.assertNotIn("ADD one world", block)
+        self.assertIn("leave the consolidating, the new worlds and the enhancing to the runs that draw them",
+                      self.last())
+
+    def test_a_whole_run_is_one_step(self):
+        block = self.block()
+        for whole in ["one step of the fitting together", "is a complete and successful run",
+                      "the next step is the next deepening run's, from wherever this one leaves the site",
+                      "Build on what is already there rather than starting over",
+                      "do not add for the sake of adding", "SIZE. The answer is small by design",
+                      "One coherent stage of a deepening too big for one answer"]:
+            with self.subTest(whole=whole):
+                self.assertIn(whole, block)
+
+    def test_the_workflow_and_the_readme_offer_it(self):
+        workflow = (mi.REPO_ROOT / ".github" / "workflows" / "make-interesting.yml").read_text()
+        for option in ["deepen", self.MODE]:
+            with self.subTest(option=option):
+                self.assertIn(f"\n          - {option}\n", workflow)
+        self.assertIn("create, enhance, consolidate or deepen", workflow)
+        readme = (mi.REPO_ROOT / "README.md").read_text(encoding="utf-8")
+        bag = readme[readme.index("### The bag of marbles"):readme.index("### Legible to a stranger")]
+        for mode, weight in mi.MODE_MARBLES.items():
+            with self.subTest(mode=mode):
+                self.assertIn(f"| `{mode}` | {weight} |", bag)
+        self.assertIn("Forty-six marbles", bag)
+        self.assertIn("*Fit the site together*", bag)
 
 
 class CadenceAxiomTest(SiteDirTestCase):
@@ -9764,7 +9961,7 @@ class MainTest(SiteDirTestCase):
         self.assertIn(model, mi.MODELS)
         self.assertEqual(read_outputs(output), {"model": model, "summary": "Added a clock.", "mode": "enhance_overall",
                                                 "items": "", "headline": "Enhance the site"})
-        self.assertIn("Mode:    enhance_overall (5 of 42 marbles)", self.printed)
+        self.assertIn("Mode:    enhance_overall (5 of 46 marbles)", self.printed)
 
     def test_the_whole_run_asks_for_one_output_budget(self):
         # The prompt's number and the CLI's number are the same number, resolved once for the run:
@@ -9805,7 +10002,7 @@ class MainTest(SiteDirTestCase):
         output = self.run_main({"RUN_MODE": "create_item"})
         self.assertIn("THIS RUN CREATES ONE NEW WORLD", fake.calls()[-1]["prompt"])
         self.assertEqual(read_outputs(output)["headline"], "Create a world")
-        self.assertIn("Mode:    create_item (1 of 42 marbles)", self.printed)
+        self.assertIn("Mode:    create_item (1 of 46 marbles)", self.printed)
 
     def test_the_bag_is_drawn_once_per_run_and_the_draw_shapes_everything(self):
         fake = FakeCopilot(self, f"say({GOOD_PLAN!r})")
@@ -9837,7 +10034,7 @@ class MainTest(SiteDirTestCase):
         outputs = read_outputs(output)
         self.assertEqual((outputs["mode"], outputs["items"], outputs["headline"]),
                          ("consolidate_item", "loam 1", "Consolidate loam 1"))
-        self.assertIn("Mode:    consolidate_item (4 of 42 marbles; drawn: loam 1)", self.printed)
+        self.assertIn("Mode:    consolidate_item (4 of 46 marbles; drawn: loam 1)", self.printed)
 
     def test_what_an_answer_changed_outside_its_mode_is_named_in_the_refusal(self):
         # The answer the tests refuse touched index.html and sitemap.xml in a run that works on the

@@ -10,7 +10,7 @@ on:
         required: false
         default: ""
       mode:
-        description: "What the run does (auto draws it from the bag of marbles: a kind of work -- create, enhance or consolidate -- on one area -- one world, the navigation, the persona or the whole site; a bare kind of work draws among its modes)"
+        description: "What the run does (auto draws it from the bag of marbles: a kind of work -- create, enhance, consolidate or deepen, which makes it all fit together better -- on one area -- one world, the navigation, the persona or the whole site; a bare kind of work draws among its modes)"
         required: false
         type: choice
         default: auto
@@ -19,6 +19,7 @@ on:
           - create
           - enhance
           - consolidate
+          - deepen
           - create_item
           - enhance_item
           - enhance_nav
@@ -28,6 +29,7 @@ on:
           - consolidate_nav
           - consolidate_persona
           - consolidate_overall
+          - deepen_overall
 
 permissions: {}
 
@@ -164,9 +166,9 @@ jobs:
           done
 
       # What the run does is drawn from a bag of marbles (MODE_MARBLES in the script): a kind of
-      # work -- create, enhance or consolidate -- on one area of the site -- one world, drawn at
-      # random too, the navigation, the persona or the whole -- unless the manual "mode" input
-      # names one. The model is one of the heaviest Copilot offers, at near-maximum reasoning
+      # work -- create, enhance, consolidate or deepen -- on one area of the site -- one world,
+      # drawn at random too, the navigation, the persona or the whole -- unless the manual "mode"
+      # input names one. The model is one of the heaviest Copilot offers, at near-maximum reasoning
       # effort. An answer is only written once it passes test.yml's own tests, so what this leaves
       # behind is a change the deploy pipeline will accept; an answer that is refused is shown back
       # to its model for repair before another model is asked.
