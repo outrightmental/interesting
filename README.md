@@ -459,7 +459,9 @@ itself.
   and paints the site in the palette the configuration derives inside the world's mood, so the
   address carries the whole of it. The piece harness holds every world to it: a piece that is the same piece whichever of
   its world's cards it was opened from is refused, and the stage harness holds the stage to
-  titling a feature from the card rather than from the world's line.
+  titling a feature from the card rather than from the world's line. The seed carries one more
+  thing besides the dials: the gate the piece is one piece of (`variant.nest`, see
+  [Nesting axiom](#nesting-axiom)), which a dealt card ends on and its solve names under the seal.
 - **It follows the persona.** The world the visitor's reading opens onto is moved to the front and
   badged *for you*, and follows the reading as it changes. With no sky yet, a card that reads the
   sky paints a veiled ghost of itself, and one unpowered card is dealt early carrying the shared
@@ -787,6 +789,111 @@ puzzle stands on its own legs, and the rite is fun first and never tiresome.
   verb. The module copy was the largest part of the pass and the most constrained: the piece
   harness played every world's pieces through the law before and after, and refused any wording
   that changed what a piece is.
+
+### Nesting axiom
+
+The [ritual axiom](#ritual-axiom) says what the site has to feel like. This says what scale
+everything on it sits at: **every small thing a visitor does is one piece of a larger, unfinished
+and very important puzzle, every larger thing is one piece of a larger one still, and all of it
+implies the largest** — which the site calls, after the alchemists, **the great work**, and which
+is never finished. A piece is one piece of a gate, the gate one gate of a colour, the colour one
+colour of the great work; a piece is one piece of its world's working, the world one working of
+the site, the site one piece of the great work. The note this comes from (issue
+[#102](https://github.com/outrightmental/interesting/issues/102)) put it as *"one piece at a time
+of a larger (infinitely large), more important (very, very important) puzzle"*, and carried a
+passage as the flavour of that feel:
+
+> Matter is energy. In the universe, there are many energy fields which we cannot normally
+> perceive. Some energies have a spiritual source which act upon a person's soul. However, this
+> soul does not exist ab initio, as orthodox Christianity teaches. It has to be brought into
+> existence by a process of guided self-observation. However, this is rarely achieved, owing to
+> man's unique ability to be distracted from spiritual matters by everyday trivia.
+
+And like the ritual axiom, it is as much about the limit as the feel, because a site told that
+every piece belongs to something larger drifts, left to itself, towards collections, quotas, meters
+and pieces locked behind other pieces — the gadgetry [Legible to a
+stranger](#legible-to-a-stranger) was written to clear away, and the opposite of a work that is
+never finished. **The larger working is implied, never owed.**
+
+- **Five holds**, each one a thing a change can be checked against:
+  - **A solve places a piece; it does not end it.** A solved piece says what it was one piece of,
+    and a piece's own words can too: a title, a line, a finale or a card that gestures at the
+    working beyond it — one lantern of a rite still being lit, one drawer of a cabinet with more
+    drawers than anyone has opened — is better than one that closes the book.
+  - **Every larger thing is one piece of a larger one still.** Nothing names a top short of the
+    great work and nothing says the work is done: no *the final piece*, no *all found*, no
+    *complete the set*, no last level. The feed and the stage never run out of pieces of it, which
+    the [completion axiom](#completion-axiom) and the
+    [continued-interaction axiom](#continued-interaction-axiom) already guarantee.
+  - **Implied, never owed.** The larger working carries nothing a piece needs and holds nothing
+    back: no count against a total, no meter, no collection, no badge, no piece locked until others
+    are solved, no reward withheld for later. Every piece stands on its own legs (the completion
+    axiom) and nothing shared keeps score (legibility's *content first, chrome small*). The stage's
+    score line is the site's one count, and nothing is ever *out of* anything.
+  - **Very important, never a sermon.** The importance is felt in the dressing — the rite's face,
+    the seal, the nest opening outward under it — and never lectured: no doctrine, no scripture,
+    nothing a visitor is asked to believe. The passage above is the flavour and never the text. The
+    threshold's sideways question is the site's guided self-observation (see
+    [Mood axiom](#mood-axiom)), and every piece is a moment's attention given to something
+    important rather than spent on trivia.
+  - **One nest, everywhere.** The place a piece holds comes from its seed, like the rest of its
+    configuration, so a card and the piece it opens as are one piece of the same gate, a piece sent
+    by its address is placed where it was, and pieces of different worlds are pieces of one gate —
+    one more way the worlds read as [one single experience](#one-single-experience). A new scale is
+    named inside that nest, never as a second nest beside it.
+- **What a visitor sees** (the issue's open question 3, answered with a named larger working, and
+  neither a count nor an accumulating fragment: a count is a score, and a fragment that accumulates
+  is a collection to complete, which would turn a work that is never finished into a chore with an
+  end):
+  - **Under the seal of every solved piece, the nest.** Three lines, each a step further out than
+    the one inside it, cut in by one slice from the top just after the seal lands, so the work
+    opens outward from the piece a line at a time: *one piece of the dissolving, / one gate of the
+    blackening, / one colour of the great work* — the last lit in the primary. It is in the rail
+    under the seal and never over the scene, set in the rite's serif, a polite live region for a
+    screen reader, and it goes with the piece: a wrong check names nothing, and the next piece
+    starts with nothing named. [`site/js/variant.js`](site/js/variant.js) (`nest(seed)`) places a
+    seed; [`site/js/stage.js`](site/js/stage.js) (`renderNest`) writes it on the solve into
+    `#stage-nest`, which [`site/_includes/stage.njk`](site/_includes/stage.njk) writes in the rail.
+  - **At the foot of every card the feed deals, its gate.** One small line in the serif with the
+    sigil's star in front of it — *of the dissolving* — from the same seed the card hands the stage,
+    so the gate a card names is the gate its solve names, and cards of different worlds visibly
+    gather into the same workings as a visitor scrolls. It is dealt with the card's face, so
+    *another* cuts in the new card's gate with the rest. The cards the template writes are worlds
+    rather than pieces, and carry none.
+  - **On the threshold, the term, explained once.** The home page's first line ends *Every puzzle
+    you solve is one piece of the great work, which is never finished*, which is where a visitor
+    first meets the site and so where legibility says a term of the site's own is explained.
+- **The gates and the colours are a real tradition, in plain words.** The twelve gates are George
+  Ripley's, in his order, three to each of the work's four colours — the burning, the dissolving
+  and the parting of the blackening; the joining, the rotting and the congealing of the whitening;
+  the feeding, the rising and the ripening of the yellowing; the exalting, the multiplying and the
+  casting of the reddening — and the great work is the alchemists' own name for the largest
+  working there is. A visitor needs none of that to play: it is a world's name, a piece's title,
+  dressing, as arcane as the ritual axiom allows and no more.
+- **The passage is never quoted to a visitor** (the issue's open question 2). It is framing for the
+  prompt, which paraphrases it as the flavour of the standard, and for this document, which quotes
+  it; the site carries its feel and none of its words, because a visitor would be asked to read a
+  sermon, and *esoteric is a vibe, never a veil*. `RealSiteTest` sweeps the built site for it.
+- **Stated in the prompt, as a named standard** (the issue's open question 1, answered as a sixth
+  standard rather than as more words in the ritual axiom: the ritual axiom is the feel and this is
+  the scale, and either can be held without the other). `NESTED` names it beside `MISSION`,
+  `WHOLE`, `INTERESTING`, `LEGIBLE` and `RITUAL` in
+  [`.github/scripts/make_interesting.py`](.github/scripts/make_interesting.py). It is said where a
+  run envisions the whole — at every scale, the piece in hand, the working it is one piece of and
+  the great work — again after the ritual holds under `A PIECE OF THE GREAT WORK, NEVER A QUOTA`,
+  with the five holds and the passage's flavour, and again in the line a run reads last: *the piece
+  in hand, the working beyond it and the great work beyond that, with nothing to collect and nothing
+  held back.* The creating and enhancing modes carry it into what they add.
+- **Deliberately not held to in code.** No check could judge whether a piece feels like one piece
+  of something very important, so the prompt is where this standard lives, exactly as `WHOLE`,
+  `INTERESTING`, `LEGIBLE` and `RITUAL` do: it is not among the ten coded axioms, and
+  `NestedStandardTest` holds the prompt to it. Its one readable half is held on the site as
+  committed: `CardVariantTest` holds `nest()` to placing the same seed in the same gate, to every
+  gate coming round, to every gate being one gate of one colour, to every nest ending in the great
+  work and to no figure in any of it; `StageTest` and `RealSiteTest` play the real stage through
+  the stage harness and hold a solve to naming exactly the nest its seed is placed in, a wrong check
+  to naming none, and the next piece to opening with none; and `RealSiteTest` reads where the
+  markup, the scripts and the stylesheets put it.
 
 ### Motion axiom
 

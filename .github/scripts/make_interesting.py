@@ -26,6 +26,9 @@ it is user engagement time. The site is more interesting when a person stays
 longer and wants to keep going. LEGIBLE names the test a stranger puts the site
 to -- one name per page, one way to do each thing, content before chrome, never
 a dead end -- because confusion spends engagement time as surely as boredom.
+RITUAL names the feel, and NESTED the scale: every piece a visitor solves is one
+piece of a larger working, inside a larger one still, out to the great work,
+which is never finished -- implied, and never owed as a quota or a meter.
 
 Ten axioms stand over every run, each stated in the prompt and held to in code:
 
@@ -219,6 +222,35 @@ RITUAL = ("an esoteric magical ritual -- every arrival, question, piece, solve a
           "a small rite, and the mystery is all in the dressing: nothing a visitor needs to know "
           "is ever obscured, every puzzle stands on its own legs, and the rite is fun first and "
           "never tiresome")
+
+# What the site has to imply (issue #102). MISSION names the aim, INTERESTING the measure, WHOLE the
+# shape, LEGIBLE the test a stranger puts it to and RITUAL the feel; this names the scale everything
+# sits at: every small thing a visitor does is one piece of a larger, unfinished and very important
+# puzzle, every larger thing is one piece of a larger one still, and all of it implies the largest
+# -- the great work, which is never finished. The note it comes from carries a passage as its
+# flavour (matter as energy, fields we cannot perceive, a self brought into being by guided
+# self-observation and rarely, because everyday trivia distracts), and that flavour is said to the
+# model and kept from the visitor: the README quotes it, the site never does.
+#
+# And like RITUAL it is stated with its limit in the same breath, because a site told that every
+# piece belongs to something larger drifts, left to itself, towards collections, quotas, meters and
+# pieces locked behind other pieces -- the gadgetry LEGIBLE was written to clear away, and the
+# opposite of a work that is never finished. The larger working is implied, never owed: every piece
+# is whole on its own legs (the completion axiom), and nothing counts a visitor towards a total.
+#
+# Like WHOLE, INTERESTING, LEGIBLE and RITUAL it is a standard stated to the model rather than one
+# held to in code: no check can settle whether a piece feels like one piece of something very
+# important. It is stated where a run envisions the whole, again after the ritual holds with the
+# five holds a run can check its own change against (see A PIECE OF THE GREAT WORK in
+# build_prompt), and again in the line it reads last. The site's one concrete form of it -- the
+# nest a solved piece names, from nest() in js/variant.js -- is held by the stage harness and
+# RealSiteTest like the ritual axiom's typographic half. The README section "Nesting axiom" is the
+# long form.
+NESTED = ("one piece of an infinitely larger puzzle -- every small thing a visitor does is one "
+          "piece of a larger, unfinished and very important working, every larger thing is one "
+          "piece of a larger one still, and all of it implies the largest, the great work; and the "
+          "larger working is implied, never owed: every piece is whole on its own legs, nothing "
+          "is a quota, a meter or a lock, and the great work is never finished")
 
 # What a run does is drawn from a bag of marbles, the mechanism xj music uses to choose among
 # memes (docs.xjmusic.com/making-xj-music/memes): every mode puts as many marbles in the bag as
@@ -2476,7 +2508,11 @@ def build_prompt(shown, omitted=(), run=None, budget=None, feedback=""):
         "follows from the first page to the last. Then ask where what is there falls short of "
         "that: what the pages repeat, where they have drifted apart, which of them a visitor "
         "would not guess belong to the same site, and what the piece as a whole needs most right "
-        "now. That look at the site as a whole is the first half of every run. What you do is the "
+        "now. Envision it at every scale while you are there: the piece a visitor has in hand, the "
+        "larger working it is one piece of, and the great work all of it is one piece of (see A "
+        "PIECE OF THE GREAT WORK) -- and ask where a piece reads as the whole of something rather "
+        "than as one piece of something larger. That look at the site as a whole is the first half "
+        "of every run. What you do is the "
         f"second half, and it follows from what you saw, because the site has to become {WHOLE} "
         "and not a collection of individually decent pages.\n\n"
         + mode_block(run) +
@@ -2541,6 +2577,51 @@ def build_prompt(shown, omitted=(), run=None, budget=None, feedback=""):
         "the site feel more like a rite without taking one bit of clarity away is a good change; "
         "one that trades clarity for mystery fails this standard even though no check can see "
         "it.\n\n"
+        f"A PIECE OF THE GREAT WORK, NEVER A QUOTA. Everything on the site is {NESTED}. Like the "
+        "rite, the scale lives in the dressing: a visitor feels that the piece in hand matters "
+        "because it belongs to something larger, and that the larger thing belongs to something "
+        "larger still, out to the largest -- and never has to collect, count or unlock anything to "
+        "feel it. Hold every change to these five, and undo what already breaks them:\n"
+        "- A solve places a piece; it does not end it. A solved piece says what it was one piece "
+        "of, and the stage already says it for every piece: under the seal, the gate the piece was "
+        "one piece of, the colour that gate is one gate of, and the great work that colour is one "
+        f"colour of (nest(seed) in \"{VARIANT_SCRIPT}\", written by renderNest in "
+        f"\"{STAGE_SCRIPT}\" into #stage-nest, and named on a dealt card as its .card-nest line by "
+        "\"js/feed.js\", so a card and its solve name the same gate). A piece's own words can do "
+        "it too: a title, a line, a finale or a card that gestures at the working beyond it -- one "
+        "lantern of a rite still being lit, one drawer of a cabinet with more drawers than anyone "
+        "has opened -- is better than one that closes the book.\n"
+        "- Every larger thing is one piece of a larger one still: a piece of its world's working, "
+        "the world one working of the site, the site one piece of the great work. Nothing names a "
+        "top short of the great work and nothing says the work is done: no \"the final piece\", "
+        "no \"all found\", no \"complete the set\", no last level. There is always a larger "
+        "working beyond the one a visitor can see, and the feed and the stage never run out of "
+        "pieces of it.\n"
+        "- Implied, never owed: the larger working carries nothing a piece needs and holds nothing "
+        "back. No count against a total, no meter, no collection, no badge, no piece locked until "
+        "others are solved, no reward withheld for later -- every piece stands on its own legs "
+        "(the completion axiom) and nothing shared keeps score (LEGIBLE TO A STRANGER). The "
+        "stage's score line is the site's one count, and nothing is ever out of anything.\n"
+        "- Very important, never a sermon: the importance is felt in the dressing -- the rite's "
+        "face, the seal, the nest opening outward under it -- and never lectured. No doctrine, no "
+        "scripture, nothing a visitor is asked to believe. The flavour is that of the note this "
+        "standard comes from: matter is energy; there are many fields we cannot normally "
+        "perceive, some with a spiritual source that act on a person's soul; and that soul is not "
+        "there from the start but has to be brought into being by guided self-observation, which "
+        "is rarely achieved, owing to our unique ability to be distracted by everyday trivia. So "
+        "the threshold's sideways question is a guided "
+        "self-observation, and every piece is a moment's attention given to something important "
+        "rather than spent on trivia. That is the flavour, never the text: none of it is quoted "
+        "to a visitor.\n"
+        "- One nest, everywhere: the place a piece holds comes from its seed, like the rest of its "
+        "configuration (the alignment axiom), so a card and the piece it opens as are one piece of "
+        "the same gate, a piece sent by its address is placed where it was, and pieces of "
+        "different worlds are pieces of one gate -- which is one more way the worlds read as one "
+        "work. Name a new scale inside that nest, never a second nest beside it.\n"
+        "A change that makes a visitor feel the piece in hand is one piece of something larger "
+        "and very important, without counting at them or taking a moment of clarity away, is a "
+        "good change; one that turns the larger working into a quota, a meter, a lock or a sermon "
+        "fails this standard even though no check can see it.\n\n"
         "POWERED DOWN, NEVER BROKEN. Where a component depends on something the visitor has not "
         "done yet -- a saved sky, a kept list, storage this browser does not offer -- its only "
         "announcement of that is the solution, in place: the component presents as unpowered, not "
@@ -3243,7 +3324,9 @@ def build_prompt(shown, omitted=(), run=None, budget=None, feedback=""):
         f"Keep it {LEGIBLE}: one name per page, one way to do each thing, content before chrome, "
         f"and never a dead end. Keep it {RITUAL}: the rite in the frame, the instruction in the "
         "sentence, no riddle where a rule should be, and every movement along a curve rolled for "
-        "it and never a formula. Respond with the JSON object only."
+        f"it and never a formula. And make all of it {NESTED}: the piece in hand, the working "
+        "beyond it and the great work beyond that, with nothing to collect and nothing held back. "
+        "Respond with the JSON object only."
     )
     return system + "\n\n" + user
 
@@ -3356,8 +3439,9 @@ def work_block(run):
             "world for an orientation that has none, or a kind of piece no world deals yet. It "
             "arrives already federated, in the same run: inside the shared layout, in the one "
             "visual language, dealt by the feed and played on the stage like every other world, "
-            f"and nothing it adds may repeat what a shared file already does. The shell -- "
-            f"{SHELL_FILES} -- does not change for a new world: a world that needs it changed is "
+            f"and nothing it adds may repeat what a shared file already does -- and as one more "
+            "working of the great work, whose pieces are placed in it by the stage like every other "
+            f"world's. The shell -- {SHELL_FILES} -- does not change for a new world: a world that needs it changed is "
             "the wrong world for this run. Tidy nothing, change no other world, and add no second "
             "page beside it. A module is sent whole, so keep it well under the size a file may be: "
             "the smaller existing modules are the measure.\n\n"
@@ -3371,7 +3455,8 @@ def work_block(run):
             "between seeds and between cards, a scene that rewards looking, a harder size for the "
             "seed that rolls it, a hint worth its price, measured feedback on a wrong check that "
             "gives nothing away, a solve worth reaching, a title and a line in the site's own "
-            "voice, something to discover on the third go that was not there on the first. "
+            "voice, something to discover on the third go that was not there on the first, a "
+            "finale that leaves the piece one piece of a working still going on. "
             f"Deepen what is there rather than starting over, and build on {their} own "
             f"material. Work inside {their} own files: {their} module, {their} page, {their} line "
             f"in \"{WORLDS_DATA}\", and where the enhancement needs them {their} orientation in "
@@ -3469,7 +3554,8 @@ def work_block(run):
             "reason to stay: a new way of querying a visitor's orientation (the single most "
             "interesting change there is to make here), a stage that plays a piece better, a feed "
             "that deals better, a finer motion scheme, a sounder type scale, an error page worth "
-            "landing on, a threshold that explains itself on sight. Not a new world (that is "
+            "landing on, a threshold that explains itself on sight, a solve that says more of the "
+            "larger working a piece was one piece of. Not a new world (that is "
             "create_item's run), not one world's own module (enhance_item's), not the "
             "constellation or the persona for their own sake (their own modes'): what is shared is "
             "this run's, and only what is shared. Work by edits to the shared files, one coherent "
@@ -3710,7 +3796,7 @@ FRAMEWORK_PINS = (
     "\"variant: m.variant, card: shown(m)\" and interestingStage.open(file, seed, { ... seeds "
     f"... variant ... card }}); id='feed-grid' from \"{INCLUDES_DIR}/worlds.njk\" on every page. "
     f"In \"{VARIANT_SCRIPT}\": the named exports mulberry32, hash, mix, alpha, roll, revive, "
-    "recolor, aspect, light, rite, DIALS, PLAIN and ASPECT_LIMITS (0.6 to 1.9), with the contrast "
+    "recolor, aspect, light, rite, nest, GREAT_WORK, DIALS, PLAIN and ASPECT_LIMITS (0.6 to 1.9), with the contrast "
     "the tests hold the recolouring to, and the rite block (from the rite:begin comment to "
     "rite:end) kept word for word the same as the copy in the piece harness. "
     f"In \"{SASS_DIR}/_stage.scss\": \".stage-next {{\" with position: fixed, right: "
@@ -3741,7 +3827,18 @@ FRAMEWORK_PINS = (
     f"\"{SASS_DIR}/_rite.scss\" is @use'd from css/site.scss with single quotes, holds no "
     "position: fixed, says pointer-events: none, and answers prefers-reduced-motion: reduce "
     "with animation: none; the built css/site.css names the serif stack and styles .stage-sigil, "
-    f"which \"{STAGE_INCLUDE}\" writes as id='stage-sigil' in the head. The motion axiom's "
+    f"which \"{STAGE_INCLUDE}\" writes as id='stage-sigil' in the head. The nesting axiom's "
+    f"readable half: \"{VARIANT_SCRIPT}\" exports nest(seed), three scales from the innermost out, "
+    "each { is, of }, the outermost of GREAT_WORK ('the great work'), the same for the same seed, "
+    "every gate coming round and each gate always one gate of the same colour, with no figure in "
+    f"any of it; \"{STAGE_INCLUDE}\" writes <p class='stage-nest' id='stage-nest' "
+    "aria-live='polite' hidden> in the rail after the foot and never inside #stage-scene; "
+    f"\"{STAGE_SCRIPT}\" imports nest from ./variant.js, calls renderNest(c) in finish() and "
+    "hides and empties ui.nest in close(), so a solved piece names its nest and a wrong check or "
+    "the next piece names none; \"js/feed.js\" ends every dealt card's body with a .card-nest "
+    "line from nest(seed); .stage-nest { in _stage.scss and .card-nest { in _feed.scss include "
+    "type.rite; and no page carries the note's passage itself (ab initio, orthodox Christianity, "
+    "everyday trivia). The motion axiom's "
     f"readable half: \"{MOTION_SCRIPT}\" stays, loaded by the layout as {MOTION_TAG} without "
     f"defer and before {PERSONA_SCRIPT}, assigning window.interestingMotion with ease, curve, "
     "tween, scrollTo, scrollIntoView, ms, stagger, geometry, cut, reveal, flip, rite, wax, "

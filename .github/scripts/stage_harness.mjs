@@ -37,7 +37,10 @@
                       that the piece it solved is still there, and then presses the way on in
                       the lower right, which is what opens the next. The way on is read before
                       the check too: dim over an unsolved piece, and pressable all the same
-                      (issue #109).
+                      (issue #109). Each round also reads what the solve said under its seal --
+                      the nest, what the piece was one piece of (README: "Nesting axiom") --
+                      beside what variant.js places that seed in, and what was left of it once
+                      the next piece was on.
     wrongThenRight    The puzzle half. Open a piece, work its helpers, set every answer wrong and
                       press check: the stage must say so, count the try, leave every knob live and
                       the piece unfinished, and light nothing. Then set the answers right and
@@ -455,6 +458,9 @@ function makePage(worlds, clock, options) {
   done.hidden = true;
   make('span', 'stage-done-text', done).textContent = 'done';
   make('div', 'stage-progress', end);
+  // The nest, under the seal, in the rail: what a solved piece was one piece of, which the stage
+  // writes on the solve and takes away with the piece.
+  make('p', 'stage-nest', side).hidden = true;
   // The host the difficulty slider is rendered into, at the foot of the rail, as _includes/
   // stage.njk writes it: the setting every piece is dealt at, offered where it is a dependency
   // (issue #93) until a level is picked (issue #100). The stub persona below renders nothing into
@@ -857,6 +863,8 @@ function look(page) {
     dots: by('stage-progress').querySelectorAll('.stage-dot').length,
     doneShown: !by('stage-done').hidden,
     doneOverScene: within(by('stage-done'), by('stage-scene')),
+    nest: by('stage-nest') && !by('stage-nest').hidden ? by('stage-nest').textContent : '',
+    nestOverScene: !!by('stage-nest') && within(by('stage-nest'), by('stage-scene')),
     // The way on can be pressed whenever it is shown (issue #109); lit is how much it is asking to be.
     nextLit: by('stage-next').dataset.lit !== undefined,
     nextEnabled: !by('stage-next').disabled,
@@ -953,6 +961,20 @@ async function answersFor(stageDir, worlds, file, seed, options, difficulty) {
   }
 }
 
+/* What the stage should say under the seal of a solved piece of `seed`: the place nest() in
+   variant.js gives that seed, scale by scale, in the words the stage writes it in. '' where the
+   configuration has no nest to give, so a stage that says nothing is told from one that says the
+   wrong thing. */
+async function nestOf(stageDir, seed) {
+  try {
+    const V = await import(pathToFileURL(path.join(stageDir, 'variant.js')).href);
+    if (typeof V.nest !== 'function') return '';
+    return V.nest(seed).map((scale) => 'one ' + scale.is + ' of ' + scale.of).join(', ');
+  } catch (e) {
+    return '';
+  }
+}
+
 /* The same, with every answer wrong: the piece harness's own idea of a wrong value. */
 function wrongAnswers(answers) {
   const values = {};
@@ -1036,6 +1058,10 @@ async function rounds(stageDir, worlds, deal, clock) {
       modes: page.modes.slice(),
       wantedWhilePlaying: finished.wanted,
       litWhilePlaying: finished.nextLit,
+      nest: finished.nest,
+      nestOf: await nestOf(stageDir, was.seed),
+      nestOverScene: finished.nestOverScene,
+      nestOnNext: look(page).nest,
       // Before the check, with the piece still unsolved: the way on can be pressed all the same.
       enabledWhilePlaying: offered.nextEnabled,
       movedOnByItself: onward.movedOnByItself,

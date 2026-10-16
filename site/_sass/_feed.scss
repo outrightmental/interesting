@@ -340,6 +340,7 @@ html:not([data-cut]) .card-link:active::before {
 .card-quote,
 .card-mono,
 .card-cite,
+.card-nest,
 .card-badge {
   transition:
     color var(--motion-medium) var(--ease-stair),
@@ -424,6 +425,23 @@ html:not([data-cut]) .card-link:active::before {
   color: var(--md-sys-color-on-surface-variant);
   font-style: italic;
   @include type.scale(body-small);
+}
+
+// The gate a dealt card is one piece of (README: "Nesting axiom"; js/feed.js, sparkBody): the last
+// line of the card, the same gate its piece names under the seal once it is solved, so cards of
+// different worlds read as pieces of the same larger working. It is one of the rite's words and
+// wears the serif, small and quiet, with the sigil's star painted in front of it -- read as nothing
+// by a screen reader that honours the alternative text.
+.card-nest {
+  margin: 0.35rem 0 0;
+  color: var(--md-sys-color-on-surface-variant);
+  @include type.scale(label-medium);
+  @include type.rite;
+}
+
+.card-nest::before {
+  content: '\2726  ' / '';
+  color: var(--md-sys-color-tertiary);
 }
 
 // ---- the badge ----------------------------------------------------------------------------
@@ -535,6 +553,7 @@ html:not([data-cut]) .card-link:active::before {
   .card-quote,
   .card-mono,
   .card-cite,
+  .card-nest,
   .card-badge {
     transition: none;
   }

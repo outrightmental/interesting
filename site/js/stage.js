@@ -17,8 +17,10 @@
   in its place, and only its press does. It can be pressed at any time, solved or not (issue
   #109) -- a visitor is never held by a puzzle they would rather leave -- but it is dim while the
   puzzle is unsolved, and the ceremony ends by lighting it. So one puzzle follows another without
-  end, and it is the visitor who says when. _includes/stage.njk writes the stage; this file runs
-  it; js/feed.js hands it the next card.
+  end, and it is the visitor who says when. Nor is a solve an ending: under its seal the stage
+  says what the piece was one piece of -- a gate, of a colour, of the great work (README: "Nesting
+  axiom") -- so every piece is laid into something larger that is never finished.
+  _includes/stage.njk writes the stage; this file runs it; js/feed.js hands it the next card.
 
   ---------------------------------------------------------------------------------------------
   The puzzle axiom: every piece is a legitimate puzzle
@@ -380,7 +382,7 @@
   incomplete attempt where a visitor has accepted analytics, and nothing here keeps it.
 */
 
-import { PLAIN, revive, recolor, aspect as framed, ratioOf, mulberry32, hash, mix, alpha, rite } from './variant.js';
+import { PLAIN, revive, recolor, aspect as framed, ratioOf, mulberry32, hash, mix, alpha, rite, nest } from './variant.js';
 
 const root = document.documentElement.getAttribute('data-root') || '';
 const stage = document.getElementById('stage');
@@ -1012,6 +1014,7 @@ const ui = stage ? {
   progress: document.getElementById('stage-progress'),
   done: document.getElementById('stage-done'),
   doneText: document.getElementById('stage-done-text'),
+  nest: document.getElementById('stage-nest'), // what a solved piece was one piece of, out to the great work
   onward: document.getElementById('stage-next'),
   again: document.getElementById('stage-again'),
   tune: document.getElementById('stage-difficulty'),
@@ -2984,6 +2987,9 @@ function finish(say) {
   write(ui.doneText, 'solved');
   ui.done.hidden = false;
   land(ui.done, 'done-land', { family: 'arrive', duration: 'long' });
+  // And the solve places the piece rather than ending it: under the seal, what it was one piece
+  // of, scale by scale out to the great work (renderNest).
+  renderNest(c);
   // The finale is on the scene, which on a phone may be above the knob that finished it. The done
   // mark is not: it reports from the end of the dots' row in the rail, clear of the picture.
   const box = ui.scene.getBoundingClientRect();
@@ -3003,6 +3009,27 @@ function finish(say) {
     if (!current || current.token !== token) return;
     lightTheWayOn(true);
   }, calm.matches ? 500 : 1200);
+}
+
+/* The nest (README: "Nesting axiom"): a solved piece is not over, it is placed. It was one piece of
+   a gate, the gate is one gate of a colour, and the colour one colour of the great work -- nest() in
+   js/variant.js, from the seed this piece was dealt from, so the gate a card in the feed named is
+   the gate its solve names, and a piece sent to someone by its address is placed where it was.
+   One line a scale, from the innermost out, under the seal and never over the scene; the whole
+   is cut in by one slice from the top (_sass/_stage.scss), so the work opens outward from the
+   piece a line at a time. It is the rite's dressing and nothing else: it counts nothing, asks
+   nothing of the visitor, and stays as long as the piece does. Shown before it is written, so
+   the live line is there to hear the words arrive. */
+function renderNest(c) {
+  if (!ui.nest) return;
+  const scales = nest(c.seed);
+  ui.nest.textContent = '';
+  ui.nest.hidden = false;
+  scales.forEach((scale, i) => {
+    const words = 'one ' + scale.is + ' of ' + scale.of + (i < scales.length - 1 ? ',' : '');
+    ui.nest.appendChild(el('span', 'stage-nest-scale', i ? ' ' + words : words));
+  });
+  land(ui.nest, 'nest-open', { family: 'arrive', duration: 'long', after: riteMs('medium', 340) });
 }
 
 /* ---- the way on ----------------------------------------------------------------------------- */
@@ -3194,6 +3221,11 @@ function close(keep) {
   write(ui.doneText, 'done');
   ui.done.hidden = true;
   ui.done.classList.remove('is-landing');
+  if (ui.nest) {
+    ui.nest.textContent = '';
+    ui.nest.hidden = true;
+    ui.nest.classList.remove('is-landing');
+  }
   dimTheWayOn();
 }
 

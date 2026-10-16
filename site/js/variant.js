@@ -18,12 +18,13 @@
   tested on its own (.github/scripts/card_variant_harness.mjs drives it,
   CardVariantTest in .github/scripts/test_make_interesting.py makes the assertions).
 
-      import { roll, revive, PLAIN, recolor, aspect, light } from './variant.js';
+      import { roll, revive, PLAIN, recolor, aspect, light, nest } from './variant.js';
 
       const v = roll(seed);                  // the variant: seven dials
       const seeds = recolor(moodSeeds, v);   // the piece's four palette seeds, re-derived by it
       const ratio = aspect('4 / 5', v);      // its frame, stretched by it
       const same = revive(handedOver, seed); // the configuration a card handed over, made safe
+      const place = nest(seed);              // what the piece is one piece of, up to the great work
 
   The seven dials, three of colour and four of composition (DIALS below holds the range of each):
 
@@ -249,6 +250,46 @@ export function aspect(ratio, v) {
    the top-left corner that sheet falls back to on its own. */
 export function light(v) {
   return Math.round(30 + v.turn * 52) + '% ' + Math.round(20 + v.turn * 16) + '%';
+}
+
+/* ---- the nest: what a piece is one piece of ------------------------------------------------
+
+   Every piece is one piece of something larger, and every larger thing one piece of something
+   larger still (README: "Nesting axiom"). A piece is one piece of a gate, the gate is one gate of
+   a colour, and the colour is one colour of the great work, which takes in everything on the site
+   and is never finished. The gates are George Ripley's twelve, in his order and in plain words,
+   three to each of the work's four colours; the great work is the alchemists' own name for the
+   largest working there is.
+
+   nest(seed) is that place, scale by scale from the innermost out, each scale read as
+   "one <is> of <of>":
+
+       nest(seed)  ->  [{ is: 'piece',  of: 'the dissolving' },
+                        { is: 'gate',   of: 'the blackening' },
+                        { is: 'colour', of: 'the great work' }]
+
+   It is rolled from the seed like the rest of the configuration, so a card and the feature it opens
+   as are one piece of the same gate, a piece's own address carries its place with it, and pieces of
+   different worlds are pieces of one gate. It is dressing and nothing more: it changes nothing
+   about the puzzle, locks nothing, and counts nothing a visitor could fill, because the work it
+   names is never finished. */
+export const GREAT_WORK = 'the great work';
+export const COLOURS = ['the blackening', 'the whitening', 'the yellowing', 'the reddening'];
+export const GATES = [
+  'the burning', 'the dissolving', 'the parting',
+  'the joining', 'the rotting', 'the congealing',
+  'the feeding', 'the rising', 'the ripening',
+  'the exalting', 'the multiplying', 'the casting'
+];
+
+export function nest(seed) {
+  const gate = Math.floor(mulberry32(((seed >>> 0) ^ 0x6e657374) >>> 0)() * GATES.length);
+  const colour = Math.floor(gate * COLOURS.length / GATES.length);
+  return [
+    { is: 'piece', of: GATES[gate] },
+    { is: 'gate', of: COLOURS[colour] },
+    { is: 'colour', of: GREAT_WORK }
+  ];
 }
 
 /* rite:begin -- the same text stands in .github/scripts/piece_harness.mjs, which plays a module
