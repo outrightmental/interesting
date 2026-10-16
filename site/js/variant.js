@@ -271,7 +271,7 @@ export function light(v) {
    It is rolled from the seed like the rest of the configuration, so a card and the feature it opens
    as are one piece of the same gate, a piece's own address carries its place with it, and pieces of
    different worlds are pieces of one gate. It is dressing and nothing more: it changes nothing
-   about the puzzle, gates nothing, and counts nothing a visitor could fill, because the work it
+   about the puzzle, locks nothing, and counts nothing a visitor could fill, because the work it
    names is never finished. */
 export const GREAT_WORK = 'the great work';
 export const COLOURS = ['the blackening', 'the whitening', 'the yellowing', 'the reddening'];

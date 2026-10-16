@@ -250,7 +250,7 @@ NESTED = ("one piece of an infinitely larger puzzle -- every small thing a visit
           "piece of a larger, unfinished and very important working, every larger thing is one "
           "piece of a larger one still, and all of it implies the largest, the great work; and the "
           "larger working is implied, never owed: every piece is whole on its own legs, nothing "
-          "is a quota, a meter or a gate, and the great work is never finished")
+          "is a quota, a meter or a lock, and the great work is never finished")
 
 # What a run does is drawn from a bag of marbles, the mechanism xj music uses to choose among
 # memes (docs.xjmusic.com/making-xj-music/memes): every mode puts as many marbles in the bag as
@@ -2620,7 +2620,7 @@ def build_prompt(shown, omitted=(), run=None, budget=None, feedback=""):
         "work. Name a new scale inside that nest, never a second nest beside it.\n"
         "A change that makes a visitor feel the piece in hand is one piece of something larger "
         "and very important, without counting at them or taking a moment of clarity away, is a "
-        "good change; one that turns the larger working into a quota, a meter, a gate or a sermon "
+        "good change; one that turns the larger working into a quota, a meter, a lock or a sermon "
         "fails this standard even though no check can see it.\n\n"
         "POWERED DOWN, NEVER BROKEN. Where a component depends on something the visitor has not "
         "done yet -- a saved sky, a kept list, storage this browser does not offer -- its only "

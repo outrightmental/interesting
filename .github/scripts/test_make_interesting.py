@@ -3375,7 +3375,7 @@ class NestedStandardTest(unittest.TestCase):
                       "the great work"]:
             with self.subTest(scale=scale):
                 self.assertIn(scale, mi.NESTED)
-        for limit in ["implied, never owed", "whole on its own legs", "a quota, a meter or a gate",
+        for limit in ["implied, never owed", "whole on its own legs", "a quota, a meter or a lock",
                       "never finished"]:
             with self.subTest(limit=limit):
                 self.assertIn(limit, mi.NESTED)
