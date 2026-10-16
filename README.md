@@ -1884,6 +1884,27 @@ invariant of the iteration, stated in the prompt and held to in code.
   [#60](https://github.com/outrightmental/interesting/issues/60)): it opens with an answer already
   on it, which is why `ctx.value(id)` is the piece's from the first frame, so pressing it and
   letting go where it stands is giving that answer and the stage takes it as set.
+- **Sorted by hand, never by arrows** (issue
+  [#104](https://github.com/outrightmental/interesting/issues/104)). Sorting is always excellent.
+  An `order` knob is an M3 list, one row per item — its place, its name, and a drag handle at its
+  end — and nothing else stands beside an item. A row is picked up and put down where it goes,
+  three ways that are one gesture: dragged, by a mouse or a pen from anywhere on it and by a finger
+  from its handle (so a thumb on the list still scrolls the page), while the rows it passes step
+  aside in one stair to open the gap it will land in and every figure says where its row would be;
+  tapped and then tapped into another row's place, which is one pointer and no dragging (WCAG
+  2.2's 2.5.7); or picked up by Enter or Space, carried by the arrow keys (Home and End to either
+  end) and put down by Enter or Space, with Escape putting it back. Each pick-up, carry and
+  put-down is said on a live line, every row is named by its place, the one focus ring stays on
+  the row being carried, and for a visitor who asked for less motion the rows are simply in their
+  new places. The knob's contract is unchanged — `ctx.value(id)` is the array of item values in
+  their current order, set at the first move (a put-down, or a step the keyboard carries a row),
+  and `solution` gives the array that solves — so
+  the light table's filter order and every other order on the site play exactly as they did. A
+  list with an up and a down button beside each item, moving one thing along one place at a time,
+  is the pattern this replaced, and it does not come back: the prompt says so, for the stage and
+  for anything else on the site a visitor puts in order, and the stage harness's `orderSorted`
+  scenario reads the knob's buttons — one per row, whose words are exactly its place and its name,
+  and *keep this order* — so `StageTest` fails a stage that puts anything beside a row.
 - **One instantiation, then nothing.** A piece is its turn on the stage and no part of it outlives
   that turn — and that turn runs to the press of the way on, not to the finish. The stage has one
   teardown, and it takes the whole piece apart — the frame loop, the
@@ -1933,7 +1954,7 @@ invariant of the iteration, stated in the prompt and held to in code.
   scenario steps by hand so a 1.8-second hold costs nothing, a canvas that records nothing, and a
   feed that deals the worlds it is told to. It plays every piece the way a visitor who knows the
   answer would — the helpers worked, the answers set to the module's own solution, read by asking
-  the module for the very piece the stage opened — and presses the check. Eleven scenarios: a world
+  the module for the very piece the stage opened — and presses the check. Twelve scenarios: a world
   played, another played, and the first dealt again, each round solving, sitting out six seconds
   of its own clock to prove the stage does not see itself out, and then opening the next when the
   way on is pressed; every answer set wrong and checked, which must be refused, counted, said on
@@ -1952,11 +1973,16 @@ invariant of the iteration, stated in the prompt and held to in code.
   the persona's difficulty slider, which the stage must ask the persona for in the rail's own
   host, only until a level is picked (issue #100), and which, moved, must deal the same world and
   the same seed again as the piece the module makes at the new setting, still playable to a solve
-  (issue #93); and a piece answered wrong and then left by the way on, which must open the next
+  (issue #93); a piece answered wrong and then left by the way on, which must open the next
   card and be reported once as an incomplete attempt — no ceremony, nothing on the tally, the
   address replaced — with a second press over the same leaving taking no second card, and a press
   over a world with nothing to play or a module still loading opening the next card all the same
-  (issue #109). What the persona draws in that host — the slider for a new visitor, the footnote
+  (issue #109); and an order sorted every way a visitor sorts one — tapped, carried by the
+  keyboard and put back with Escape, dragged by a mouse and by a finger on its handle, a finger on
+  its words that must move nothing, and drags the browser takes back or Escape puts back — which
+  must have no control beside its rows, and must give the piece the order the rows show at every
+  put-down and every step the keyboard carries a row, and at nothing else (issue #104). What the
+  persona draws in that host — the slider for a new visitor, the footnote
   once a level is picked, by pointer, by keys, in the sheet or at the middle of the dial outright —
   is played by [`.github/scripts/lightbox_harness.mjs`](.github/scripts/lightbox_harness.mjs),
   the one stub browser that runs the real `js/persona.js`.
@@ -1964,7 +1990,7 @@ invariant of the iteration, stated in the prompt and held to in code.
   like the piece harness it is outside `/site`, so a run cannot soften it. Deliberately, it holds
   the site as committed rather than refusing a plan: it drives the stage through the stage's own
   elements, and those are a run's to rewrite, so gating plans on it would pin markup the silo leaves
-  open. The prompt says so, and says to keep all twelve true when rewriting the stage.
+  open. The prompt says so, and says to keep all thirteen true when rewriting the stage.
 - **Held to in code.** `check_completion` in
   [`.github/scripts/make_interesting.py`](.github/scripts/make_interesting.py) reads the one list
   of worlds off the built home page (the `#site-worlds` JSON the layout writes from
@@ -1994,7 +2020,7 @@ invariant of the iteration, stated in the prompt and held to in code.
   on the committed site rather than on a plan, for the reason given above.
 - **True of the site as committed**: `RealSiteTest` builds `/site` and plays every world's piece
   through the law on every pull request and before every deploy, plays the stage itself through the
-  eleven scenarios above, checks that every world page is the stage and that the threshold hosts the
+  twelve scenarios above, checks that every world page is the stage and that the threshold hosts the
   question on it, checks that every world's module reads `env.difficulty` inside its pieces, and
   checks that the limits the prompt states are the harness's own.
 
