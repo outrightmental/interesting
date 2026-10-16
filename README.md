@@ -56,15 +56,18 @@ iterate a more interesting website
   left): up to three models per run, inside the fifty minutes the run gives itself for asking.
   If `main` moves on before the push the rebased commit is tested again, so the run never pushes
   a commit that would block the deploy.
-- **Every run draws its mode from a bag of marbles** — a kind of work (*create*, *enhance* or
-  *consolidate*) on one area of the site (one world, the navigation, the persona, or the whole),
-  each mode with as many marbles in the bag as its weight says, so a third of all runs enhance one
-  world and a new world is the rarest run of all. A creating or enhancing run serves the mission
-  **"make the website more interesting as a single coherent whole"**; a consolidating run serves
-  **"consolidate, federate, refactor and clean up the website into a single coherent whole"** and
-  adds nothing. The manual form can name a mode outright, and the commit message says which it
-  was: it opens with *Enhance the quiet room*, *Consolidate the navigation*, *Create a world* and
-  so on (see [The bag of marbles](#the-bag-of-marbles)).
+- **Every run draws its mode from a bag of marbles** — a kind of work (*create*, *enhance*,
+  *consolidate* or *deepen*) on one area of the site (one world, the navigation, the persona, or
+  the whole), each mode with as many marbles in the bag as its weight says, so nearly a third of
+  all runs enhance one world and a new world is the rarest run of all. A creating or enhancing run
+  serves the mission **"make the website more interesting as a single coherent whole"**; a
+  consolidating run serves **"consolidate, federate, refactor and clean up the website into a
+  single coherent whole"** and adds nothing; and the deepening run, the *make it all fit together
+  better* job, serves **"make it all fit together better, every piece of the website one piece of
+  a single coherent whole and that whole one piece of something larger still"**. The manual form
+  can name a mode outright, and the commit message says which it was: it opens with *Enhance the
+  quiet room*, *Consolidate the navigation*, *Create a world*, *Fit the site together* and so on
+  (see [The bag of marbles](#the-bag-of-marbles)).
 - **One run at a time** — a run that starts while an earlier run of the workflow is still going
   skips itself and finishes green without doing anything, so there is never more than one
   iteration in flight. (To retry a failed run use *Run workflow*: *Re-run failed jobs* does not
@@ -621,11 +624,12 @@ What a run does is drawn at random from a bag of marbles, the mechanism
 puts as many marbles in the bag as its weight says, one marble is drawn, and the mode it belongs
 to is the run's. A mode is a kind of work — *create* a new one, *enhance* it (make it more
 interesting, measured as [engagement time](#engagement-time-axiom)), *consolidate* it (clean up
-its code and logic and fix its bugs, adding nothing) — on one area of the site: one *item* (a
-world: its page, its module and its line in `_data/worlds.json`), the *nav* (the navigation
-experience and the constellation inside the sparkles logo in the upper left), the *persona* (the
-configuration inside the button in the upper right, and the way the persona runs through the
-site), or the site *overall* (the site-wide experience and the framework beneath it).
+its code and logic and fix its bugs, adding nothing), *deepen* it (make it all fit together
+better, one step further into the [nesting axiom](#nesting-axiom) each time) — on one area of the
+site: one *item* (a world: its page, its module and its line in `_data/worlds.json`), the *nav*
+(the navigation experience and the constellation inside the sparkles logo in the upper left), the
+*persona* (the configuration inside the button in the upper right, and the way the persona runs
+through the site), or the site *overall* (the site-wide experience and the framework beneath it).
 
 | Mode | Marbles | What the run does |
 |---|---|---|
@@ -638,14 +642,17 @@ site), or the site *overall* (the site-wide experience and the framework beneath
 | `consolidate_nav` | 2 | clean up the navigation's code and logic and fix its bugs |
 | `consolidate_persona` | 3 | clean up the persona's code and logic and fix its bugs |
 | `consolidate_overall` | 4 | clean up the framework, re-federate, and fix bugs |
+| `deepen_overall` | 4 | make it all fit together better: take the site one step further into the nesting axiom |
 
-- **Forty-two marbles, drawn once per run.** `MODE_MARBLES` in
+- **Forty-six marbles, drawn once per run.** `MODE_MARBLES` in
   [`.github/scripts/make_interesting.py`](.github/scripts/make_interesting.py) is the bag;
   `chosen_mode()` draws from it, and the draw is remembered nowhere, so two runs of one mode can
   land in a row. The manual *Run workflow* form can name a mode outright, or a kind of work
-  (`create`, `enhance`, `consolidate`) to draw among that work's modes only. The log says what was
-  drawn (`Mode: enhance_item (14 of 42 marbles; drawn: the quiet room)`), and the commit message
-  opens with it: *Enhance the quiet room*, *Consolidate the navigation*, *Create a world*.
+  (`create`, `enhance`, `consolidate`, `deepen`) to draw among that work's modes only; `interesting`,
+  the old name for the runs that grow the site, still draws among the creating and enhancing
+  modes. The log says what was drawn (`Mode: enhance_item (14 of 46 marbles; drawn: the quiet
+  room)`), and the commit message opens with it: *Enhance the quiet room*, *Consolidate the
+  navigation*, *Create a world*, *Fit the site together*.
 - **An item mode draws its world too.** The world — one, usually; sometimes two or three, from a
   bag of its own — is drawn from `_data/worlds.json` by the script, not chosen by the model, and
   the prompt names it with its page, its module and what it is like. Its files are shown first
@@ -661,6 +668,34 @@ site), or the site *overall* (the site-wide experience and the framework beneath
   most refused answers were refused for. An answer that changes files outside its mode's own is
   not refused for that alone, but when the tests refuse it, the repair round names those files
   back to the model.
+- **The deepening mode makes it all fit together better** (issue
+  [#103](https://github.com/outrightmental/interesting/issues/103)). `deepen_overall` is neither
+  tidying, as a consolidating run is, nor one area's reason to stay, as an enhancing run is: it
+  asks what the site adds up to, and makes the pieces fit into that larger whole — every piece one
+  piece of a larger working, out to the great work (see [Nesting axiom](#nesting-axiom)) — going
+  further each time it is drawn. Its block, `THIS RUN MAKES IT ALL FIT TOGETHER BETTER`, stands
+  between `ENVISION THE WHOLE FIRST` and `LEGIBLE TO A STRANGER` like every mode's.
+  - **The name keeps the shape.** *deepen* is a fourth kind of work and *overall* its one area,
+    because what has to fit together is all of it, so everything that splits a mode on `_` reads
+    it with no special case: `RUN_MODE=deepen` draws it, no file it touches is a stray, and the
+    framework is shown after the nest's own files (`NEST_FILES`: `js/variant.js`,
+    `_data/worlds.json`, the stage and the feed), which it sees first.
+  - **Four marbles, on top of the bag.** No other mode's weight came down: a bag is shares, so the
+    new job takes its 4 of every 46 hours from every other mode in proportion, and each weight still
+    says what it said beside its neighbours.
+  - **Further every time, with no memory.** A run remembers nothing of the runs before it, and
+    the commit history is not something a silo'd model is shown, so the site itself is the record:
+    the run reads how far the site already carries the nesting — which scales it names and where,
+    which it only implies, what still reads as the whole of something — and takes the next step
+    from there, never one already taken and never a step back. Run after run, it goes deeper
+    rather than round in a circle.
+  - **It may add what the fitting needs, and nothing beside.** A line, a word, the name of a
+    scale, one more place the stage, the feed or the threshold says what a piece belongs to — but
+    no new world, page, piece or knob, and not one world's own module, which are the creating and
+    enhancing modes'. And `DEEPER, NEVER HEAVIER`: every step keeps to the nesting axiom's five
+    holds, so going further never means a count, a collection, a lock or a sermon, and the nest's
+    own shape — its three scales, which the tests hold — is deepened in what the site says around
+    it rather than in how many scales it has.
 - **Why a bag.** The weights say how the hours are spent, the rare modes still come round, and
   every run is a small, named piece of work on a named set of files, which is what keeps an answer
   inside a model's output limit and inside the hour: on 2026-10-07 and 2026-10-08 every
@@ -883,7 +918,10 @@ never finished. **The larger working is implied, never owed.**
   the great work — again after the ritual holds under `A PIECE OF THE GREAT WORK, NEVER A QUOTA`,
   with the five holds and the passage's flavour, and again in the line a run reads last: *the piece
   in hand, the working beyond it and the great work beyond that, with nothing to collect and nothing
-  held back.* The creating and enhancing modes carry it into what they add.
+  held back.* The creating and enhancing modes carry it into what they add, and one mode,
+  `deepen_overall` — the *make it all fit together better* job — does nothing else: each time it
+  is drawn it takes the site one step further into it (see [The bag of
+  marbles](#the-bag-of-marbles)).
 - **Deliberately not held to in code.** No check could judge whether a piece feels like one piece
   of something very important, so the prompt is where this standard lives, exactly as `WHOLE`,
   `INTERESTING`, `LEGIBLE` and `RITUAL` do: it is not among the ten coded axioms, and

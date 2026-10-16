@@ -4,11 +4,12 @@
 Picks one of the heaviest models GitHub Copilot offers, at near-maximum reasoning
 effort, shows it the current contents of the /site folder, and asks it to work on
 the website. What a run does is drawn at random from a bag of marbles
-(chosen_mode(), MODE_MARBLES): a mode is a kind of work -- create, enhance or
-consolidate -- on one area of the site -- one world, the navigation, the persona
-or the whole -- and each mode has as many marbles in the bag as its weight says,
-so a third of all runs enhance one world and a new world is the rarest run of
-all. An item mode draws the world it works on at random too (draw_items()).
+(chosen_mode(), MODE_MARBLES): a mode is a kind of work -- create, enhance,
+consolidate or deepen -- on one area of the site -- one world, the navigation,
+the persona or the whole -- and each mode has as many marbles in the bag as its
+weight says, so nearly a third of all runs enhance one world and a new world is
+the rarest run of all. An item mode draws the world it works on at random too
+(draw_items()).
 
 Every run of every mode starts the same way, unconditionally: the model is told
 to envision the site as one experience -- one navigation, one visual language,
@@ -17,9 +18,12 @@ has to be. A creating or enhancing run then makes the one change that most
 lengthens a visitor's stay, inside its mode's own files, and whatever it adds
 arrives federated in the same run. A consolidating run adds nothing: it cleans
 up the code and logic of its area and fixes its bugs, by edits that leave what
-the deploy's tests hold in place where it is. So every run gets a whole answer
-to one small, named piece of work, which is what keeps an answer inside a model's
-output limit and inside the hour (see the modes, below MISSION).
+the deploy's tests hold in place where it is. A deepening run, the one that
+makes it all fit together better, neither tidies nor adds a thing of its own: it
+reads how far the site already carries NESTED and takes it one step further, so
+run after run the pieces fit deeper into the larger working. So every run gets a
+whole answer to one small, named piece of work, which is what keeps an answer
+inside a model's output limit and inside the hour (see the modes, below MISSION).
 
 "Interesting" is not left to a model's taste: INTERESTING names the measure, and
 it is user engagement time. The site is more interesting when a person stays
@@ -245,7 +249,8 @@ RITUAL = ("an esoteric magical ritual -- every arrival, question, piece, solve a
 # build_prompt), and again in the line it reads last. The site's one concrete form of it -- the
 # nest a solved piece names, from nest() in js/variant.js -- is held by the stage harness and
 # RealSiteTest like the ritual axiom's typographic half. The README section "Nesting axiom" is the
-# long form.
+# long form. And one mode of the bag, deepen_overall (issue #103), has no other work than taking
+# the site further into it, a step a run.
 NESTED = ("one piece of an infinitely larger puzzle -- every small thing a visitor does is one "
           "piece of a larger, unfinished and very important working, every larger thing is one "
           "piece of a larger one still, and all of it implies the largest, the great work; and the "
@@ -260,6 +265,8 @@ NESTED = ("one piece of an infinitely larger puzzle -- every small thing a visit
 #   work  create       make a new one
 #         enhance      make it more interesting, measured as INTERESTING says
 #         consolidate  clean up its code and logic and fix its bugs, adding nothing
+#         deepen       make it all fit together better: take what it adds up to (NESTED) one step
+#                      further than it stands
 #   area  item         one world (a content item is a world here: its page, its module and its
 #                      line in _data/worlds.json), drawn at random too (draw_items)
 #         nav          the navigation experience and the constellation inside the sparkles logo
@@ -275,6 +282,16 @@ NESTED = ("one piece of an infinitely larger puzzle -- every small thing a visit
 # those tests. A mode is a small, named piece of work on a named set of files, so an answer can be
 # a few edits; the weights say how the hours are spent; and the rare modes still come round. The
 # draw is per run, remembered nowhere: two runs of one mode can land in a row.
+#
+# deepen_overall is the "make it all fit together better" job (issue #103). Its name keeps the
+# work_area shape that Run, chosen_mode, strays and focus_files all split on: deepening is a fourth
+# kind of work, and only ever on the whole, because what has to fit together is all of it -- so
+# RUN_MODE=deepen draws it, strays names nothing, and the framework is in view behind the nest's
+# own files (NEST_FILES). Its four marbles went in on top of the others rather than out of any one
+# of them: a bag is shares, so the new job takes its 4 of every 46 hours from every other mode in
+# proportion, and each other weight still says what it said beside its neighbours. And "further and
+# further, ongoing" asks for no memory the draw does not have: the site is the record of how far
+# the fitting together has gone, so a deepening run reads it for that and takes the next step.
 MODE_MARBLES = {
     "create_item": 1,
     "enhance_item": 14,
@@ -285,9 +302,10 @@ MODE_MARBLES = {
     "consolidate_nav": 2,
     "consolidate_persona": 3,
     "consolidate_overall": 4,
+    "deepen_overall": 4,
 }
 MODES = tuple(MODE_MARBLES)
-WORKS = ("create", "enhance", "consolidate")
+WORKS = ("create", "enhance", "consolidate", "deepen")
 AREAS = ("item", "nav", "persona", "overall")
 # The mode build_prompt assumes when it is given none: the one with the most marbles, so that a
 # prompt built by hand reads as the typical run does.
@@ -319,10 +337,11 @@ def chosen_mode():
     """The mode this run works in.
 
     RUN_MODE, if it names a mode, wins: it is a person's choice through the workflow's manual
-    input. If it names a kind of work instead ("enhance", "consolidate", "create" -- or
+    input. If it names a kind of work instead ("enhance", "consolidate", "create", "deepen" -- or
     "interesting", the old name for the runs that grow the site, which is the creating and the
-    enhancing modes together), the draw is from that part of the bag only. Otherwise, and for
-    "auto", the whole bag is drawn from; a name that is none of those is said so and drawn past.
+    enhancing modes together, and not the deepening one, which came after the name), the draw is
+    from that part of the bag only. Otherwise, and for "auto", the whole bag is drawn from; a name
+    that is none of those is said so and drawn past.
     """
     named = (os.environ.get("RUN_MODE") or "").strip().lower().replace("-", "_")
     if named in MODES:
@@ -331,7 +350,8 @@ def chosen_mode():
     if named in WORKS:
         marbles = {mode: n for mode, n in MODE_MARBLES.items() if mode.startswith(named + "_")}
     elif named == "interesting":
-        marbles = {mode: n for mode, n in MODE_MARBLES.items() if not mode.startswith("consolidate_")}
+        marbles = {mode: n for mode, n in MODE_MARBLES.items()
+                   if mode.startswith(("create_", "enhance_"))}
     elif named and named != "auto":
         print(f"::warning::RUN_MODE {one_line(named, 60)!r} is not one of {', '.join(MODES)}; "
               "drawing from the bag instead.")
@@ -436,11 +456,19 @@ HEADLINE_AREAS = {"nav": "the navigation", "persona": "the persona", "overall": 
 # opening of the prompt, the line it reads last, the console line and clean_summary's fallback.
 CONSOLIDATION_MISSION = ("consolidate, federate, refactor and clean up the website into a single "
                          "coherent whole")
+# And what a deepening run serves, in the same places (issue #103): the job's own name, "make it all
+# fit together better", and what fitting together means here -- NESTED's scale, every piece one
+# piece of the whole and the whole one piece of something larger. It keeps "single coherent whole"
+# as the other two do, since it is the line read at both ends of the prompt.
+DEEPENING_MISSION = ("make it all fit together better, every piece of the website one piece of a "
+                     "single coherent whole and that whole one piece of something larger still")
 
 
 def aim_of(run):
     """What the run does, as the phrase that completes "..., by": its work on its area, with the
     worlds an item mode drew named."""
+    if run.work == "deepen":
+        return "deepening what the site adds up to, one step further than it stands"
     if run.area == "item":
         what = name_items(run.items)
         if run.work == "create":
@@ -457,16 +485,23 @@ def aim_of(run):
 
 
 def mission_of(run):
-    """The mission a run serves, with its mode's aim: MISSION for a creating or enhancing run and
-    CONSOLIDATION_MISSION for a consolidating one, each followed by what this run does it by."""
-    base = CONSOLIDATION_MISSION if run.work == "consolidate" else MISSION
+    """The mission a run serves, with its mode's aim: MISSION for a creating or enhancing run,
+    CONSOLIDATION_MISSION for a consolidating one and DEEPENING_MISSION for a deepening one, each
+    followed by what this run does it by."""
+    base = {"consolidate": CONSOLIDATION_MISSION, "deepen": DEEPENING_MISSION}.get(run.work, MISSION)
     return f"{base}, by {aim_of(run)}"
 
 
 def headline_of(run):
     """The first words of the commit message and of the run summary: what a reader of `git log`
     sees before the model's own sentence. The workflow reads it from the "headline" output rather
-    than carrying a prefix of its own. "Enhance the quiet room: ..." names the world drawn."""
+    than carrying a prefix of its own. "Enhance the quiet room: ..." names the world drawn.
+
+    A deepening run is headed with its job's name rather than with "Deepen", which an enhancing
+    run's own sentence so often opens with ("Enhance the lantern ritual: Deepen ..."): "Fit the
+    site together: ..." is a run of the make-it-all-fit-together-better job, and nothing else."""
+    if run.work == "deepen":
+        return f"Fit {HEADLINE_AREAS[run.area]} together"
     verb = {"create": "Create", "enhance": "Enhance", "consolidate": "Consolidate"}[run.work]
     if run.area == "item":
         return f"{verb} {name_items(run.items) or 'a world'}"
@@ -856,9 +891,9 @@ def site_worlds(files):
 def focus_files(run, files=()):
     """The files `run` works in, in the order the prompt shows them after the protected ones: a
     drawn world's page and module for an item mode (with the data and the palette its lines are
-    in), the shell's own files for nav and persona, and then the whole framework for every mode,
-    so what every world stands on is always in view. `files` is the site as read_site() gives
-    it; a name that is not in it is passed over."""
+    in), the shell's own files for nav and persona, the nest's for a deepening run (NEST_FILES),
+    and then the whole framework for every mode, so what every world stands on is always in view.
+    `files` is the site as read_site() gives it; a name that is not in it is passed over."""
     own = []
     if run.area == "item":
         for world in run.items:
@@ -868,6 +903,8 @@ def focus_files(run, files=()):
         own += NAV_FILES
     elif run.area == "persona":
         own += PERSONA_FILES
+    elif run.work == "deepen":
+        own += NEST_FILES
     present = {rel for rel, _ in files}
     own += sorted(rel for rel in present if is_framework(rel) and rel not in FIXED_FILES)
     focus, seen = [], set()
@@ -3348,9 +3385,9 @@ def bag_note(run):
     weights = ", ".join(f"{mode} {n}" for mode, n in MODE_MARBLES.items())
     return (
         "THE BAG OF MARBLES. What a run does is drawn at random from a bag of marbles. A mode is a "
-        "kind of work -- create, enhance or consolidate -- on one area of the site -- one world, "
-        "the navigation, the persona, or the whole -- and each mode has as many marbles in the bag "
-        f"as the hours it is owed: {weights}, of {sum(MODE_MARBLES.values())}. One marble is drawn "
+        "kind of work -- create, enhance, consolidate or deepen -- on one area of the site -- one "
+        "world, the navigation, the persona, or the whole -- and each mode has as many marbles in "
+        f"the bag as the hours it is owed: {weights}, of {sum(MODE_MARBLES.values())}. One marble is drawn "
         f"each run, and this run drew {run.mode}. Every other mode gets runs of its own, so do this "
         "run's one mode, whole, and leave the rest to the runs that draw them: the consolidation "
         "that is overdue, the world that is missing, the shell that wants rethinking are each some "
@@ -3422,6 +3459,22 @@ FRAMEWORK_IS = (
     f"error page, and the one visual language in \"{SASS_DIR}/\": the tokens, the type scale and "
     "its registers, the base rules, the panel, the controls, the unlock, the moods. "
 )
+# Where the site says what a piece is one piece of (issue #102), as the deepening mode describes
+# it, and the files it is said in, which focus_files shows a deepening run ahead of the rest of the
+# framework: the nest itself, the words the site is dealt from, where a solve says it and where a
+# card does.
+NEST_IS = (
+    f"Where the site says what a piece is one piece of: nest(seed) in \"{VARIANT_SCRIPT}\" places "
+    "every seed's piece in a gate, the gate in a colour and the colour in the great work (GATES, "
+    f"COLOURS, GREAT_WORK); \"{STAGE_SCRIPT}\" writes that under the seal of a solved piece "
+    f"(renderNest, into #stage-nest in \"{STAGE_INCLUDE}\", painted by \"{SASS_DIR}/_stage.scss\"); "
+    "\"js/feed.js\" ends every card it deals with its gate (.card-nest, painted by "
+    f"\"{SASS_DIR}/_feed.scss\") in the feed \"{INCLUDES_DIR}/worlds.njk\" writes; and "
+    f"\"{WORLDS_DATA}\" holds the words the site is dealt from -- the threshold's line, which names "
+    "the great work where a visitor first meets it, and every world's name and line. "
+)
+NEST_FILES = (VARIANT_SCRIPT, WORLDS_DATA, STAGE_INCLUDE, STAGE_SCRIPT, f"{SASS_DIR}/_stage.scss",
+              "js/feed.js", f"{INCLUDES_DIR}/worlds.njk", f"{SASS_DIR}/_feed.scss")
 
 
 def work_block(run):
@@ -3560,6 +3613,49 @@ def work_block(run):
             "constellation or the persona for their own sake (their own modes'): what is shared is "
             "this run's, and only what is shared. Work by edits to the shared files, one coherent "
             "stage of a change too big for one answer.\n\n"
+        )
+    if run.mode == "deepen_overall":
+        return (
+            "THIS RUN MAKES IT ALL FIT TOGETHER BETTER: it deepens what the site adds up to, so "
+            "that every piece reads as one piece of a larger working, every working as one piece "
+            "of a larger one still, out to the great work -- one step further than the site "
+            "carries it now. " + bag_note(run) + NEST_IS +
+            "It is not tidying, which is the consolidating modes' work, and it is not one area's "
+            "reason to stay, which is the enhancing modes': it asks what all of it adds up to and "
+            "makes the pieces fit into that larger whole. A PIECE OF THE GREAT WORK, below, is the "
+            "standard, and taking the site further into it is the whole of this run.\n"
+            "FURTHER EVERY TIME. This run remembers nothing of the runs before it, and needs "
+            "nothing: the site as it stands is the record of how far the fitting together has "
+            "gone. So read it for that first -- which scales it names and where (the nest under a "
+            "solve, the gate at the foot of a card, the threshold's line, a world's own line), "
+            "which it implies and does not name yet, what still reads as the whole of something "
+            "rather than as one piece of something larger, and which pieces belong to one working "
+            "without anything showing it. Then take the next step from there: the one the site is "
+            "ready for, never one it has already taken, and never a step back from one it has. "
+            "Build on what earlier runs fitted rather than fitting it again another way, so that "
+            "run after run the site goes deeper and never round in a circle.\n"
+            "A step is one of these, or one like them: a thing that reads as the whole of "
+            "something made to say what it is one piece of -- a world's line, a reading, the error "
+            "page, a card; a scale the site implies and does not yet name, named in the words "
+            "around the nest -- a world as one working of the site, the site as one piece of the "
+            "great work; two pieces, two worlds or two gates shown to belong to one working, by a "
+            "word, a colour or a movement they share; the nest said at one more moment a visitor "
+            "already reaches, or saying more where it is already said; one name for one scale, "
+            "used for it everywhere. The nest's own shape -- its three scales, piece, gate and "
+            "colour, out to the great work -- is held in place (below): deepen what the site says "
+            "around it and where it says it, not how many scales nest() returns.\n"
+            "DEEPER, NEVER HEAVIER. Every step keeps to the five holds under A PIECE OF THE GREAT "
+            "WORK: nothing counts a visitor towards a total, nothing is collected or locked, "
+            "nothing names a top short of the great work or says the work is done, and nothing "
+            "lectures -- the further the site goes, the less it has to say so. A step that turns "
+            "the larger working into a quota, a meter, a lock or a sermon goes backwards however "
+            "deep it looks, and so does one that costs a visitor a moment of clarity.\n"
+            "It may add what the fitting needs -- a line, a word, the name of a scale, one more "
+            "place the stage, the feed or the threshold says what a piece belongs to -- but not a "
+            "new world (create_item's run), a new page, a new piece or a new knob, and not one "
+            "world's own module (enhance_item's): the whole is this run's, through the shared "
+            "files it is all dealt from. Tidy nothing that is not in the way. Work by edits to "
+            "those files, one coherent step of a deepening that is never finished.\n\n"
         )
     return (  # consolidate_overall
         "THIS RUN CONSOLIDATES THE WHOLE SITE: cleans up the code and logic of the site-wide "
@@ -3917,6 +4013,20 @@ def complete_run(run):
             "kilobytes in all, and a file sent whole only when it is new. One coherent stage of a "
             "cleanup too big for one answer is a whole run; half of a bigger one is not.\n\n"
         )
+    if run.work == "deepen":
+        return (
+            "A run whose entire change is one step of the fitting together -- one more thing that "
+            "says what it is one piece of, one scale named that was only implied, two pieces shown "
+            "to belong to one working -- is a complete and successful run. It needs nothing "
+            "alongside it, and must have nothing: the step is the run, and the next step is the "
+            "next deepening run's, from wherever this one leaves the site. Build on what is "
+            "already there rather than starting over, and do not add for the sake of adding: a "
+            "step that only makes what is there fit is as deep as one that adds a line. SIZE. The "
+            "answer is small by design: edits, to the files this mode names, well inside a quarter "
+            "of your output limit, and a file sent whole only when it is new. One coherent stage "
+            "of a deepening too big for one answer is a whole run; half of a bigger one is "
+            "not.\n\n"
+        )
     return (
         "A run whose entire change is the one thing this mode names, done whole, is a complete "
         "and successful run. It needs nothing alongside it, and must have nothing: the one change "
@@ -3947,6 +4057,10 @@ def then_clause(run):
     if run.mode == "create_item":
         return ("add one new world as part of the same whole, already federated, and nothing else: "
                 "leave the consolidating, and every other area, to the runs that draw them")
+    if run.work == "deepen":
+        return ("take what the site adds up to one step further than it stands, by the one change "
+                "that makes the most of it fit together as one piece of something larger, and leave "
+                "the consolidating, the new worlds and the enhancing to the runs that draw them")
     where = {"item": f"inside {names or 'the one world'} and {'their' if len(run.items) > 1 else 'its'} own files",
              "nav": "in the navigation's own files", "persona": "in the persona's own files",
              "overall": "in the framework's own files"}[run.area]
