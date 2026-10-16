@@ -4499,6 +4499,306 @@ class ParticipateButtonTest(unittest.TestCase):
                 self.assertNotIn(reach, source)
 
 
+class AdvertisingTest(unittest.TestCase):
+    """What site/js/analytics.js and site/js/clickadu.js actually load, run against a stub browser.
+
+    Issue #110: Clickadu's ads, banner and in-page push only, on the worlds' pages only, behind the
+    consent banner's own "advertising" category, with the zones written in at deploy time. A third
+    party's code on a visitor's page is worth testing rather than only holding in place, and both
+    files are fixed, so no run can be asked to put them right. ads_harness.mjs runs the real files
+    -- with the placeholders as committed and as the deploy fills them -- against a stand-in for the
+    consent library, and reports what it saw; the assertions are here.
+    """
+
+    GA = "https://www.googletagmanager.com/gtag/js?id=G-TEST1234"
+    BANNER = "https://ads.example/b/1111111"
+    IN_PAGE_PUSH = "//ads.example/p/2222222"
+    # The banner's words before there were ads, which a deploy without an ad zone still says.
+    TODAY = ("This site counts visits with Google Analytics, and measures nothing else. Those "
+             "cookies are only set if you accept them. Either way, the toys on these pages keep "
+             "your constellation in your own browser and send it nowhere.")
+
+    @classmethod
+    def setUpClass(cls):
+        cls.repo = Path(mi.__file__).resolve().parents[2]
+        cls.harness = Path(mi.__file__).resolve().parent / "ads_harness.mjs"
+        cls.analytics = cls.repo / "site" / mi.ANALYTICS_SCRIPT
+        cls.clickadu = cls.repo / "site" / mi.ADS_SCRIPT
+        cls.observed = None
+
+    def setUp(self):
+        for script in (self.analytics, self.clickadu):
+            if not script.is_file():
+                self.skipTest(f"no script at {script}")
+        needs_node(self)
+        if AdvertisingTest.observed is None:
+            run = subprocess.run([mi.NODE_BIN, str(self.harness), str(self.analytics), str(self.clickadu)],
+                                 capture_output=True, text=True, timeout=60)
+            self.assertEqual(run.returncode, 0, f"the harness failed: {run.stderr[-2000:]}")
+            AdvertisingTest.observed = json.loads(run.stdout)
+        self.seen = AdvertisingTest.observed
+
+    def words(self, banner):
+        """Everything the banner says, its sections included, as one string."""
+        return " ".join([banner["description"], banner["accept"]]
+                        + [f"{s['title']} {s['description']}" for s in banner["sections"]])
+
+    def advertising_section(self, banner):
+        sections = [s for s in banner["sections"] if s.get("linkedCategory") == "advertising"]
+        self.assertEqual(len(sections), 1, "one advertising section, linked to its category")
+        return sections[0]
+
+    def test_a_copy_the_deploy_has_not_been_through_is_silent(self):
+        # A fork, a local copy, an undeployed checkout: no tag, no ads, no banner, no stylesheet.
+        seen = self.seen["asCommitted"]
+        self.assertEqual(seen["fetched"], [])
+        self.assertEqual(seen["stylesheets"], [])
+        self.assertIsNone(seen["banner"])
+        self.assertEqual(seen["slots"], 0)
+
+    def test_without_an_ad_zone_the_banner_says_what_it_said_before(self):
+        # Analytics deployed and no ad zone: today's banner, word for word, and nothing of
+        # Clickadu's -- even for a visitor whose stored answer names advertising.
+        seen = self.seen["measuredOnly"]
+        banner = seen["banner"]
+        self.assertEqual(banner["categories"], ["necessary", "analytics"])
+        self.assertIsNone(banner["advertising"])
+        self.assertEqual(banner["revision"], 0, "answers already given stand")
+        self.assertEqual(banner["description"], self.TODAY)
+        self.assertEqual(banner["accept"], "Accept analytics")
+        self.assertNotRegex(self.words(banner), r"(?i)clickadu|\bads?\b|advertis")
+        self.assertEqual(seen["thirdParty"], [self.GA])
+        self.assertIsNone(seen["clickadu"], "clickadu.js is not even fetched")
+
+    def test_nothing_of_clickadus_is_fetched_before_the_visitor_says_yes(self):
+        waiting = self.seen["notYetAnswered"]
+        self.assertIsNotNone(waiting["banner"], "the banner is up, asking")
+        self.assertEqual(waiting["thirdParty"], [])
+        self.assertIsNone(waiting["clickadu"])
+        declined = self.seen["adsDeclined"]
+        self.assertEqual(declined["thirdParty"], [self.GA], "analytics yes, advertising no")
+        self.assertIsNone(declined["clickadu"])
+        self.assertEqual(declined["slots"], 0)
+
+    def test_accepted_on_a_world_the_two_formats_land_where_they_belong(self):
+        seen = self.seen["everythingAccepted"]
+        # The zones travel on clickadu.js's own element, from the one file the deploy writes.
+        self.assertEqual(seen["clickadu"]["attributes"],
+                         {"data-banner": self.BANNER, "data-in-page-push": self.IN_PAGE_PUSH})
+        # The banner in its slot, under the world's stage and above the feed ...
+        slot = seen["slot"]
+        self.assertEqual(slot["parent"], "body")
+        self.assertEqual(slot["after"], "main-content")
+        self.assertEqual(slot["before"], "page")
+        self.assertEqual(slot["bannerScripts"], [self.BANNER])
+        # ... and in-page push on the page itself, where Clickadu floats its card from.
+        self.assertEqual(seen["onTheBody"], [self.IN_PAGE_PUSH])
+        self.assertEqual(seen["slots"], 1)
+
+    def test_the_two_zones_are_all_that_is_ever_asked_of_clickadu(self):
+        # Banner and in-page push and no other format: whatever else a zone could be is never
+        # fetched, because nothing else is ever named.
+        self.assertEqual(self.seen["everythingAccepted"]["thirdParty"], [self.GA, self.BANNER, self.IN_PAGE_PUSH])
+        self.assertEqual(self.seen["bannerOnly"]["thirdParty"], [self.GA, self.BANNER])
+        self.assertEqual(self.seen["bannerOnly"]["onTheBody"], [])
+        self.assertEqual(self.seen["inPagePushOnly"]["thirdParty"], [self.GA, self.IN_PAGE_PUSH])
+        self.assertIsNone(self.seen["inPagePushOnly"]["slot"], "no banner, no slot")
+        # No popunder and no interstitial: nothing opens a window or takes over a click.
+        source = self.clickadu.read_text()
+        for reach in ["window.open", "'click'", '"click"', "location.href", "location.assign"]:
+            with self.subTest(reach=reach):
+                self.assertNotIn(reach, source)
+
+    def test_the_landing_page_carries_no_ads(self):
+        # The threshold has no data-world; accepting ads there serves none.
+        seen = self.seen["notAWorld"]
+        self.assertEqual(seen["slots"], 0)
+        self.assertEqual(seen["thirdParty"], [self.GA])
+        self.assertEqual(seen["onTheBody"], [])
+
+    def test_advertising_is_a_category_of_its_own_that_can_be_declined(self):
+        banner = self.seen["everythingAccepted"]["banner"]
+        self.assertEqual(banner["categories"], ["necessary", "analytics", "advertising"])
+        # Withdrawn, it reloads the page: the one way to take a third party's running code back off.
+        self.assertEqual(banner["advertising"], {"autoClear": {"cookies": [], "reloadPage": True}})
+        section = self.advertising_section(banner)
+        self.assertIn("reloads the page", section["description"])
+        self.assertIn("https://www.clickadu.com/privacy", section["description"])
+        self.assertIn("cookies of its own", section["description"])
+
+    def test_the_banner_only_ever_describes_what_is_served(self):
+        both = self.seen["everythingAccepted"]["banner"]
+        self.assertIn("Google Analytics", both["description"])
+        self.assertIn("Clickadu", both["description"])
+        self.assertEqual(both["accept"], "Accept both")
+        ads = self.seen["adsOnly"]
+        self.assertEqual(ads["banner"]["categories"], ["necessary", "advertising"])
+        self.assertNotIn("Google", self.words(ads["banner"]))
+        self.assertEqual(ads["banner"]["accept"], "Accept ads")
+        self.assertNotIn(self.GA, ads["fetched"], "no measurement ID, no Google tag")
+        # Each format is named only when its zone is set.
+        banner_only = self.advertising_section(self.seen["bannerOnly"]["banner"])["description"]
+        push_only = self.advertising_section(self.seen["inPagePushOnly"]["banner"])["description"]
+        self.assertIn("a banner under the puzzle", banner_only)
+        self.assertNotIn("card", banner_only)
+        self.assertIn("card in a corner", push_only)
+        self.assertNotIn("a banner", push_only)
+        for description in (banner_only, push_only):
+            with self.subTest(description=description[:60]):
+                self.assertIn("Never a pop-up, a pop-under or an ad that covers the page", description)
+                self.assertIn("none on the threshold", description)
+
+    def test_an_answer_given_before_there_were_ads_is_asked_again(self):
+        # That answer was given to a banner that said it measured nothing else.
+        banner = self.seen["everythingAccepted"]["banner"]
+        self.assertEqual(banner["revision"], 1)
+        self.assertTrue(banner["description"].endswith("{{revisionMessage}}"))
+        self.assertIn("before this site showed ads", banner["revisionMessage"])
+
+    def test_the_slot_says_it_is_an_advertisement_and_floats_over_nothing(self):
+        seen = self.seen["everythingAccepted"]
+        slot = seen["slot"]
+        self.assertEqual(slot["tag"], "aside", "a landmark of its own, outside the page's main")
+        self.assertEqual(slot["label"], "advertisement")
+        self.assertEqual(slot["visibleLabel"], "advertisement")
+        self.assertEqual(slot["visibleLabelHidden"], "true", "named once, by the landmark")
+        styles = seen["adStyles"]
+        # Invisible until Clickadu has filled it: an unfilled zone leaves no empty labelled box.
+        self.assertIn(".site-ad:has(.site-ad-banner > :not(script)) .site-ad-label", styles)
+        self.assertIn(".site-ad-label { display: none; }", styles)
+        self.assertNotIn("position: fixed", styles, "the slot is in the page, not over it")
+        self.assertNotRegex(styles, r"(?<![\w-])(?:animation|transition)(?:-[a-z]+)?\s*:",
+                            "nothing here moves, so there is nothing to answer for")
+
+    def test_a_shell_without_the_feature_still_gets_one_slot(self):
+        seen = self.seen["withoutTheFeature"]
+        self.assertEqual(seen["slot"]["parent"], "body")
+        self.assertEqual(seen["slot"]["bannerScripts"], [self.BANNER])
+        self.assertEqual(seen["slots"], 1)
+
+    def test_one_set_of_ads_a_page_however_often_the_file_runs(self):
+        seen = self.seen["loadedTwice"]
+        self.assertEqual(seen["slots"], 1)
+        self.assertEqual(seen["onTheBody"], [self.IN_PAGE_PUSH])
+        self.assertEqual(seen["thirdParty"].count(self.BANNER), 1)
+
+    def test_it_waits_for_the_body_and_still_knows_its_zones(self):
+        early, then = self.seen["beforeTheBody"]["early"], self.seen["beforeTheBody"]["then"]
+        self.assertIn("DOMContentLoaded", early["listeners"])
+        self.assertEqual(early["thirdParty"], [self.GA], "no ad before there is a page to put it on")
+        self.assertEqual(then["slot"]["bannerScripts"], [self.BANNER])
+        self.assertEqual(then["onTheBody"], [self.IN_PAGE_PUSH])
+
+    def test_an_address_of_another_shape_is_never_fetched(self):
+        # javascript: and plain http: both reach the element in this scenario, and neither loads.
+        seen = self.seen["aStrangeAddress"]
+        self.assertEqual(seen["thirdParty"], [])
+        self.assertEqual(seen["slots"], 0)
+
+    def test_nothing_of_the_visitors_own_is_reached_for(self):
+        # The privacy page says the site passes Clickadu nothing but which zone to fill.
+        source = self.clickadu.read_text()
+        for reach in ["interestingState", "localStorage", "sessionStorage", "document.cookie",
+                      "fetch(", "XMLHttpRequest"]:
+            with self.subTest(reach=reach):
+                self.assertNotIn(reach, source)
+
+    def test_googles_own_ad_signals_stay_denied(self):
+        # Consent mode's ad signals are for Google's ads; the site serves none, and accepting
+        # Clickadu's is not accepting Google's.
+        source = self.analytics.read_text()
+        for signal in ["ad_storage", "ad_user_data", "ad_personalization"]:
+            with self.subTest(signal=signal):
+                self.assertIn(f"{signal}: 'denied'", source)
+                self.assertNotIn(f"{signal}: 'granted'", source)
+
+
+def deploy_step(name):
+    """The `run:` script of the step called `name` in deploy.yml, dedented, read as text so the
+    test needs no YAML parser."""
+    workflow = (Path(mi.__file__).resolve().parents[2] / ".github" / "workflows" / "deploy.yml").read_text()
+    start = workflow.index(f"- name: {name}\n")
+    step = workflow[start:]
+    body = step[step.index("run: |\n") + len("run: |\n"):]
+    lines = []
+    for line in body.split("\n"):
+        if line.strip() and not line.startswith(" " * 10):
+            break
+        lines.append(line)
+    return textwrap.dedent("\n".join(lines))
+
+
+class AdZoneInjectionTest(unittest.TestCase):
+    """deploy.yml's own step that writes the Clickadu zones into the built js/analytics.js (issue
+    #110), run with bash on a copy of the committed file. The value is pasted into a string in a
+    script, so what it refuses matters as much as what it writes."""
+
+    BANNER = "https://ads.example/b/1111111?x=1&y=2"
+    IN_PAGE_PUSH = "//ads.example/p/2222222"
+    PLACEHOLDERS = ["__CLICKADU_BANNER_SRC__", "__CLICKADU_IN_PAGE_PUSH_SRC__"]
+
+    def setUp(self):
+        if shutil.which("bash") is None:
+            self.skipTest("bash is not installed")
+        self.script = deploy_step("Inject the Clickadu zones")
+        work = tempfile.TemporaryDirectory()
+        self.addCleanup(work.cleanup)
+        self.build = Path(work.name)
+        (self.build / "js").mkdir()
+        self.analytics = self.build / mi.ANALYTICS_SCRIPT
+        self.committed = (Path(mi.__file__).resolve().parents[2] / "site" / mi.ANALYTICS_SCRIPT).read_text()
+        self.analytics.write_text(self.committed)
+        self.summary = self.build / "summary.md"
+
+    def inject(self, banner="", in_page_push=""):
+        env = dict(os.environ, BUILD_DIR=str(self.build), GITHUB_STEP_SUMMARY=str(self.summary),
+                   CLICKADU_BANNER_SRC=banner, CLICKADU_IN_PAGE_PUSH_SRC=in_page_push)
+        return subprocess.run(["bash", "-c", self.script], env=env, capture_output=True, text=True, timeout=60)
+
+    def test_both_zones_are_written_in_and_nothing_else_changes(self):
+        run = self.inject(self.BANNER, self.IN_PAGE_PUSH)
+        self.assertEqual(run.returncode, 0, run.stdout + run.stderr)
+        written = self.analytics.read_text()
+        self.assertIn(f"banner: '{self.BANNER}'", written, "an & in the address survives sed")
+        self.assertIn(f"inPagePush: '{self.IN_PAGE_PUSH}'", written)
+        for placeholder in self.PLACEHOLDERS:
+            self.assertNotIn(placeholder, written)
+        self.assertIn("__GA_MEASUREMENT_ID__", written, "the measurement ID is the other step's")
+        expected = self.committed.replace(self.PLACEHOLDERS[0], self.BANNER).replace(self.PLACEHOLDERS[1], self.IN_PAGE_PUSH)
+        self.assertEqual(written, expected)
+
+    def test_each_zone_is_optional_on_its_own(self):
+        run = self.inject(banner=self.BANNER)
+        self.assertEqual(run.returncode, 0, run.stdout + run.stderr)
+        written = self.analytics.read_text()
+        self.assertNotIn(self.PLACEHOLDERS[0], written)
+        self.assertIn(self.PLACEHOLDERS[1], written, "an unset zone keeps its placeholder")
+
+    def test_without_a_zone_the_site_is_published_without_ads(self):
+        run = self.inject()
+        self.assertEqual(run.returncode, 0, run.stdout + run.stderr)
+        self.assertEqual(self.analytics.read_text(), self.committed)
+        self.assertIn("Published without ads", self.summary.read_text())
+
+    def test_a_value_that_is_not_an_address_is_refused_and_nothing_is_written(self):
+        for value in ["https://ads.example/a';alert(1)//", "https://ads.example/a\nb",
+                      "http://ads.example/a", "javascript:alert(1)", "https://ads.example/a|b",
+                      "https://ads.example/a b", "https://ads.example/a\\b", "ads.example/a",
+                      "https://ads.example"]:
+            with self.subTest(value=value):
+                run = self.inject(banner=value)
+                self.assertNotEqual(run.returncode, 0)
+                self.assertIn("is not the address of a Clickadu zone's code", run.stdout)
+                self.assertEqual(self.analytics.read_text(), self.committed)
+
+    def test_a_built_file_without_the_placeholders_fails_the_deploy(self):
+        # A copy whose placeholders had gone would publish the site silently without ads.
+        self.analytics.write_text(self.committed.replace(self.PLACEHOLDERS[1], "nothing"))
+        run = self.inject(self.BANNER, self.IN_PAGE_PUSH)
+        self.assertNotEqual(run.returncode, 0)
+        self.assertIn("__CLICKADU_IN_PAGE_PUSH_SRC__", run.stdout)
+
+
 class IssueFormTest(unittest.TestCase):
     """The GitHub side of issue #43: what a visitor lands on once they press the button.
 
@@ -9160,6 +9460,47 @@ class RealSiteTest(unittest.TestCase):
         self.assertEqual(out["accepted"], [attempt],
                          "a puzzle left unsolved was not counted once as an incomplete attempt, and only that")
         self.assertEqual(out["withdrawn"], [attempt], "a puzzle left unsolved was counted after consent was withdrawn")
+
+    def test_no_ad_zone_is_committed_but_the_deploy_injects_them(self):
+        # Issue #110, the same bargain the measurement ID makes: the zones are placeholders in the
+        # committed file, the deploy writes them into the built copy, and infra owns the secrets.
+        analytics = self.site[mi.ANALYTICS_SCRIPT]
+        deploy = (self.repo / ".github" / "workflows" / "deploy.yml").read_text()
+        github = (self.repo / "infra" / "github.tf").read_text()
+        locals_tf = (self.repo / "infra" / "locals.tf").read_text()
+        for secret, local in [("CLICKADU_BANNER_SRC", "clickadu_banner_src"),
+                              ("CLICKADU_IN_PAGE_PUSH_SRC", "clickadu_in_page_push_src")]:
+            with self.subTest(secret=secret):
+                self.assertIn(f"'__{secret}__'", analytics, "a zone is committed")
+                self.assertIn(secret, deploy, "nothing replaces the placeholder at deploy time")
+                self.assertIn(f"{secret} = local.{local}", re.sub(r" +", " ", github))
+                self.assertRegex(locals_tf, rf'(?m)^\s*{local}\s*=\s*"')
+        self.assertIn('analytics="${BUILD_DIR}/js/analytics.js"', deploy[deploy.index("Inject the Clickadu zones"):])
+
+    def test_the_ads_ride_the_analytics_line_and_are_out_of_every_runs_reach(self):
+        # No page loads clickadu.js: analytics.js does, behind the visitor's yes, so the line every
+        # page already carries brings the ads, and a page that loaded them itself would go round
+        # the consent banner.
+        self.assertIn(mi.ADS_SCRIPT, self.site, "the file behind the ads has to be there")
+        self.assertIn("'clickadu.js'", self.site[mi.ANALYTICS_SCRIPT])
+        for page in sorted(mi.html_pages(self.site)):
+            with self.subTest(page=page):
+                self.assertNotIn("clickadu.js", self.site[page])
+        self.assertIn(mi.ADS_SCRIPT, mi.FIXED_FILES)
+        with self.assertRaises(mi.RejectedChange):
+            mi.validate_plan({"files": [{"path": mi.ADS_SCRIPT, "content": "more ads"}]})
+        with self.assertRaises(mi.RejectedChange):
+            mi.validate_plan({"delete": [mi.ADS_SCRIPT]})
+
+    def test_the_fine_print_says_what_the_ads_are(self):
+        # Issue #110: the privacy page used to say there was no advertising. It names the network
+        # now, and what is fetched from elsewhere.
+        privacy = self.site["privacy.html"]
+        self.assertIn("Clickadu", privacy)
+        self.assertIn("https://www.clickadu.com/privacy", privacy)
+        self.assertNotIn("There is no advertising", privacy)
+        self.assertNotIn("No fonts, embeds or third-party widgets are fetched from anywhere else", privacy)
+        self.assertIn("Clickadu", self.site["terms.html"])
 
     def test_every_page_loads_the_local_state_store_and_its_meta_menu(self):
         self.assertIn(mi.STATE_SCRIPT, self.site, "the file behind the line has to be there")

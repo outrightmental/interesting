@@ -1,46 +1,69 @@
 /*
-  Google Analytics and the cookie consent banner, shared by every page of the site.
+  Google Analytics, Clickadu's ads and the cookie consent banner, shared by every page of the site.
 
   One line in the <head> of a page carries all of it:
 
       <script src='js/analytics.js' defer></script>
 
-  This file brings the rest with it, loading its two neighbours by paths worked out from its own
-  URL (so a page in a sub-folder only needs the matching relative src):
+  This file brings the rest with it, loading its neighbours by paths worked out from its own URL
+  (so a page in a sub-folder only needs the matching relative src):
 
       css/cookieconsent.css    the banner's styles
       js/cookieconsent.umd.js  the banner itself, vendored from the 3.1.0 release of
                                https://github.com/orestbida/cookieconsent (MIT), exactly as
                                published apart from the license header copied onto the CSS
+      js/clickadu.js           the ads, which decides whether a page carries any and where
 
   Nothing is reported until a visitor accepts the analytics category: the Google tag is not even
   fetched before then, and rejecting it later switches measurement back off and lets the banner
-  clear the cookies it set. A small "cookies" button sits in the corner of every page so a choice
-  can be changed at any time.
+  clear the cookies it set. Nothing is advertised until a visitor accepts the advertising category
+  either: js/clickadu.js, and Clickadu's code with it, is not fetched before then, and rejecting it
+  later reloads the page, which is the one way to take a third party's running code back off it.
+  A small "cookies" button sits in the corner of every page so a choice can be changed at any time.
 
-  The measurement ID is not committed. The deploy workflow replaces the placeholder below with the
-  GA_MEASUREMENT_ID repository secret on its way to S3 (see .github/workflows/deploy.yml, and
-  infra/github.tf for where that secret comes from). In a fork, a local copy or any checkout the
-  deploy has not been through, the placeholder stays and switches this whole file off: no tag, no
-  banner, no cookies, nothing to consent to.
+  No identifier is committed. The deploy workflow replaces the placeholders below on its way to S3:
+  the GA_MEASUREMENT_ID repository secret, and CLICKADU_BANNER_SRC and CLICKADU_IN_PAGE_PUSH_SRC,
+  the address of each Clickadu zone's code (see .github/workflows/deploy.yml, and infra/github.tf
+  for where those secrets come from). A placeholder the deploy has not replaced switches its own
+  part off, and the banner only asks about the parts that are on. In a fork, a local copy or any
+  checkout the deploy has not been through, every placeholder stays and this whole file is off: no
+  tag, no ads, no banner, no cookies, nothing to consent to.
 
   The AI iteration may rewrite any page of this site, so the line above is an axiom of every
-  run and these three files are kept out of its reach: see ANALYTICS_SCRIPT, FIXED_FILES and
-  check_analytics in .github/scripts/make_interesting.py.
+  run and these four files are kept out of its reach: see ANALYTICS_SCRIPT, ADS_SCRIPT,
+  FIXED_FILES and check_analytics in .github/scripts/make_interesting.py.
 */
 (function () {
   'use strict';
 
   var MEASUREMENT_ID = '__GA_MEASUREMENT_ID__';
+  // The src of the <script> Clickadu's "get code" gives for each zone, one zone a format. Banner
+  // and in-page push are the only two formats the site serves (see js/clickadu.js).
+  var AD_ZONES = {
+    banner: '__CLICKADU_BANNER_SRC__',
+    inPagePush: '__CLICKADU_IN_PAGE_PUSH_SRC__'
+  };
   var CONSENT_SCRIPT = 'cookieconsent.umd.js';
   var CONSENT_STYLE = '../css/cookieconsent.css';
+  var ADS_SCRIPT = 'clickadu.js';
   var CATEGORY = 'analytics';
+  var AD_CATEGORY = 'advertising';
 
-  // No measurement ID means nothing is measured, so there is nothing to ask consent for either.
-  if (!/^G-[A-Z0-9]+$/.test(MEASUREMENT_ID)) return;
+  var measured = /^G-[A-Z0-9]+$/.test(MEASUREMENT_ID);
+  // A zone is on once the deploy has put an address where its placeholder was: the shape the
+  // deploy checks the secret against, an https or protocol-relative URL.
+  var zones = {};
+  for (var format in AD_ZONES) {
+    if (/^(https:)?\/\/[A-Za-z0-9.-]+\//.test(AD_ZONES[format])) zones[format] = AD_ZONES[format];
+  }
+  var advertised = !!(zones.banner || zones.inPagePush);
+
+  // Nothing measured and nothing advertised means there is nothing to ask consent for either.
+  if (!measured && !advertised) return;
 
   var base = scriptFolder();
   var tagLoaded = false;
+  var adsServed = false;
 
   window.dataLayer = window.dataLayer || [];
 
@@ -48,7 +71,7 @@
     window.dataLayer.push(arguments);
   }
 
-  /* The folder this script was loaded from, so its two neighbours can be found from any page of the
+  /* The folder this script was loaded from, so its neighbours can be found from any page of the
      site, however deep, without hard-coding a path or a domain. */
   function scriptFolder() {
     var el = document.currentScript;
@@ -61,11 +84,12 @@
     return el && el.src ? el.src.replace(/[^/]*$/, '') : 'js/';
   }
 
-  function loadScript(src, onload) {
+  function loadScript(src, onload, attributes) {
     var el = document.createElement('script');
     el.src = src;
     el.async = true;
     if (onload) el.onload = onload;
+    for (var name in attributes || {}) el.setAttribute(name, attributes[name]);
     document.head.appendChild(el);
   }
 
@@ -89,6 +113,8 @@
       return;
     }
     tagLoaded = true;
+    // The three ad signals are Google's, for Google's own ads, and stay denied whatever a visitor
+    // says about advertising: the Google tag serves no ads here, and Clickadu's are not Google's.
     gtag('consent', 'default', {
       ad_storage: 'denied',
       ad_user_data: 'denied',
@@ -122,6 +148,20 @@
       hints: Number(d.hints) || 0,
       touched: d.touched ? 1 : 0
     });
+  }
+
+  /* Clickadu's ads, once a visitor has said yes to them. js/clickadu.js decides whether this page
+     carries any, and where; it is handed the zones on its own script element, so this file stays
+     the one place the deploy writes an identifier into. There is no off switch to match: the
+     advertising category reloads the page when it is withdrawn (autoClear.reloadPage below), and
+     the page comes back without this. */
+  function serveAds() {
+    if (adsServed) return;
+    adsServed = true;
+    var attributes = {};
+    if (zones.banner) attributes['data-banner'] = zones.banner;
+    if (zones.inPagePush) attributes['data-in-page-push'] = zones.inPagePush;
+    loadScript(base + ADS_SCRIPT, null, attributes);
   }
 
   /* A small, quiet way back to the choice: withdrawing consent has to be as easy as giving it, and
@@ -161,75 +201,131 @@
     });
   }
 
+  /* What the banner says, which is only ever what this copy of the site does: a part the deploy
+     left switched off is not mentioned, so the words cannot promise or confess anything that is
+     not served. */
+  function wording() {
+    var accept = measured && advertised ? 'Accept both' : measured ? 'Accept analytics' : 'Accept ads';
+    var description = measured && advertised
+      ? 'This site counts visits with Google Analytics and shows ads from Clickadu on its worlds, ' +
+        'and does nothing else with cookies. Neither is loaded unless you accept it.'
+      : measured
+        ? 'This site counts visits with Google Analytics, and measures nothing else. Those ' +
+          'cookies are only set if you accept them.'
+        : 'This site shows ads from Clickadu on its worlds, and measures nothing itself. They ' +
+          'are only loaded if you accept them.';
+    description += ' Either way, the toys on these pages keep your constellation in your own ' +
+      'browser and send it nowhere.';
+    // Said only to a visitor whose earlier answer was given before the site showed ads (see
+    // revision in run below); the banner replaces it with nothing for everyone else.
+    if (advertised) description += '{{revisionMessage}}';
+
+    var sections = [
+      {
+        title: 'What this site keeps',
+        description:
+          'You can change this at any time with the "cookies" button in the corner of any page.'
+      },
+      {
+        title: 'Strictly necessary',
+        description:
+          'Only your answer to this banner, kept in your browser so it is not asked again. ' +
+          'Nothing leaves your device.',
+        linkedCategory: 'necessary'
+      }
+    ];
+    if (measured) {
+      sections.push({
+        title: 'Analytics',
+        description:
+          'Google Analytics 4, used to count visits and see where visitors stay engaged, so the ' +
+          'iteration knows what to spend its attention on. Declining removes its cookies and ' +
+          'stops the measurement.',
+        linkedCategory: CATEGORY
+      });
+    }
+    if (advertised) {
+      var formats = [];
+      if (zones.banner) formats.push('a banner under the puzzle');
+      if (zones.inPagePush) formats.push('now and then a small notification-style card in a corner');
+      sections.push({
+        title: 'Advertising',
+        description:
+          'Ads from Clickadu, an ad network, on the worlds\' pages only: ' + formats.join(' and ') +
+          '. Never a pop-up, a pop-under or an ad that covers the page, and none on the threshold, ' +
+          'the mood atlas, the site map or the fine print. Clickadu chooses and counts the ads from ' +
+          'its own servers and may set cookies of its own to do it (see ' +
+          '<a href="https://www.clickadu.com/privacy" target="_blank" rel="noopener noreferrer">' +
+          'its privacy policy</a>). Declining stops them loading and reloads the page without them.',
+        linkedCategory: AD_CATEGORY
+      });
+    }
+
+    return {
+      consentModal: {
+        title: 'A quiet word about cookies',
+        description: description,
+        revisionMessage: ' You answered before this site showed ads, so it asks again.',
+        acceptAllBtn: accept,
+        acceptNecessaryBtn: 'Decline',
+        showPreferencesBtn: 'Let me choose'
+      },
+      preferencesModal: {
+        title: 'Cookie preferences',
+        acceptAllBtn: accept,
+        acceptNecessaryBtn: 'Decline',
+        savePreferencesBtn: 'Save my choice',
+        closeIconLabel: 'Close',
+        sections: sections
+      }
+    };
+  }
+
   function run() {
     var cc = window.CookieConsent;
-    if (!cc || !cc.run) return; // the banner did not load, so nothing is measured
+    if (!cc || !cc.run) return; // the banner did not load, so nothing is measured or advertised
 
+    // A stored answer can name a category this copy of the site does not offer (one given before
+    // the deploy switched a part off), so a part is only ever started when it is switched on.
     function applyConsent() {
-      if (cc.acceptedCategory(CATEGORY)) enableAnalytics();
-      else disableAnalytics();
+      if (measured) {
+        if (cc.acceptedCategory(CATEGORY)) enableAnalytics();
+        else disableAnalytics();
+      }
+      if (advertised && cc.acceptedCategory(AD_CATEGORY)) serveAds();
+    }
+
+    var categories = { necessary: { enabled: true, readOnly: true } };
+    if (measured) {
+      categories[CATEGORY] = {
+        autoClear: { cookies: [{ name: /^_ga/ }, { name: '_gid' }] }
+      };
+    }
+    if (advertised) {
+      // Clickadu's cookies are set on its own domain, where no page can clear them, so there are
+      // none to list. What can be taken back is its running code: withdrawing consent reloads the
+      // page, and the page comes back without it.
+      categories[AD_CATEGORY] = {
+        autoClear: { cookies: [], reloadPage: true }
+      };
     }
 
     // The site is dark on every page; the banner ships a matching palette under this class.
     document.documentElement.classList.add('cc--darkmode');
 
     cc.run({
+      // An answer given before the site showed ads was an answer to a banner that said it
+      // measured nothing else, so it is asked again once there are ads; until then the answers
+      // already given stand.
+      revision: advertised ? 1 : 0,
       guiOptions: {
         consentModal: { layout: 'box', position: 'bottom right', equalWeightButtons: true },
         preferencesModal: { layout: 'box', equalWeightButtons: true }
       },
-      categories: {
-        necessary: { enabled: true, readOnly: true },
-        analytics: {
-          autoClear: { cookies: [{ name: /^_ga/ }, { name: '_gid' }] }
-        }
-      },
+      categories: categories,
       language: {
         default: 'en',
-        translations: {
-          en: {
-            consentModal: {
-              title: 'A quiet word about cookies',
-              description:
-                'This site counts visits with Google Analytics, and measures nothing else. Those ' +
-                'cookies are only set if you accept them. Either way, the toys on these pages keep ' +
-                'your constellation in your own browser and send it nowhere.',
-              acceptAllBtn: 'Accept analytics',
-              acceptNecessaryBtn: 'Decline',
-              showPreferencesBtn: 'Let me choose'
-            },
-            preferencesModal: {
-              title: 'Cookie preferences',
-              acceptAllBtn: 'Accept analytics',
-              acceptNecessaryBtn: 'Decline',
-              savePreferencesBtn: 'Save my choice',
-              closeIconLabel: 'Close',
-              sections: [
-                {
-                  title: 'What this site keeps',
-                  description:
-                    'You can change this at any time with the "cookies" button in the corner of ' +
-                    'any page.'
-                },
-                {
-                  title: 'Strictly necessary',
-                  description:
-                    'Only your answer to this banner, kept in your browser so it is not asked ' +
-                    'again. Nothing leaves your device.',
-                  linkedCategory: 'necessary'
-                },
-                {
-                  title: 'Analytics',
-                  description:
-                    'Google Analytics 4, used to count visits and see where visitors stay ' +
-                    'engaged, so the iteration knows what to spend its attention on. Declining ' +
-                    'removes its cookies and stops the measurement.',
-                  linkedCategory: 'analytics'
-                }
-              ]
-            }
-          }
-        }
+        translations: { en: wording() }
       },
       onConsent: applyConsent,
       onChange: applyConsent
