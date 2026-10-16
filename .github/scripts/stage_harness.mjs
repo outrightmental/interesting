@@ -37,7 +37,10 @@
                       that the piece it solved is still there, and then presses the way on in
                       the lower right, which is what opens the next. The way on is read before
                       the check too: dim over an unsolved piece, and pressable all the same
-                      (issue #109).
+                      (issue #109). Each round also reads what the solve said under its seal --
+                      the nest, what the piece was one piece of (README: "Nesting axiom") --
+                      beside what variant.js places that seed in, and what was left of it once
+                      the next piece was on.
     wrongThenRight    The puzzle half. Open a piece, work its helpers, set every answer wrong and
                       press check: the stage must say so, count the try, leave every knob live and
                       the piece unfinished, and light nothing. Then set the answers right and
@@ -841,6 +844,8 @@ function look(page) {
     dots: by('stage-progress').querySelectorAll('.stage-dot').length,
     doneShown: !by('stage-done').hidden,
     doneOverScene: within(by('stage-done'), by('stage-scene')),
+    nest: by('stage-nest') && !by('stage-nest').hidden ? by('stage-nest').textContent : '',
+    nestOverScene: !!by('stage-nest') && within(by('stage-nest'), by('stage-scene')),
     // The way on can be pressed whenever it is shown (issue #109); lit is how much it is asking to be.
     nextLit: by('stage-next').dataset.lit !== undefined,
     nextEnabled: !by('stage-next').disabled,
@@ -1034,6 +1039,10 @@ async function rounds(stageDir, worlds, deal, clock) {
       modes: page.modes.slice(),
       wantedWhilePlaying: finished.wanted,
       litWhilePlaying: finished.nextLit,
+      nest: finished.nest,
+      nestOf: await nestOf(stageDir, was.seed),
+      nestOverScene: finished.nestOverScene,
+      nestOnNext: look(page).nest,
       // Before the check, with the piece still unsolved: the way on can be pressed all the same.
       enabledWhilePlaying: offered.nextEnabled,
       movedOnByItself: onward.movedOnByItself,

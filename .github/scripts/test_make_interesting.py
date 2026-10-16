@@ -7812,6 +7812,13 @@ class RealSiteTest(unittest.TestCase):
                 self.assertEqual(played["focusedWhenFinished"], "stage-next",
                                  "the way on lit and the keyboard was left wherever it was")
                 self.assertTrue(played["movedOn"], "the way on was pressed and nothing followed")
+                # A solve places the piece (issue #102): under the seal, what it was one piece of,
+                # out to the great work, and the next piece opens with nothing named yet.
+                self.assertEqual(played["nest"], played["nestOf"],
+                                 "the solve did not name what this piece was one piece of")
+                self.assertTrue(played["nest"].endswith("one colour of the great work"))
+                self.assertFalse(played["nestOverScene"], "the nest is laid over the picture")
+                self.assertEqual(played["nestOnNext"], "", "the next piece opened under the last one's nest")
         # A piece left unsolved (issue #109), on the site as committed: the way on can be pressed
         # over it, opens the next card, and the leaving is an incomplete attempt and not a finish.
         unsolved = report["leftUnsolved"]["result"]

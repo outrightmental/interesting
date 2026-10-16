@@ -17,8 +17,10 @@
   in its place, and only its press does. It can be pressed at any time, solved or not (issue
   #109) -- a visitor is never held by a puzzle they would rather leave -- but it is dim while the
   puzzle is unsolved, and the ceremony ends by lighting it. So one puzzle follows another without
-  end, and it is the visitor who says when. _includes/stage.njk writes the stage; this file runs
-  it; js/feed.js hands it the next card.
+  end, and it is the visitor who says when. Nor is a solve an ending: under its seal the stage
+  says what the piece was one piece of -- a gate, of a colour, of the great work (README: "Nesting
+  axiom") -- so every piece is laid into something larger that is never finished.
+  _includes/stage.njk writes the stage; this file runs it; js/feed.js hands it the next card.
 
   ---------------------------------------------------------------------------------------------
   The puzzle axiom: every piece is a legitimate puzzle
