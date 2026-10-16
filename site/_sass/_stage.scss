@@ -14,9 +14,10 @@
 //
 // The knobs are M3 controls: a choice is a row of tonal buttons that fill when pressed, a toggle
 // a tonal button that fills when on, a range the M3 slider, a number a stepper round a field, a
-// word a text field, an order a list with up and down beside each item, a pick a row of chips
-// that press in, a grid a block of square cells, a press and a hold one big button (the hold
-// reads as pressed while it is held, and the bar under it fills), a tap and a wait a bar the
+// word a text field, an order a list sorted by hand (a row dragged into place, or picked up by a
+// tap or a key and put down in its place -- never a pair of moves beside each item), a pick a row
+// of chips that press in, a grid a block of square cells, a press and a hold one big button (the
+// hold reads as pressed while it is held, and the bar under it fills), a tap and a wait a bar the
 // piece fills. A knob that is set gets a seal; a knob gated on another is warded until it
 // opens. Under the knobs is the check: the one filled button in the rail, enabled once every
 // knob is set, with the score beside it -- because every piece is a puzzle now, and a puzzle is
@@ -735,9 +736,20 @@
   text-transform: uppercase;
 }
 
-// An order: one row per item, its name and two small moves beside it. A move is a swap in a step
-// series: the two rows that changed places are handed the distance back to where they were (--dy,
-// js/stage.js) and step from there to here in landing treads (row-swap), one way only.
+// An order: a list sorted by hand (issue #104), never by a pair of moves beside each item. Each
+// item is one row -- an M3 list item on the surface container, its place in the primary, its name,
+// and at its end the drag handle, two short bars a finger takes it by -- and the whole row is the
+// target, 44px and up, wearing the one focus ring.
+//
+// Dragged (is-dragging, on the list is-sorting): the row in hand is raised to the third elevation
+// and follows the pointer by --drag-y, written by js/stage.js as the pointer moves -- the hand is
+// the motion, so nothing eases it -- while each row it passes steps aside by --shift in a landing
+// stair rolled for that drag (make-way), so the gap that opens is where it will land. Picked up by
+// a tap or a key (is-holding): the row in hand reads as pressed, sealed like every pressed control,
+// the rest are outlined as the places it can go, and a pointer over one draws the line it would be
+// put down at -- above a row above it, below a row below it (data-side). Put down, a row that
+// changed places steps there from where it stood in the same landing treads (row-swap, or
+// row-swap-b for a move that overtakes one still landing): one way only, never a glide.
 .knob-order {
   display: grid;
   gap: 0.35rem;
@@ -747,28 +759,16 @@
 }
 
 .knob-order-item {
-  display: flex;
-  align-items: center;
-  gap: 0.35rem;
-  min-height: 44px;
-  padding: 0.15rem 0.25rem 0.15rem 0.75rem;
-  border-radius: var(--md-sys-shape-corner-small);
-  background: var(--md-sys-color-surface-container-high);
-  color: var(--md-sys-color-on-surface);
-  counter-increment: order;
-  @include type.scale(body-medium);
+  position: relative;
+  display: grid;
 }
 
-.knob-order-item::before {
-  content: counter(order);
-  flex: none;
-  width: 1.4em;
-  color: var(--md-sys-color-primary);
-  @include type.scale(label-large);
-}
-
-.knob-order-item[data-flip] {
+.knob-order-item[data-flip='a'] {
   animation: row-swap var(--motion-row-swap, var(--motion-medium)) var(--ease-row-swap, var(--ease-arrive)) both;
+}
+
+.knob-order-item[data-flip='b'] {
+  animation: row-swap-b var(--motion-row-swap-b, var(--motion-medium)) var(--ease-row-swap-b, var(--ease-arrive)) both;
 }
 
 @keyframes row-swap {
@@ -781,15 +781,124 @@
   }
 }
 
+@keyframes row-swap-b {
+  from {
+    translate: 0 var(--dy, 0px);
+  }
+
+  to {
+    translate: 0 0;
+  }
+}
+
+.knob-order-row {
+  justify-content: flex-start;
+  gap: 0.6rem;
+  width: 100%;
+  min-height: 44px;
+  padding: 0.25rem 0 0.25rem 0.75rem;
+  border-radius: var(--md-sys-shape-corner-small);
+  background: var(--md-sys-color-surface-container-high);
+  color: var(--md-sys-color-on-surface);
+  text-align: start;
+  cursor: grab;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
+  @include type.scale(body-medium);
+}
+
+.knob-order-place {
+  flex: none;
+  min-width: 1.4em;
+  color: var(--md-sys-color-primary);
+  @include type.scale(label-large);
+}
+
 .knob-order-label {
   flex: 1 1 auto;
 }
 
-.knob-order-move {
+// The handle: a 44px column at the row's end, and the one part of it a finger drags by -- the rest
+// of the row is left to the browser under a finger, so a thumb on the list still scrolls the page.
+.knob-order-grip {
+  position: relative;
   flex: none;
+  align-self: stretch;
   width: 44px;
-  min-height: 44px;
-  padding: 0;
+  color: var(--md-sys-color-on-surface-variant);
+  touch-action: none;
+}
+
+.knob-order-grip::before {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 18px;
+  height: 8px;
+  translate: -50% -50%;
+  border-block: 2px solid currentColor;
+}
+
+.knob-order-row[aria-pressed='true'] .knob-order-place,
+.knob-order-row[aria-pressed='true'] .knob-order-grip,
+.knob-order-row:disabled .knob-order-place,
+.knob-order-row:disabled .knob-order-grip {
+  color: inherit;
+}
+
+.knob-order.is-sorting {
+  cursor: grabbing;
+}
+
+.knob-order.is-sorting .knob-order-item {
+  translate: 0 var(--shift, 0px);
+  transition: translate var(--motion-make-way, var(--motion-short)) var(--ease-make-way, var(--ease-arrive));
+}
+
+.knob-order.is-sorting .knob-order-item.is-dragging {
+  z-index: 1;
+  translate: 0 var(--drag-y, 0px);
+  transition: none;
+}
+
+.knob-order-item.is-dragging > .knob-order-row {
+  background: var(--md-sys-color-surface-container-highest);
+  box-shadow: var(--md-sys-elevation-level3);
+  cursor: grabbing;
+}
+
+.knob-order.is-holding .knob-order-item[data-side] > .knob-order-row {
+  box-shadow: inset 0 0 0 1px var(--md-sys-color-outline);
+}
+
+// The line a row in hand would be put down at, in the gap above or below the row under the
+// pointer: there at once, as a place is, and gone the same way.
+.knob-order-item[data-side]::after {
+  content: '';
+  position: absolute;
+  left: 0.5rem;
+  right: 0.5rem;
+  height: 3px;
+  border-radius: var(--md-sys-shape-corner-full);
+  background: var(--md-sys-color-primary);
+  pointer-events: none;
+  visibility: hidden;
+}
+
+.knob-order-item[data-side='before']::after {
+  top: calc(-0.175rem - 1.5px);
+}
+
+.knob-order-item[data-side='after']::after {
+  bottom: calc(-0.175rem - 1.5px);
+}
+
+@media (hover: hover) {
+  .knob-order.is-holding .knob-order-item[data-side]:hover::after {
+    visibility: visible;
+  }
 }
 
 // A pick: chips that press in, as a choice's buttons do, pinned with an inset ring.
@@ -1320,7 +1429,8 @@
   .knob-notches i[data-done],
   .knob-hold.is-refusing,
   .knob-count.is-ratcheting,
-  .knob-order-item[data-flip],
+  .knob-order-item[data-flip='a'],
+  .knob-order-item[data-flip='b'],
   .stage[data-verdict='wrong'][data-try-parity='a'] .stage-check-row,
   .stage[data-verdict='wrong'][data-try-parity='b'] .stage-check-row,
   #stage-progress .stage-dot.is-dealing {
@@ -1330,6 +1440,12 @@
   // A gate opening under less motion: the ward is simply gone.
   .knob[data-unwarding]::after {
     opacity: 0;
+  }
+
+  // A row being sorted under less motion: the one in hand still follows the hand, which is the
+  // visitor's own movement, and the rows it passes are simply in their new places.
+  .knob-order.is-sorting .knob-order-item {
+    transition: none;
   }
 
   // The ghost is a movement and nothing else, so it is simply not there.

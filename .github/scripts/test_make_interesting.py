@@ -4695,6 +4695,133 @@ HOLD_PIECE = """    let holds = 0;
     };"""
 
 
+# A piece whose answer is an order (issue #104): four trees to sort, opened out of order, and a
+# toggle after them so sorting the trees never finishes the piece. Its apply() writes how many
+# orders it has been given and the last of them onto the status line -- the one thing a piece says
+# that the harness reads back -- so the knob's contract can be read off the stage: ctx.value(id) is
+# the array of item values in the order the rows show, given at every put-down and never at a
+# pick-up, a drag the browser takes back or one put back with Escape.
+ORDER_PIECE = """    let given = 0;
+    return {
+      title: 'four trees in a row',
+      brief: 'Plant the trees in the order of the alphabet.',
+      goal: 'Put the trees in order.',
+      steps: [
+        { id: 'trees', ask: 'the trees, first to last', kind: 'order', value: [3, 1, 0, 2],
+          items: ['ash', 'birch', 'cedar', 'damson'].map((name, i) => ({ label: 'the ' + name, value: i })) },
+        { id: 'sure', ask: 'and say so', kind: 'toggle' }
+      ],
+      solution: { trees: [0, 1, 2, 3], sure: true },
+      check(ctx) { return { solved: ctx.value('trees').join(',') === '0,1,2,3' && ctx.value('sure') === true }; },
+      start(ctx) { ctx.g.fillRect(0, 0, ctx.w, ctx.h); },
+      apply(id, value, ctx) { if (id === 'trees') ctx.status('given ' + (given += 1) + ': ' + ctx.value('trees').join(',')); }
+    };"""
+
+
+def moved(order, at, to):
+    """`order` with the item at `at` taken out and put back in at `to`, the way a row is carried."""
+    out = list(order)
+    out.insert(to, out.pop(at))
+    return out
+
+
+def assert_sorted_by_hand(test, result, where=""):
+    """Hold the harness's orderSorted readings to the order knob as issue #104 rebuilt it.
+
+    What it is made of first, because that is the ban: every button in an order knob is either one
+    of its rows -- one per item, its words exactly its place and its name -- or the one "keep this
+    order". There is nothing beside an item to press, so an up and a down by every row cannot come
+    back without failing here, whatever the items are called. Then every gesture: a row put down
+    sets the knob to the order the rows show, and a pick-up, a finger on the words, a drag the
+    browser takes back, one put back with Escape and a mouse hovering with no button down change
+    nothing.
+    """
+    made, seen = result["made"], result["seen"]
+    at = f"{where}: " if where else ""
+    n = len(made["items"])
+    test.assertGreaterEqual(n, 2, f"{at}an order of fewer than two items")
+    test.assertEqual(made["list"], "OL", f"{at}the rows are not an ordered list")
+    test.assertEqual(made["rows"], n, f"{at}not one row per item")
+    test.assertEqual(made["grips"], n, f"{at}a row with no handle to drag it by")
+    rows = [b for b in made["buttons"] if b["row"]]
+    others = [b["text"] for b in made["buttons"] if not b["row"]]
+    test.assertEqual(others, ["keep this order"],
+                     f"{at}an order knob has a control beside its rows -- a move button is the arrow "
+                     "pattern issue #104 took out")
+    for k, (row, label, place) in enumerate(zip(rows, seen["opened"]["labels"], seen["opened"]["places"])):
+        with test.subTest(row=k):
+            test.assertEqual(place, str(k + 1), f"{at}a row's figure is not its place")
+            test.assertEqual(row["text"], place + label, f"{at}a row carries something besides its place and its name")
+            test.assertEqual(row["name"], f"{label}, place {k + 1} of {n}", f"{at}a row is not named by its place")
+    first = seen["opened"]["order"]
+    test.assertEqual(sorted(first, key=str), sorted(made["items"], key=str), f"{at}the rows are not the items")
+    test.assertFalse(seen["opened"]["set"], f"{at}the order was set before anyone touched it")
+    # Tapped up, and tapped into the first row's place.
+    test.assertEqual(seen["tappedUp"]["held"], [first[-1]], f"{at}a tap did not pick the row up")
+    test.assertTrue(seen["tappedUp"]["holding"])
+    test.assertEqual(seen["tappedUp"]["order"], first, f"{at}picking a row up moved it")
+    test.assertFalse(seen["tappedUp"]["set"], f"{at}picking a row up gave an order")
+    tapped = [first[-1]] + first[:-1]
+    test.assertEqual(seen["tappedDown"]["order"], tapped, f"{at}a tap did not put the row down in that place")
+    test.assertTrue(seen["tappedDown"]["set"], f"{at}a row put down did not set the order")
+    test.assertEqual(seen["tappedDown"]["held"], [])
+    test.assertFalse(seen["tappedDown"]["holding"])
+    test.assertEqual(seen["tappedDown"]["places"], [str(k + 1) for k in range(n)], f"{at}the figures did not follow")
+    test.assertIn("put down in place 1 of", seen["tappedDown"]["told"], f"{at}the put-down was not said")
+    test.assertEqual(seen["tappedInPlace"]["order"], tapped, f"{at}a row put down where it stood moved")
+    test.assertEqual(seen["letGo"]["order"], tapped)
+    test.assertEqual(seen["letGo"]["held"], [], f"{at}a row stayed in hand with the focus gone")
+    # The keyboard: picked up, carried, sent to the end, put back; picked up, carried, put down.
+    test.assertEqual(seen["keyUp"]["held"], [tapped[0]], f"{at}a key did not pick the row up")
+    test.assertIn("arrow keys", seen["keyUp"]["how"], f"{at}nobody was told the arrow keys carry it")
+    test.assertEqual(seen["keyDown"]["order"], moved(tapped, 0, 1), f"{at}the arrow key did not carry the row")
+    test.assertEqual(seen["keyDown"]["held"], [tapped[0]], f"{at}the row was dropped as it was carried")
+    test.assertIn(f"place 2 of {n}", seen["keyDown"]["told"], f"{at}the carry was not said")
+    test.assertEqual(seen["keyEnd"]["order"], moved(tapped, 0, n - 1), f"{at}End did not carry the row to the end")
+    test.assertEqual(seen["keyBack"]["order"], tapped, f"{at}Escape did not put the row back")
+    test.assertEqual(seen["keyBack"]["held"], [])
+    test.assertIn("put back", seen["keyBack"]["told"])
+    keyed = moved(tapped, 0, 1)
+    test.assertEqual(seen["keyPutDown"]["order"], keyed, f"{at}the row was not put down where it was carried")
+    test.assertEqual(seen["keyPutDown"]["held"], [])
+    test.assertEqual(seen["walked"]["order"], keyed, f"{at}an arrow key moved a row nobody had picked up")
+    test.assertEqual(seen["walked"]["focused"], 1, f"{at}the arrow keys do not walk the rows")
+    # Dragged by a mouse: nothing under the threshold, then two rows down with the rows passed
+    # stepping aside and every figure saying where its row would be, and then let go.
+    test.assertFalse(seen["nudged"]["sorting"], f"{at}a press that hardly moved became a drag")
+    test.assertEqual(seen["nudged"]["order"], keyed)
+    drag = seen["dragging"]
+    to = min(2, n - 1)
+    test.assertTrue(drag["sorting"], f"{at}a mouse dragging a row is not sorting")
+    test.assertEqual(drag["dragging"], 1)
+    test.assertEqual(drag["order"], keyed, f"{at}the rows were reordered before the row was let go of")
+    test.assertEqual(drag["dragY"][0], f"{50.0 * to:.1f}px", f"{at}the row in hand does not follow the pointer")
+    test.assertEqual(drag["shifts"][1:], [("-50.0px" if k <= to else "0.0px") for k in range(1, n)],
+                     f"{at}the rows passed did not step aside by the row in hand")
+    test.assertEqual(drag["places"], [str(to + 1)] + [str(k if k <= to else k + 1) for k in range(1, n)],
+                     f"{at}the figures do not say where the rows would be")
+    dropped = moved(keyed, 0, to)
+    test.assertEqual(seen["dropped"]["order"], dropped, f"{at}the row was not put down in its gap")
+    test.assertFalse(seen["dropped"]["sorting"])
+    test.assertEqual(seen["dropped"]["shifts"], [""] * n, f"{at}a row was left standing aside")
+    test.assertEqual(seen["dropped"]["dragY"], [""] * n)
+    test.assertEqual(seen["dropped"]["held"], [], f"{at}the click a drag ends on picked a row up")
+    test.assertFalse(seen["hovered"]["sorting"], f"{at}a mouse hovering with no button down dragged a row")
+    test.assertEqual(seen["hovered"]["order"], dropped)
+    test.assertEqual(seen["hovered"]["dragY"], [""] * n)
+    # A finger: on the words it is the page scrolling; on the grip it is a drag.
+    test.assertEqual(seen["fingerOnWords"]["order"], dropped, f"{at}a finger on the words dragged the row")
+    gripped = moved(dropped, n - 1, n - 2)
+    test.assertEqual(seen["fingerOnGrip"]["order"], gripped, f"{at}a finger on the grip did not drag the row")
+    # Taken back by the browser, and put back with Escape: nothing moves.
+    test.assertEqual(seen["cancelled"]["order"], gripped, f"{at}a drag the browser took back moved a row")
+    test.assertFalse(seen["cancelled"]["sorting"])
+    test.assertIn("put back", seen["cancelled"]["told"])
+    test.assertEqual(seen["escaped"]["order"], gripped, f"{at}Escape did not put the dragged row back")
+    test.assertEqual(seen["escaped"]["held"], [], f"{at}the click after a drag put back picked a row up")
+    test.assertFalse(seen["escaped"]["sorting"])
+
+
 # A piece that says what it is still being told, so a finished piece staying playable can be read
 # back off the stage (issue #86). Its frame() writes the counts onto the one live line a piece has,
 # so the harness can see its frames still coming (it never says it is at rest), the knob still
@@ -4881,6 +5008,14 @@ class CompletionAxiomTest(SiteDirTestCase):
                      # rewriting the stage knows it.
                      "Every knob must be one its visitor can actually set",
                      "solvable whatever order they reach its knobs in",
+                     # Issue #104: sorting is always excellent, and never a list with a move button
+                     # beside each item -- said to the run that writes a piece, to the run that
+                     # rewrites the stage, and held by the stage harness.
+                     "Sorting is always excellent",
+                     "an order knob is a list sorted by hand",
+                     "never a list with up and down buttons, or arrows of any kind, beside each item",
+                     "the same goes for anything else on the site a visitor puts in order",
+                     "an order knob is one row per item and nothing beside them",
                      "A piece is one instantiation and keeps nothing between them",
                      mi.STAGE_HARNESS_REL,
                      "a wrong answer checked is refused and counted and leaves every knob live",
@@ -5328,6 +5463,59 @@ class StageTest(unittest.TestCase):
                 self.assertEqual(result[when]["pct"], "100%")
                 self.assertTrue(result[when]["set"])
                 self.assertEqual(result[when]["completes"], 0, "a piece with a knob nobody set finished")
+
+    def test_an_order_is_sorted_by_hand_and_never_by_arrows(self):
+        # Issue #104: the order knob was one row per item with an up and a down beside it, the
+        # pattern the note that opened the issue calls garbage. It is sorted by hand now -- a row
+        # dragged into place, a row tapped up and tapped into another's place, a row carried by the
+        # keyboard -- and nothing stands beside an item to press. ORDER_PIECE opens its four trees
+        # out of order; the scenario sorts them every way a visitor does and reads the rows back.
+        result = self.scenario("orderSorted", toy=ORDER_PIECE)
+        self.assertTrue(result["playable"], "the harness found no order knob on the order piece")
+        self.assertEqual(result["made"]["items"], [0, 1, 2, 3])
+        self.assertEqual(result["seen"]["opened"]["order"], [3, 1, 0, 2], "the order did not open as the piece dealt it")
+        self.assertEqual(result["seen"]["opened"]["labels"], ["the damson", "the birch", "the ash", "the cedar"])
+        assert_sorted_by_hand(self, result)
+
+    def test_every_put_down_gives_the_piece_the_order_the_rows_show(self):
+        # The knob's contract to the rest of the site is what it was (issue #104): ctx.value(id) is
+        # the array of item values in their current order, and the knob is set at the first move.
+        # ORDER_PIECE's apply() says how many orders it has been given and the last one, so every
+        # gesture can be held to it: a put-down -- a tap, a key, a drag, a row put down where it
+        # stood -- gives the order the rows show, and a pick-up, a walk of the arrow keys, a mouse
+        # hovering with no button down, a finger on the words, a drag the browser takes back and one put back with Escape give nothing.
+        seen = self.scenario("orderSorted", toy=ORDER_PIECE)["seen"]
+        # How many orders each gesture gives. A key carries the row a place at a time and the scene
+        # follows it, so each carry gives the order as it goes, and the put-down gives it once more.
+        gives = {"tappedDown": 1, "tappedInPlace": 1, "keyDown": 1, "keyEnd": 1, "keyBack": 1, "keyPutDown": 2,
+                 "dropped": 1, "fingerOnGrip": 1}
+        quiet = ["tappedUp", "letGo", "keyUp", "walked", "nudged", "dragging", "hovered", "fingerOnWords", "cancelled",
+                 "escaped"]
+        self.assertNotIn("given", seen["opened"]["status"], "the piece was given an order nobody gave")
+        self.assertNotIn("given", seen["tappedUp"]["status"], "picking a row up gave the piece an order")
+        count = 0
+        for step in list(seen)[1:]:
+            with self.subTest(step=step):
+                self.assertIn(step, list(gives) + quiet, "a gesture the test does not know how to judge")
+                count += gives.get(step, 0)
+                if count:
+                    self.assertEqual(seen[step]["status"], f"given {count}: " + ",".join(str(v) for v in seen[step]["order"]),
+                                     "the piece was not given the order the rows show, exactly when one was put down")
+                    self.assertTrue(seen[step]["set"], "the order stopped being set")
+
+    def test_an_order_dealt_as_the_answer_solves_through_the_sorter(self):
+        # And the law the piece harness holds every order to, played through the new controls: the
+        # order with its first two swapped is refused, and the solution, sorted into place by
+        # tapping, solves -- in a world dealt twice in one session as much as the first time.
+        puzzle = self.scenario("wrongThenRight", toy=ORDER_PIECE)
+        self.assertTrue(puzzle["playable"])
+        self.assertEqual(puzzle["unset"], [], "the order could not be set by hand")
+        self.assertNotEqual(puzzle["afterWrong"]["mode"], "done", "the order with its first two swapped solved it")
+        self.assertEqual(puzzle["afterRight"]["mode"], "done", "the solution, sorted by hand, did not solve it")
+        rounds = self.scenario("rounds", toy=ORDER_PIECE)["rounds"]
+        for played in rounds:
+            with self.subTest(world=played["was"]["file"], seed=played["was"]["seed"]):
+                self.assertTrue(played["solved"], "a piece with an order did not solve on the stage")
 
     def test_a_wrong_answer_is_refused_and_the_right_one_solves(self):
         # The puzzle axiom, on the stage: a piece is finished by a check that solves it and by
@@ -7749,6 +7937,12 @@ class RealSiteTest(unittest.TestCase):
                     self.assertNotIn("let go early", filled[when]["status"])
             self.assertEqual(filled["after"]["completes"], filled["filled"]["completes"],
                              f"{filled['world']}: letting go of a hold already set did something of its own")
+        # An order is sorted by hand (issue #104), and never by a pair of moves beside each item.
+        # Which worlds deal an order is theirs to decide, so the scenario may find none -- StageTest
+        # holds the knob with a piece of its own -- but wherever one is dealt it is held whole.
+        sorted_ = report["orderSorted"]["result"]
+        if sorted_["playable"]:
+            assert_sorted_by_hand(self, sorted_, f"{sorted_['world']} at {sorted_['seed']}")
         torn = report["teardown"]["result"]
         self.assertEqual(torn["waiting"], 0, "the stage left a timer running after the piece")
         self.assertEqual(torn["look"]["knobs"], [])

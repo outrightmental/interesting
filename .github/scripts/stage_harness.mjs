@@ -97,6 +97,17 @@
                       each of which must open the next card from the stack. Last, the way on
                       pressed over a piece whose answer is set and the check pressed as it leaves,
                       which must not finish a piece that was left.
+    orderSorted       An order sorted by hand (issue #104). Find an order knob and read what it is
+                      made of -- a row per item and no move button beside any of them -- then sort
+                      it every way a visitor does: a row tapped up and tapped into another's place,
+                      picked up by a key and carried by the arrow keys, put back with Escape,
+                      dragged by a mouse and by a finger on its grip, and a finger on its words,
+                      which is the page scrolling and must move nothing -- the mouse drag coming
+                      after a press let go of off its row, which must not leave the list waiting
+                      on a pointerup that never comes, nor make the mouse passing back over the
+                      list with no button down a drag. Every put-down has to set
+                      the knob to the order the rows show, and a pick-up, a drag the browser takes
+                      back and a drag put back with Escape have to give no order at all.
 
   Every scenario reports what it observed and makes no judgements: StageTest in
   test_make_interesting.py makes the assertions, as ParticipateButtonTest does for the button.
@@ -109,7 +120,8 @@ import { Worker, isMainThread, parentPort, workerData } from 'node:worker_thread
 import { wrongFor, difficultyAt, MIDDLE_DIFFICULTY } from './piece_harness.mjs';
 
 const SCENARIOS = ['rounds', 'wrongThenRight', 'afterDone', 'sliderUsed', 'sliderUntouched', 'holdFilled', 'teardown',
-                   'carried', 'pressAnswered', 'difficultyMoved', 'leftUnsolved'];
+                   'carried', 'pressAnswered', 'difficultyMoved', 'leftUnsolved',
+                   'orderSorted'];
 const SCENARIO_TIMEOUT_MS = 20000;
 const MISSING_WORLD = 'stage-harness-nowhere.html'; // a world with no module: the teardown and the card
 const SEEDS = [4242, 101, 99991, 7]; // tried in turn until a piece with the knob wanted turns up
@@ -655,22 +667,27 @@ async function setKnob(page, clock, knob, slider, want, step) {
     return;
   }
   if (kind === 'order') {
-    // The rows are rebuilt on every move, so the order is tracked here and each move is one press
-    // of the up button on the row that has to rise: a selection sort, the way a visitor does it.
+    // Sorted the way a visitor sorts with one finger and no dragging (issue #104): the row that
+    // belongs in a place tapped to pick it up, and the row standing in that place tapped to put it
+    // down there. Each item is put in its place from the top -- a selection sort, one pick-up per
+    // item out of place -- and the order is read back off the rows after every put-down.
     const labels = () => knob.querySelectorAll('.knob-order-label').map((node) => node.textContent);
+    const rows = () => knob.querySelectorAll('.knob-order-row');
     const items = step ? step.items : [];
     const current = () => labels().map((label) => {
       const item = items.find((i) => String(i.label == null ? i.value : i.label) === label);
       return item ? item.value : label;
     });
+    const tap = async (row) => {
+      fire(row, 'click', { detail: 1 });
+      await clock.advance(60);
+    };
     if (answer && Array.isArray(want)) {
       for (let t = 0; t < want.length; t++) {
-        let at = current().indexOf(want[t]);
-        for (let guard = 0; at > t && guard < 16; guard++) {
-          const row = knob.querySelectorAll('.knob-order-item')[at];
-          fire(row.querySelectorAll('button')[0], 'click');
-          await clock.advance(60);
-          at = current().indexOf(want[t]);
+        const at = current().indexOf(want[t]);
+        if (at > t && rows()[at] && rows()[t]) {
+          await tap(rows()[at]);
+          await tap(rows()[t]);
         }
       }
       if (current().every((v, i) => v === want[i]) && !isSet(knob)) {
@@ -678,9 +695,11 @@ async function setKnob(page, clock, knob, slider, want, step) {
         if (keep) fire(keep, 'click');
       }
     } else {
-      const rows = knob.querySelectorAll('.knob-order-item');
-      const last = rows[rows.length - 1];
-      if (last) fire(last.querySelectorAll('button')[0], 'click'); // the last one up a step
+      const all = rows();
+      if (all.length > 1) {
+        await tap(all[all.length - 1]); // the last one picked up
+        await tap(all[0]); // and put down at the top
+      }
     }
     await clock.advance(120);
     return;
@@ -1154,16 +1173,17 @@ async function slider(stageDir, worlds, deal, clock, how) {
   };
 }
 
-/* The knobs worked down until a hold is reachable: a hold is often behind a gate, so getting to one
-   is playing the piece as far as it. Returns the hold's knob, or null if this piece has none a
-   visitor can get to. Both the hold scenarios go through here. */
-async function reachHold(page, clock, answers) {
+/* The knobs worked down until a knob of `kind` -- a hold, unless another is asked for -- is
+   reachable: one is often behind a gate, so getting to it is playing the piece as far as it.
+   Returns that knob, still unset, or null if this piece has none a visitor can get to. Both the
+   hold scenarios and the order's go through here. */
+async function reachHold(page, clock, answers, kind) {
   const a = answers || { values: {}, steps: {} };
   for (let pass = 0; pass < knobsOn(page).length + 2; pass++) {
     let moved = false;
     for (const knob of knobsOn(page)) {
       if (isSet(knob) || isLocked(knob)) continue;
-      if (knob.dataset.kind === 'hold') return knob;
+      if (knob.dataset.kind === (kind || 'hold')) return knob;
       await setKnob(page, clock, knob, 'move', a.values[knob.dataset.id], a.steps[knob.dataset.id]);
       if (isSet(knob)) moved = true;
     }
@@ -1251,6 +1271,198 @@ async function teardown(stageDir, worlds, deal, clock) {
   api.open(MISSING_WORLD, 7, { push: false });
   await clock.advance(3000);
   return { playable: true, held, playing, whilePlaying, waiting: clock.waiting, current: api.current(), look: look(page) };
+}
+
+/* ---- an order sorted by hand (issue #104) ---------------------------------------------------- */
+
+/* An order knob, found the way the slider and the hold are -- the deal first, then every world, at
+   a few seeds, played as far as the knob -- and sorted every way a visitor sorts one. A row tapped
+   to pick it up and another tapped to put it down in that one's place; a row picked up by a key,
+   carried by the arrow keys, put back with Escape, and picked up and put down again; the arrow keys
+   with nothing in hand; a drag by a mouse, by a finger on the grip, and by a finger on the words
+   (which is a visitor scrolling the page, not a drag); a drag the browser takes back, and one put
+   back with Escape. What the knob is made of is read off first, because a knob with a move button
+   beside each item is the pattern this replaced.
+
+   A drag reads where the rows stand, and the stub lays nothing out, so the rows are given a
+   browser's boxes before each drag -- 44px tall with 6px between, top to bottom in the order they
+   stand -- and every drag is said in rows: two of them down for the mouse, one up for the finger.
+   Reports the order and the knob's state after every gesture and judges none of it: StageTest and
+   RealSiteTest hold it to the knob's contract and to the ban on move buttons. */
+const ROW_PITCH = 50;
+
+async function orderSorted(stageDir, worlds, deal, clock) {
+  const page = await load(stageDir, worlds, clock);
+  page.win.interestingFeed = { take: () => null, consume() {} };
+  const api = page.win.interestingStage;
+  const tries = [deal[0].file].concat(worlds.map((world) => world.file));
+  let found = null;
+  for (const at of SEEDS) {
+    for (const file of tries) {
+      api.open(file, at, { arriving: true });
+      if (!(await waitForPiece(page, clock))) continue;
+      const answers = await answersFor(stageDir, worlds, file, at, {});
+      const knob = await reachHold(page, clock, answers, 'order');
+      if (knob) {
+        found = { file, seed: at, knob, step: answers.steps[knob.dataset.id] || null };
+        break;
+      }
+    }
+    if (found) break;
+  }
+  if (!found) return { playable: false, world: '', seed: 0, look: look(page) };
+  const { knob, step } = found;
+  const items = step && Array.isArray(step.items) ? step.items : [];
+  const valueOf = (label) => {
+    const item = items.find((i) => String(i.label == null ? i.value : i.label) === label);
+    return item ? item.value : label;
+  };
+  const fire = (node, type, extra) => node.dispatchEvent(Object.assign({ type }, extra || {}));
+  const list = knob.querySelector('.knob-order');
+  const rows = () => knob.querySelectorAll('.knob-order-row');
+  const lis = () => knob.querySelectorAll('.knob-order-item');
+  const labelOf = (row) => {
+    const label = row ? row.querySelector('.knob-order-label') : null;
+    return label ? label.textContent : '';
+  };
+  const read = () => ({
+    order: rows().map((row) => valueOf(labelOf(row))),
+    labels: rows().map(labelOf),
+    set: isSet(knob),
+    held: rows().filter((row) => row.getAttribute('aria-pressed') === 'true').map((row) => valueOf(labelOf(row))),
+    holding: !!list && list.classList.contains('is-holding'),
+    sorting: !!list && list.classList.contains('is-sorting'),
+    dragging: lis().filter((li) => li.classList.contains('is-dragging')).length,
+    dragY: lis().map((li) => li.css.get('--drag-y') || ''),
+    shifts: lis().map((li) => li.css.get('--shift') || ''),
+    names: rows().map((row) => row.getAttribute('aria-label') || ''),
+    places: rows().map((row) => (row.querySelector('.knob-order-place') || { textContent: '' }).textContent),
+    told: (knob.querySelector('[aria-live]') || { textContent: '' }).textContent,
+    how: (knob.querySelector('.knob-order-how') || { textContent: '' }).textContent,
+    status: page.doc.getElementById('stage-status').textContent,
+    focused: rows().indexOf(focused)
+  });
+  const made = {
+    id: knob.dataset.id,
+    items: items.map((i) => i.value),
+    list: list ? list.tagName : '',
+    rows: rows().length,
+    buttons: knob.querySelectorAll('button').map((b) => ({ text: b.textContent, name: b.getAttribute('aria-label') || '',
+                                                          row: b.classList.contains('knob-order-row') })),
+    grips: knob.querySelectorAll('.knob-order-grip').length
+  };
+  const seen = { opened: read() };
+  const tap = async (row) => {
+    fire(row, 'click', { detail: 1 });
+    await clock.advance(60);
+  };
+  const key = async (row, name) => {
+    fire(list, 'keydown', { key: name, target: row });
+    await clock.advance(60);
+  };
+  // Tapped: the last row picked up, which is not an order yet, and put down in the first one's
+  // place.
+  const n = rows().length;
+  await tap(rows()[n - 1]);
+  seen.tappedUp = read();
+  await tap(rows()[0]);
+  seen.tappedDown = read();
+  // Tapped up and tapped again: put down where it stood.
+  await tap(rows()[0]);
+  await tap(rows()[0]);
+  seen.tappedInPlace = read();
+  // Tapped up, and the focus taken somewhere else: let go of, where it stands.
+  await tap(rows()[0]);
+  fire(list, 'focusout', { target: rows()[0], relatedTarget: null });
+  await clock.advance(60);
+  seen.letGo = read();
+  // The keyboard: the top row picked up by a key (a click with no clicks counted), carried down
+  // one, carried to the end, and put back with Escape.
+  const top = rows()[0];
+  fire(top, 'click', { detail: 0 });
+  await clock.advance(60);
+  seen.keyUp = read();
+  await key(top, 'ArrowDown');
+  seen.keyDown = read();
+  await key(top, 'End');
+  seen.keyEnd = read();
+  await key(top, 'Escape');
+  seen.keyBack = read();
+  // Picked up again, carried down one, and put down with the key that picked it up.
+  fire(top, 'click', { detail: 0 });
+  await key(top, 'ArrowDown');
+  fire(top, 'click', { detail: 0 });
+  await clock.advance(120);
+  seen.keyPutDown = read();
+  // Nothing in hand: the arrow keys walk the rows and move nothing.
+  await key(rows()[0], 'ArrowDown');
+  seen.walked = read();
+  // The rows as a browser lays them out, which is what a drag reads.
+  const layOut = () => lis().forEach((li, k) => {
+    li.box = { left: 0, right: 320, width: 320, top: 100 + k * ROW_PITCH, bottom: 144 + k * ROW_PITCH, height: 44 };
+  });
+  const press = (extra) => Object.assign({ pointerType: 'mouse', button: 0, buttons: 1, pointerId: 1 }, extra);
+  // A press on the last row that hardly moves and is let go of off it, so no pointerup reaches the
+  // row: it must not leave the list waiting on it, or the drag after it goes nowhere.
+  layOut();
+  fire(lis()[n - 1], 'pointerdown', press({ clientY: 100 + ROW_PITCH * (n - 1) + 2 }));
+  fire(lis()[n - 1], 'pointermove', press({ clientY: 100 + ROW_PITCH * (n - 1) }));
+  // A mouse drag: the top row, nudged under the threshold, then flicked two rows down in one move
+  // -- which, with nothing holding the pointer until it is a drag, a browser hands to the row it is
+  // now over -- and let go, and the click a browser sends after it.
+  let li = lis()[0];
+  fire(li, 'pointerdown', press({ clientY: 122 }));
+  fire(li, 'pointermove', press({ clientY: 124 }));
+  seen.nudged = read();
+  fire(lis()[Math.min(2, n - 1)], 'pointermove', press({ clientY: 122 + ROW_PITCH * 2 }));
+  seen.dragging = read();
+  fire(li, 'pointerup', press({ clientY: 122 + ROW_PITCH * 2 }));
+  fire(li.querySelector('.knob-order-row'), 'click', { detail: 1 });
+  await clock.advance(120);
+  seen.dropped = read();
+  // A press slid off the side of the list and let go of there, so no pointerup reaches the row, and
+  // then the mouse brought back over the list with no button down: hovering is not a drag.
+  layOut();
+  fire(lis()[0], 'pointerdown', press({ clientY: 122 }));
+  fire(lis()[0], 'pointermove', press({ clientY: 123 }));
+  fire(lis()[Math.min(2, n - 1)], 'pointermove', press({ clientY: 122 + ROW_PITCH * 2, buttons: 0 }));
+  await clock.advance(120);
+  seen.hovered = read();
+  // A finger on the words, travelling a row up: the page scrolling past the list, not a drag.
+  layOut();
+  li = lis()[n - 1];
+  const finger = (extra) => Object.assign({ pointerType: 'touch', button: 0, buttons: 1, pointerId: 2 }, extra);
+  const bottom = 122 + ROW_PITCH * (n - 1);
+  fire(li, 'pointerdown', finger({ clientY: bottom, target: li.querySelector('.knob-order-label') }));
+  fire(li, 'pointermove', finger({ clientY: bottom - ROW_PITCH }));
+  fire(li, 'pointerup', finger({ clientY: bottom - ROW_PITCH }));
+  await clock.advance(120);
+  seen.fingerOnWords = read();
+  // A finger on the grip, travelling a row up: a drag.
+  fire(li, 'pointerdown', finger({ clientY: bottom, target: li.querySelector('.knob-order-grip') }));
+  fire(li, 'pointermove', finger({ clientY: bottom - ROW_PITCH }));
+  fire(li, 'pointerup', finger({ clientY: bottom - ROW_PITCH }));
+  await clock.advance(120);
+  seen.fingerOnGrip = read();
+  // A drag the browser takes back halfway: put back, and nothing given.
+  layOut();
+  li = lis()[0];
+  fire(li, 'pointerdown', press({ clientY: 122, pointerId: 3 }));
+  fire(li, 'pointermove', press({ clientY: 122 + ROW_PITCH * 2, pointerId: 3 }));
+  fire(li, 'pointercancel', press({ pointerId: 3 }));
+  await clock.advance(120);
+  seen.cancelled = read();
+  // A drag put back with Escape, and the pointer let go of afterwards with its click.
+  layOut();
+  fire(li, 'pointerdown', press({ clientY: 122, pointerId: 4 }));
+  fire(li, 'pointermove', press({ clientY: 122 + ROW_PITCH * 2, pointerId: 4 }));
+  await key(li.querySelector('.knob-order-row'), 'Escape');
+  fire(li, 'pointermove', press({ clientY: 122 + ROW_PITCH * 3, pointerId: 4 }));
+  fire(li, 'pointerup', press({ clientY: 122 + ROW_PITCH * 3, pointerId: 4 }));
+  fire(li.querySelector('.knob-order-row'), 'click', { detail: 1 });
+  await clock.advance(120);
+  seen.escaped = read();
+  return { playable: true, world: found.file, seed: found.seed, made, seen };
 }
 
 /* ---- every press on the scene is answered --------------------------------------------------- */
@@ -1652,6 +1864,7 @@ async function runScenario(name, stageDir, worlds, deal) {
   if (name === 'pressAnswered') return pressAnswered(stageDir, worlds, deal, clock);
   if (name === 'difficultyMoved') return difficultyMoved(stageDir, worlds, deal, clock);
   if (name === 'leftUnsolved') return leftUnsolved(stageDir, worlds, deal, clock);
+  if (name === 'orderSorted') return orderSorted(stageDir, worlds, deal, clock);
   throw new Error('no scenario named ' + name);
 }
 
