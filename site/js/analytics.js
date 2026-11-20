@@ -14,6 +14,14 @@
                                published apart from the license header copied onto the CSS
       js/clickadu.js           the ads, which decides whether a page carries any and where
 
+  It also passes the visitor's answer on to Signal, the studio's own first-party analytics, on a
+  page that carries it (js/signal.js, which only the deploy's build writes onto a page: see
+  signal/index.mjs). Signal counts how far each page is read for every visitor with no cookie and
+  no id, from the page's own HTML, and needs nobody's consent for that; it keeps a journey -- one
+  visitor across the studio's sites -- only after a yes, which this banner asks for under its own
+  "journeys" category and hands over with Signal.consent(). A browser that sends Global Privacy
+  Control is a no to Signal, whatever is answered here.
+
   Nothing is reported until a visitor accepts the analytics category: the Google tag is not even
   fetched before then, and rejecting it later switches measurement back off and lets the banner
   clear the cookies it set. Nothing is advertised until a visitor accepts the advertising category
@@ -48,6 +56,7 @@
   var ADS_SCRIPT = 'clickadu.js';
   var CATEGORY = 'analytics';
   var AD_CATEGORY = 'advertising';
+  var JOURNEY_CATEGORY = 'journeys';
 
   var measured = /^G-[A-Z0-9]+$/.test(MEASUREMENT_ID);
   // A zone is on once the deploy has put an address where its placeholder was: the shape the
@@ -57,9 +66,11 @@
     if (/^(https:)?\/\/[A-Za-z0-9.-]+\//.test(AD_ZONES[format])) zones[format] = AD_ZONES[format];
   }
   var advertised = !!(zones.banner || zones.inPagePush);
+  // Journeys are on where the page carries Signal's client, which only the deploy's build writes.
+  var journeyed = carriesSignal();
 
-  // Nothing measured and nothing advertised means there is nothing to ask consent for either.
-  if (!measured && !advertised) return;
+  // Nothing measured, advertised or journeyed means there is nothing to ask consent for either.
+  if (!measured && !advertised && !journeyed) return;
 
   var base = scriptFolder();
   var tagLoaded = false;
@@ -69,6 +80,33 @@
 
   function gtag() {
     window.dataLayer.push(arguments);
+  }
+
+  /* Whether this page carries Signal's client: its script element, with the stream's key on it.
+     Read off the markup rather than window.Signal, because both scripts are deferred and the
+     client may not have run yet. */
+  function carriesSignal() {
+    var all = document.getElementsByTagName('script');
+    for (var i = 0; i < all.length; i++) {
+      if (/(^|\/)signal\.js(\?|#|$)/.test(all[i].src || '') && all[i].getAttribute('data-key')) return true;
+    }
+    return false;
+  }
+
+  /* Signal's answer, yes or no, once its client is there: at once if it has run, or when the page
+     has finished loading, by which time every deferred script has. A client that never ran is
+     told nothing, and so keeps nothing. */
+  var loaded = false;
+  document.addEventListener('DOMContentLoaded', function () { loaded = true; });
+  function tellSignal(yes) {
+    if (window.Signal && window.Signal.consent) {
+      window.Signal.consent(yes);
+      return;
+    }
+    if (loaded) return;
+    document.addEventListener('DOMContentLoaded', function () {
+      if (window.Signal && window.Signal.consent) window.Signal.consent(yes);
+    });
   }
 
   /* The folder this script was loaded from, so its neighbours can be found from any page of the
@@ -205,20 +243,34 @@
      left switched off is not mentioned, so the words cannot promise or confess anything that is
      not served. */
   function wording() {
-    var accept = measured && advertised ? 'Accept both' : measured ? 'Accept analytics' : 'Accept ads';
-    var description = measured && advertised
-      ? 'This site counts visits with Google Analytics and shows ads from Clickadu on its worlds, ' +
-        'and does nothing else with cookies. Neither is loaded unless you accept it.'
-      : measured
-        ? 'This site counts visits with Google Analytics, and measures nothing else. Those ' +
-          'cookies are only set if you accept them.'
-        : 'This site shows ads from Clickadu on its worlds, and measures nothing itself. They ' +
-          'are only loaded if you accept them.';
+    var parts = (measured ? 1 : 0) + (advertised ? 1 : 0) + (journeyed ? 1 : 0);
+    var accept = parts > 2 ? 'Accept all' : parts > 1 ? 'Accept both'
+      : measured ? 'Accept analytics' : advertised ? 'Accept ads' : 'Accept journeys';
+    var description;
+    if (journeyed) {
+      var others = measured && advertised
+        ? 'It also counts visits with Google Analytics and shows ads from Clickadu on its worlds. '
+        : measured ? 'It also counts visits with Google Analytics. '
+          : advertised ? 'It also shows ads from Clickadu on its worlds. ' : '';
+      description = 'This site counts how far each page is read, with no cookie and nothing ' +
+        'that says who you are. With your yes it would also remember this browser, so the ' +
+        'studio can see how people find their way between its sites and games. ' + others +
+        'Nothing you can decline is loaded or kept unless you accept it.';
+    } else {
+      description = measured && advertised
+        ? 'This site counts visits with Google Analytics and shows ads from Clickadu on its worlds, ' +
+          'and does nothing else with cookies. Neither is loaded unless you accept it.'
+        : measured
+          ? 'This site counts visits with Google Analytics, and measures nothing else. Those ' +
+            'cookies are only set if you accept them.'
+          : 'This site shows ads from Clickadu on its worlds, and measures nothing itself. They ' +
+            'are only loaded if you accept them.';
+    }
     description += ' Either way, the toys on these pages keep your constellation in your own ' +
       'browser and send it nowhere.';
-    // Said only to a visitor whose earlier answer was given before the site showed ads (see
-    // revision in run below); the banner replaces it with nothing for everyone else.
-    if (advertised) description += '{{revisionMessage}}';
+    // Said only to a visitor whose earlier answer was given before the site asked about what it
+    // asks now (see revision in run below); the banner replaces it with nothing for everyone else.
+    if (advertised || journeyed) description += '{{revisionMessage}}';
 
     var sections = [
       {
@@ -244,6 +296,21 @@
         linkedCategory: CATEGORY
       });
     }
+    if (journeyed) {
+      sections.push({
+        title: 'Journeys',
+        description:
+          'Signal, the studio\'s own analytics, run by Outright Mental, which makes this site. ' +
+          'Every visitor\'s pages are counted by how far they are read, with no cookie and no ' +
+          'identifier, and that needs no yes. With a yes, this browser also keeps a random number ' +
+          'in its own storage and sends it with each page you open here and on the studio\'s ' +
+          'other sites where you said yes too, so the studio can see how people find their way ' +
+          'between them. Declining erases that number, in your browser and on the studio\'s ' +
+          'servers. A browser that sends Global Privacy Control is never followed, whatever you ' +
+          'answer here. See <a href="/privacy.html">privacy</a>.',
+        linkedCategory: JOURNEY_CATEGORY
+      });
+    }
     if (advertised) {
       var formats = [];
       if (zones.banner) formats.push('a banner under the puzzle');
@@ -265,7 +332,9 @@
       consentModal: {
         title: 'A quiet word about cookies',
         description: description,
-        revisionMessage: ' You answered before this site showed ads, so it asks again.',
+        revisionMessage: journeyed
+          ? ' This site asks about more than it did when you last answered, so it asks again.'
+          : ' You answered before this site showed ads, so it asks again.',
         acceptAllBtn: accept,
         acceptNecessaryBtn: 'Decline',
         showPreferencesBtn: 'Let me choose'
@@ -293,6 +362,7 @@
         else disableAnalytics();
       }
       if (advertised && cc.acceptedCategory(AD_CATEGORY)) serveAds();
+      if (journeyed) tellSignal(cc.acceptedCategory(JOURNEY_CATEGORY));
     }
 
     var categories = { necessary: { enabled: true, readOnly: true } };
@@ -309,15 +379,22 @@
         autoClear: { cookies: [], reloadPage: true }
       };
     }
+    if (journeyed) {
+      // Signal sets no cookie, so there are none to clear: withdrawing is Signal.consent(false),
+      // which erases the visitor in this browser and on Signal's servers (applyConsent above).
+      categories[JOURNEY_CATEGORY] = {};
+    }
 
     // The site is dark on every page; the banner ships a matching palette under this class.
     document.documentElement.classList.add('cc--darkmode');
 
     cc.run({
-      // An answer given before the site showed ads was an answer to a banner that said it
-      // measured nothing else, so it is asked again once there are ads; until then the answers
-      // already given stand.
-      revision: advertised ? 1 : 0,
+      // An answer given before the site showed ads, or before it asked about journeys, was an
+      // answer to a banner that said less than this one, so it is asked again; until then the
+      // answers already given stand.
+      // Journeys count for two, so that each part's arrival raises the revision whatever came
+      // before it: ads alone are 1, journeys alone 2, both 3.
+      revision: (advertised ? 1 : 0) + (journeyed ? 2 : 0),
       guiOptions: {
         consentModal: { layout: 'box', position: 'bottom right', equalWeightButtons: true },
         preferencesModal: { layout: 'box', equalWeightButtons: true }

@@ -25,9 +25,9 @@ iterate a more interesting website
 - **The build** — [`build.mjs`](build.mjs) turns `/site` into the artifact that is published to an
   S3 bucket behind CloudFront at [makeitmoreinteresting.com](https://makeitmoreinteresting.com/),
   in a throwaway folder outside the repository. Nothing generated is ever committed. The deploy
-  changes one file on the way — `js/analytics.js`, which gets the GA4 measurement ID and the
-  Clickadu zones — and copies everything else as the build left it. See
-  [Building the site](#building-the-site).
+  builds for the live host, which puts Signal on every page (see [Signal](#signal)), changes one
+  file on the way — `js/analytics.js`, which gets the GA4 measurement ID and the Clickadu zones —
+  and copies everything else as the build left it. See [Building the site](#building-the-site).
 - **`/infra`** — the hosting, as code. [`infra/`](infra) is a self-contained Terraform project
   that owns the bucket, the CloudFront distribution, the certificate, the
   `makeitmoreinteresting.com` hosted zone and the records in it, the deploy IAM user, the Actions
@@ -132,6 +132,7 @@ is deliberately small: a foundation to build a more holistic experience on, not 
 npm ci                              # once
 npm run build                       # prints the folder it built into
 npm run build -- --out ./build      # or pick the folder yourself
+npm run build -- --signal-host makeitmoreinteresting.com   # the live site's build, Signal and all
 ```
 
 ### Material Design 3
@@ -1392,16 +1393,56 @@ new content for any page it is shown.
 - **Held to in code.** `check_analytics` in
   [`.github/scripts/make_interesting.py`](.github/scripts/make_interesting.py) refuses a plan that
   leaves a page without the line. As with reachability, only what the run itself breaks is refused.
-- **The four files are out of reach.** `FIXED_FILES` — `js/analytics.js` and the two vendored
-  `cookieconsent` files, and beside them `js/clickadu.js` (see [Advertising](#advertising)) — are
-  never shown to a model and are refused outright as a write or a delete, so no run can quietly gut
-  the tag, the banner or the ads. They skip the prompt budget as well, so 55 KB of consent library
+- **The five files are out of reach.** `FIXED_FILES` — `js/analytics.js` and the two vendored
+  `cookieconsent` files, Signal's client `js/signal.js` (see [Signal](#signal)), and beside them
+  `js/clickadu.js` (see [Advertising](#advertising)) — are never shown to a model and are refused
+  outright as a write or a delete, so no run can quietly gut the tag, the banner, Signal or the ads. They skip the prompt budget as well, so 55 KB of consent library
   cannot push a page of the site out of the prompt.
 - **True of the site as committed**, checked by `RealSiteTest` on every pull request and before every
   deploy: every page loads the script, the files are there, no measurement ID and no ad zone is
   committed, `deploy.yml` still replaces every placeholder, the vendored library keeps its license
   and version, and a puzzle left unsolved is counted as an incomplete attempt only between consent
   given and consent withdrawn.
+
+### Signal
+
+The studio's own first-party, aggregate-only analytics, Signal (`outrightmental/signal`, docs/MVP.md,
+"Websites: depth and people"), counts the live site in two parts that are kept apart. Unlike the
+Google tag, it is not a line in `/site`: the deploy's build writes it onto every page, so no run can
+drop it and no other copy of the site can count into the live site's stream.
+
+- **The ladder, for every visitor, with no consent asked.** The first thing inside every page's
+  `<body>` is a column of 1×1 images, one every 200 px down the page and one at its foot, each a
+  plain `GET` to `https://in.signal.outright.io/v1/d` with the stream's key, the page's path and
+  the band. Signal's server adds one to that band of that page for the day and keeps nothing else:
+  no cookie, no id, nothing on the device, and no script involved. The first rung loads with the
+  page (the view); the rest are `loading="lazy"`, so the browser asks for each as the reader nears
+  it. `body` is made `position: relative` in the page's `<head>` so the ladder is the page's height
+  and a rung past the end of a short page is never asked for.
+- **Journeys, only after a yes.** [`site/js/signal.js`](site/js/signal.js), a byte copy of
+  `sdk/web/signal.js`, is in every page's `<head>` with its own banner off (`data-banner="off"`).
+  The cookie banner asks instead, under a *journeys* category of its own that only a page carrying
+  the client offers, and `js/analytics.js` passes the answer on with `Signal.consent()`. With a yes
+  the browser keeps a random visitor id in its own storage and sends it with each page view, and a
+  link to another studio site carries it across in its fragment; a no after a yes erases it here
+  and on Signal's servers. Global Privacy Control is a no, whatever the banner says. The banner's
+  `revision` goes up with journeys, so every returning visitor is asked again.
+- **One host, one key.** [`signal/index.mjs`](signal/index.mjs) holds each production host's public
+  stream key, the studio's hosts a journey may cross to, and the transform
+  [`eleventy.config.mjs`](eleventy.config.mjs) runs on every page when the build is told
+  `--signal-host`. [`deploy.yml`](.github/workflows/deploy.yml) builds with
+  `--signal-host makeitmoreinteresting.com` and refuses a build without the ladder; every other
+  build — local, the tests', the hourly run's checks, a fork's — carries neither part, and a host
+  with no stream is refused. [`signal/ladder.mjs`](signal/ladder.mjs) is a byte copy of
+  `sdk/web/ladder.mjs`; refresh both copies from `outrightmental/signal`, never edit them here.
+- **Out of reach.** `js/signal.js` is in `ANALYTICS_FILES`, and so in `FIXED_FILES`: never shown to
+  a model, never written or deleted by one. The site has no mailing-list form, so nothing calls
+  `Signal.identify()`.
+- **The fine print says so.** [`privacy.html`](site/privacy.html) says what the ladder counts and
+  keeps, that journeys wait for a yes, that Global Privacy Control is a no and how to say no.
+- **Tested.** `SignalTest` builds the site both ways and holds every page to the ladder and the
+  client, or to neither; `JourneysConsentTest` runs the real `js/analytics.js` in the ads' stub
+  browser and holds what it tells Signal: yes for a yes, no for a no, nothing before an answer.
 
 ### Advertising
 

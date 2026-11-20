@@ -802,7 +802,14 @@ ANALYTICS_TAG = f"<script src='{ANALYTICS_SCRIPT}' defer></script>"
 # split_for_prompt, which hands them to validate_plan as unseen) and refused outright as a write or
 # a delete. Two of them are a vendored release of orestbida/cookieconsent, which no model should be
 # rewriting from memory in any case.
-ANALYTICS_FILES = {ANALYTICS_SCRIPT, "js/cookieconsent.umd.js", "css/cookieconsent.css"}
+#
+# js/signal.js is the fourth: the web client of Signal, the studio's own first-party analytics, a
+# byte copy of sdk/web/signal.js in outrightmental/signal. No page in /site loads it: the deploy's
+# build writes its line, and Signal's ladder of pixels, onto every page it publishes
+# (signal/index.mjs), and js/analytics.js hands it the visitor's answer to the banner's "journeys"
+# category. Fixed for the same reasons as the rest: it is measurement, and a vendored release.
+SIGNAL_SCRIPT = "js/signal.js"
+ANALYTICS_FILES = {ANALYTICS_SCRIPT, "js/cookieconsent.umd.js", "css/cookieconsent.css", SIGNAL_SCRIPT}
 # The site's ads (issue #110): Clickadu's banner and in-page push, on a world's page and nowhere
 # else. No page loads this file: js/analytics.js does, once a visitor accepts the advertising
 # category of its banner, and hands it the zones the deploy wrote into analytics.js. So the line

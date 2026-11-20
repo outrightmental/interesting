@@ -43,7 +43,7 @@ function deployed(source, parts) {
  *  as the browser runs an async script later rather than at once: the banner and clickadu.js are
  *  run from this site's own copies, and anything else is only recorded as fetched. */
 function makeBrowser({ world = "cosmic", page = "quiet-room.html", main = true, body = true,
-                       answer = null, analytics = ANALYTICS } = {}) {
+                       answer = null, analytics = ANALYTICS, signal = null } = {}) {
   const queue = [];
   const fetched = [];
   const stylesheets = [];
@@ -101,6 +101,13 @@ function makeBrowser({ world = "cosmic", page = "quiet-room.html", main = true, 
     return out;
   }
 
+  // Signal's client as the deploy's build writes it (signal/index.mjs): a deferred script in the
+  // head with the stream's key on it. `signal` is "ran" when the client has already run by the
+  // time the banner answers, "later" when it runs only before DOMContentLoaded, and "never" when
+  // its element is there and it never runs. Its consent() calls are recorded, and nothing else.
+  const told = [];
+  const SignalStub = { consent(yes) { told.push(yes); } };
+
   const html = makeElement("html");
   html.setAttribute("data-page", page);
   if (world) html.setAttribute("data-world", world);
@@ -136,6 +143,14 @@ function makeBrowser({ world = "cosmic", page = "quiet-room.html", main = true, 
   const context = { document, console, addEventListener() {} };
   context.window = context;
   vm.createContext(context);
+  if (signal) {
+    const client = makeElement("script");
+    client.src = `${ORIGIN}js/signal.js`;
+    client.attributes["data-key"] = "makeitmoreinteresting-com.0123456789abcdef01234567";
+    head.children.push(client);
+    client.parentNode = head;
+    if (signal === "ran") context.Signal = SignalStub;
+  }
 
   /* The consent banner as this site uses it: run() once with the whole configuration, and an
      answer the visitor has given (an array of categories) or not yet given (null). */
@@ -180,6 +195,8 @@ function makeBrowser({ world = "cosmic", page = "quiet-room.html", main = true, 
     drain,
     addBody,
     fire(type) { for (const handler of document.listeners[type] || []) handler(); },
+    signalRuns() { context.Signal = SignalStub; },
+    told,
     report() {
       const slot = document.getElementById("site-ad");
       const box = document.getElementById("site-ad-banner");
@@ -196,6 +213,7 @@ function makeBrowser({ world = "cosmic", page = "quiet-room.html", main = true, 
           accept: consent.language.translations.en.consentModal.acceptAllBtn,
           description: consent.language.translations.en.consentModal.description,
           revisionMessage: consent.language.translations.en.consentModal.revisionMessage,
+          journeys: consent.categories.journeys || null,
           sections: consent.language.translations.en.preferencesModal.sections,
         },
         clickadu: (() => {
@@ -214,6 +232,7 @@ function makeBrowser({ world = "cosmic", page = "quiet-room.html", main = true, 
           bannerScripts: box ? box.children.filter((el) => el.tagName === "script").map((el) => el.src) : [],
         },
         slots: all(html).filter((el) => el.id === "site-ad").length,
+        told,
         onTheBody: document.body
           ? document.body.children.filter((el) => el.tagName === "script").map((el) => el.src)
           : [],
@@ -226,6 +245,7 @@ function makeBrowser({ world = "cosmic", page = "quiet-room.html", main = true, 
 }
 
 const ALL = ["necessary", "analytics", "advertising"];
+const WITH_JOURNEYS = [...ALL, "journeys"];
 const ZONES = ["__CLICKADU_BANNER_SRC__", "__CLICKADU_IN_PAGE_PUSH_SRC__"];
 const EVERYTHING = ["__GA_MEASUREMENT_ID__", ...ZONES];
 
@@ -319,6 +339,52 @@ const scenarios = {
     return browser.report();
   },
 };
+
+Object.assign(scenarios, {
+  /* Signal on the page, everything deployed, every category accepted with journeys: the banner
+     asks about journeys under a category of its own, and Signal is told yes. */
+  journeysAccepted() {
+    return makeBrowser({ analytics: deployed(ANALYTICS, EVERYTHING), answer: WITH_JOURNEYS, signal: "ran" }).report();
+  },
+
+  /* The same, with journeys declined: Signal is told no, and everything else goes on as before. */
+  journeysDeclined() {
+    return makeBrowser({ analytics: deployed(ANALYTICS, EVERYTHING), answer: ALL, signal: "ran" }).report();
+  },
+
+  /* No answer yet: Signal is told nothing, so it keeps nothing. */
+  journeysNotYetAnswered() {
+    return makeBrowser({ analytics: deployed(ANALYTICS, EVERYTHING), answer: null, signal: "ran" }).report();
+  },
+
+  /* Signal on the page and nothing else deployed, as on a copy with no measurement ID and no ad
+     zone: the banner still asks, about journeys alone, and no Google tag is fetched. */
+  journeysOnly() {
+    return makeBrowser({ answer: WITH_JOURNEYS, signal: "ran" }).report();
+  },
+
+  /* Today's live site: a measurement ID, no ad zone, and Signal. */
+  measuredAndJourneys() {
+    return makeBrowser({ analytics: deployed(ANALYTICS, ["__GA_MEASUREMENT_ID__"]), answer: WITH_JOURNEYS,
+                         signal: "ran" }).report();
+  },
+
+  /* The banner answers before Signal's client has run: the answer waits for DOMContentLoaded. */
+  journeysBeforeTheClient() {
+    const browser = makeBrowser({ analytics: deployed(ANALYTICS, EVERYTHING), answer: WITH_JOURNEYS, signal: "later" });
+    const early = [...browser.told];
+    browser.signalRuns();
+    browser.fire("DOMContentLoaded");
+    return { early, then: [...browser.told] };
+  },
+
+  /* A client that never ran is told nothing, and nothing throws. */
+  journeysClientNeverRan() {
+    const browser = makeBrowser({ analytics: deployed(ANALYTICS, EVERYTHING), answer: WITH_JOURNEYS, signal: "never" });
+    browser.fire("DOMContentLoaded");
+    return browser.report();
+  },
+});
 
 const results = {};
 for (const [name, scenario] of Object.entries(scenarios)) results[name] = scenario();

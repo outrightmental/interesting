@@ -26,9 +26,16 @@ import path from "node:path";
 
 import * as sass from "sass";
 
+import { keyFor, withSignal } from "./signal/index.mjs";
+
 // The folder being built. build.mjs sets this when it builds a copy of the site somewhere else
 // (the hourly AI's reachability check does exactly that); on its own, `npx eleventy` builds /site.
 const SOURCE_DIR = process.env.SITE_SOURCE_DIR || "site";
+
+// The production host this build is for, or none. build.mjs sets it from --signal-host, which only
+// deploy.yml passes; with it, every page carries Signal's ladder and client (signal/index.mjs), and
+// without it -- a local build, the hourly run's checks, a fork -- no page carries either.
+const SIGNAL_HOST = process.env.SIGNAL_HOST || "";
 
 // Where the shared files live, inside the source folder. Both are Eleventy conventions ("_" says
 // "not a page"), and both are inside /site so the hourly AI can edit them like anything else.
@@ -81,6 +88,18 @@ export default function (eleventyConfig) {
     "permalink",
     () => (data) => `${data.page.filePathStem}.${data.page.outputFileExtension}`,
   );
+
+  // Signal, on a build for a production host only: the ladder first inside <body> and the client in
+  // the <head> of every page, written here rather than in /site so that no run can drop either,
+  // and so that a build for any other copy of the site counts nothing.
+  if (SIGNAL_HOST) {
+    const key = keyFor(SIGNAL_HOST);
+    eleventyConfig.addTransform("signal", function (content) {
+      const out = this.page.outputPath;
+      if (typeof out !== "string" || !out.endsWith(".html")) return content;
+      return withSignal(content, { key, url: this.page.url });
+    });
+  }
 
   eleventyConfig.addExtension("scss", {
     outputFileExtension: "css",

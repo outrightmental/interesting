@@ -11,6 +11,7 @@
  *   node build.mjs --out path/to/folder      # build into a folder of your choosing
  *   node build.mjs --source path/to/site     # build a copy of the site somewhere else
  *   node build.mjs --quiet                   # print only the output folder
+ *   node build.mjs --signal-host <host>      # carry Signal for that production host (deploy.yml)
  *
  * The last line of stdout is always the output folder, so a caller can read it without parsing
  * anything else. The folder is emptied first, so a page a run deleted stops being built.
@@ -23,15 +24,23 @@ import { fileURLToPath } from "node:url";
 
 import Eleventy from "@11ty/eleventy";
 
+import { keyFor } from "./signal/index.mjs";
+
 const REPO_ROOT = path.dirname(fileURLToPath(import.meta.url));
 const CONFIG_PATH = path.join(REPO_ROOT, "eleventy.config.mjs");
 
 function parseArgs(argv) {
-  const options = { source: path.join(REPO_ROOT, "site"), out: null, quiet: false };
+  const options = { source: path.join(REPO_ROOT, "site"), out: null, quiet: false, signalHost: "" };
   for (let i = 0; i < argv.length; i += 1) {
     const arg = argv[i];
     if (arg === "--quiet" || arg === "-q") {
       options.quiet = true;
+    } else if (arg === "--signal-host") {
+      const value = argv[i + 1];
+      if (!value) throw new Error(`${arg} needs a host`);
+      keyFor(value); // refuse a host with no stream before anything is built
+      options.signalHost = value.toLowerCase();
+      i += 1;
     } else if (arg === "--source" || arg === "--out") {
       const value = argv[i + 1];
       if (!value) throw new Error(`${arg} needs a path`);
@@ -44,7 +53,7 @@ function parseArgs(argv) {
   return options;
 }
 
-async function build({ source, out, quiet }) {
+async function build({ source, out, quiet, signalHost }) {
   const sourceDir = path.resolve(source);
   // "generated into a temp folder": by default the build goes somewhere throwaway, outside the
   // repository, so there is never a built copy of the site to commit by accident.
@@ -58,6 +67,10 @@ async function build({ source, out, quiet }) {
   process.chdir(path.dirname(sourceDir));
   const input = path.basename(sourceDir);
   process.env.SITE_SOURCE_DIR = input; // eleventy.config.mjs needs it for the Sass load paths
+  // Signal's ladder and client, for a production host only (signal/index.mjs); unset, every page
+  // is built without them.
+  if (signalHost) process.env.SIGNAL_HOST = signalHost;
+  else delete process.env.SIGNAL_HOST;
   const eleventy = new Eleventy(input, outDir, {
     quietMode: true,
     configPath: CONFIG_PATH,

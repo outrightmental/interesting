@@ -98,13 +98,18 @@ jobs:
           node-version: 22
           cache: npm
 
+      # --signal-host is what puts Signal, the studio's own first-party analytics, on every page:
+      # its ladder of pixels first inside <body> and its client in the <head>, with this host's
+      # stream key (signal/index.mjs). Only this build passes it, so no other copy of the site --
+      # a local build, the tests', the hourly run's -- ever counts into the live site's stream.
       - name: Build /site
         if: steps.secrets.outputs.ready == 'true'
         id: build
         run: |
           npm ci --ignore-scripts
           out="${RUNNER_TEMP}/site-build"
-          npm run --silent build -- --out "$out" --quiet
+          npm run --silent build -- --out "$out" --quiet --signal-host makeitmoreinteresting.com
+          grep -q 'data-signal-depth' "${out}/index.html" || { echo "::error::the build carries no Signal ladder"; exit 1; }
           test -s "${out}/index.html" || { echo "::error::the build produced no index.html"; exit 1; }
           test -s "${out}/error.html" || { echo "::error::the build produced no error.html"; exit 1; }
           echo "dir=${out}" >> "$GITHUB_OUTPUT"
