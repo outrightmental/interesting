@@ -4713,6 +4713,170 @@ class AdvertisingTest(unittest.TestCase):
                 self.assertNotIn(f"{signal}: 'granted'", source)
 
 
+class SignalTest(unittest.TestCase):
+    """Signal, the studio's own first-party analytics, on the published site and nowhere else.
+
+    Two parts (signal/index.mjs). The ladder: a column of 1x1 images first inside every page's
+    <body>, counted by Signal's server with no script, no cookie and no id. The client,
+    js/signal.js, which keeps a journey only after a yes to the banner's "journeys" category, as
+    js/analytics.js passes it on. Both are written by the build for a production host named with
+    --signal-host, which deploy.yml alone passes, so every other build carries neither.
+    """
+
+    HOST = "makeitmoreinteresting.com"
+    KEY = "makeitmoreinteresting-com.6b5672ee0cf370d104a6eaaa"
+    INGEST = "https://in.signal.outright.io"
+
+    @classmethod
+    def setUpClass(cls):
+        cls.repo = Path(mi.__file__).resolve().parents[2]
+        needs_the_build()
+        cls.work = tempfile.TemporaryDirectory(prefix="signal-build-")
+        cls.addClassCleanup(cls.work.cleanup)
+        cls.built = cls.build("--signal-host", cls.HOST)
+        cls.plain = cls.build()
+
+    @classmethod
+    def build(cls, *extra):
+        out = Path(cls.work.name) / ("signal" if extra else "plain")
+        run = subprocess.run([mi.NODE_BIN, str(mi.BUILD_SCRIPT), "--out", str(out), "--quiet", *extra],
+                             capture_output=True, text=True, encoding="utf-8", errors="replace",
+                             cwd=cls.repo, timeout=mi.BUILD_TIMEOUT_SECONDS)
+        if run.returncode != 0:
+            raise AssertionError(f"the build failed: {run.stderr[-2000:]}")
+        return {path.relative_to(out).as_posix(): path.read_text(encoding="utf-8")
+                for path in out.rglob("*.html")}
+
+    def test_every_published_page_opens_its_body_with_the_ladder(self):
+        self.assertGreater(len(self.built), 1)
+        for rel, page in self.built.items():
+            with self.subTest(page=rel):
+                body = re.search(r"<body\b[^>]*>", page)
+                self.assertIsNotNone(body)
+                self.assertTrue(page[body.end():].startswith("<div data-signal-depth"),
+                                "the ladder is the first thing inside <body>")
+                ladder = page[body.end():page.index("</div>", body.end())]
+                path = "/" if rel == "index.html" else f"/{rel}"
+                rungs = re.findall(r'<img src="([^"]+)"', ladder)
+                self.assertEqual(len(rungs), 49, "48 rungs 200 px apart and one at the foot")
+                base = f"{self.INGEST}/v1/d?k={self.KEY}&amp;p={path.replace('/', '%2F')}&amp;"
+                for at, rung in enumerate(rungs[:-1]):
+                    self.assertEqual(rung, f"{base}b={at}-{at}")
+                self.assertEqual(rungs[-1], f"{base}e=1")
+                self.assertEqual(ladder.count('loading="lazy"'), 48, "only the view loads with the page")
+                self.assertIn("<style>body{position:relative}</style>", page[:body.start()],
+                              "body is the ladder's positioned ancestor")
+
+    def test_every_published_page_carries_the_client_with_its_banner_off(self):
+        for rel, page in self.built.items():
+            with self.subTest(page=rel):
+                head = page[:page.index("</head>")]
+                tag = re.search(r'<script defer src="/js/signal\.js"([^>]*)>', head)
+                self.assertIsNotNone(tag, "the client is in the <head>")
+                self.assertIn(f'data-key="{self.KEY}"', tag.group(1))
+                self.assertIn(f'data-ingest="{self.INGEST}"', tag.group(1))
+                self.assertIn('data-banner="off"', tag.group(1), "the site's own banner asks")
+                self.assertIn('data-privacy="/privacy.html"', tag.group(1))
+                studio = re.search(r'data-studio="([^"]*)"', tag.group(1)).group(1).split()
+                self.assertIn(self.HOST, studio)
+                self.assertIn("ascendinglark.com", studio)
+
+    def test_any_other_build_counts_nothing(self):
+        # A local build, the tests', the hourly run's checks and a fork's: no ladder, no client.
+        self.assertEqual(set(self.plain), set(self.built))
+        for rel, page in self.plain.items():
+            with self.subTest(page=rel):
+                self.assertNotIn("data-signal-depth", page)
+                self.assertNotIn("signal.js", page)
+                self.assertNotIn(self.INGEST, page)
+
+    def test_a_host_with_no_stream_is_refused(self):
+        run = subprocess.run([mi.NODE_BIN, str(mi.BUILD_SCRIPT), "--out", str(Path(self.work.name) / "x"),
+                              "--quiet", "--signal-host", "example.com"],
+                             capture_output=True, text=True, cwd=self.repo, timeout=mi.BUILD_TIMEOUT_SECONDS)
+        self.assertNotEqual(run.returncode, 0)
+        self.assertIn("not a production host", run.stderr)
+
+    def test_the_deploy_builds_for_the_live_host(self):
+        workflow = (self.repo / ".github" / "workflows" / "deploy.yml").read_text()
+        self.assertIn(f"--quiet --signal-host {self.HOST}", workflow)
+
+    def test_the_client_is_fixed_and_no_page_in_site_loads_it(self):
+        self.assertIn(mi.SIGNAL_SCRIPT, mi.FIXED_FILES)
+        self.assertTrue((self.repo / "site" / mi.SIGNAL_SCRIPT).is_file())
+        for path in (self.repo / "site").rglob("*.html"):
+            with self.subTest(page=path.name):
+                self.assertNotIn("signal.js", path.read_text(encoding="utf-8"))
+
+
+class JourneysConsentTest(unittest.TestCase):
+    """What js/analytics.js tells Signal's client, run against the same stub browser as the ads.
+
+    The banner asks about journeys under a category of its own, only on a page that carries the
+    client, and hands the answer over with Signal.consent(): yes for a yes, no for a no, and
+    nothing at all before an answer.
+    """
+
+    def setUp(self):
+        # The same harness run as AdvertisingTest's, made once for both classes.
+        if not hasattr(AdvertisingTest, "harness"):
+            AdvertisingTest.setUpClass()
+        for name in ("repo", "harness", "analytics", "clickadu"):
+            setattr(self, name, getattr(AdvertisingTest, name))
+        AdvertisingTest.setUp(self)
+
+    def test_a_yes_is_passed_on(self):
+        seen = self.seen["journeysAccepted"]
+        self.assertEqual(seen["banner"]["categories"], ["necessary", "analytics", "advertising", "journeys"])
+        self.assertEqual(seen["told"], [True])
+        self.assertEqual(seen["banner"]["accept"], "Accept all")
+
+    def test_a_no_is_passed_on_and_nothing_else_changes(self):
+        seen = self.seen["journeysDeclined"]
+        self.assertEqual(seen["told"], [False])
+        self.assertEqual(seen["thirdParty"], self.seen["everythingAccepted"]["thirdParty"])
+
+    def test_nothing_is_said_before_an_answer(self):
+        seen = self.seen["journeysNotYetAnswered"]
+        self.assertIsNotNone(seen["banner"])
+        self.assertEqual(seen["told"], [])
+        self.assertEqual(seen["thirdParty"], [])
+
+    def test_a_page_without_the_client_asks_nothing_about_journeys(self):
+        for name in ("measuredOnly", "everythingAccepted", "adsOnly"):
+            with self.subTest(scenario=name):
+                self.assertNotIn("journeys", self.seen[name]["banner"]["categories"])
+                self.assertEqual(self.seen[name]["told"], [])
+        self.assertIsNone(self.seen["asCommitted"]["banner"])
+
+    def test_the_client_alone_is_enough_to_ask(self):
+        seen = self.seen["journeysOnly"]
+        self.assertEqual(seen["banner"]["categories"], ["necessary", "journeys"])
+        self.assertEqual(seen["banner"]["accept"], "Accept journeys")
+        self.assertEqual(seen["thirdParty"], [], "no measurement ID, no Google tag")
+        self.assertEqual(seen["told"], [True])
+
+    def test_the_live_sites_banner_names_journeys_and_asks_again(self):
+        banner = self.seen["measuredAndJourneys"]["banner"]
+        self.assertEqual(banner["categories"], ["necessary", "analytics", "journeys"])
+        self.assertEqual(banner["accept"], "Accept both")
+        self.assertEqual(banner["revision"], 2, "an answer given before journeys is asked again")
+        self.assertEqual(self.seen["journeysAccepted"]["banner"]["revision"], 3)
+        self.assertTrue(banner["description"].endswith("{{revisionMessage}}"))
+        self.assertIn("no cookie", banner["description"])
+        section = [s for s in banner["sections"] if s.get("linkedCategory") == "journeys"]
+        self.assertEqual(len(section), 1)
+        for words in ("no cookie", "Global Privacy Control", "Declining erases", "privacy.html"):
+            with self.subTest(words=words):
+                self.assertIn(words, section[0]["description"])
+
+    def test_an_answer_before_the_client_has_run_waits_for_it(self):
+        seen = self.seen["journeysBeforeTheClient"]
+        self.assertEqual(seen["early"], [])
+        self.assertEqual(seen["then"], [True])
+        self.assertEqual(self.seen["journeysClientNeverRan"]["told"], [])
+
+
 def deploy_step(name):
     """The `run:` script of the step called `name` in deploy.yml, dedented, read as text so the
     test needs no YAML parser."""
